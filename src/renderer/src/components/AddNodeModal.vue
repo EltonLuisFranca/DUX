@@ -64,11 +64,14 @@ const query = ref('')
 const searchInput = ref(null)
 const selectedType = ref(null)
 
+const isWindows = window.platformInfo?.platform === 'win32'
+
 const filteredEntries = computed(() => {
   const q = query.value.trim().toLowerCase()
   return Object.entries(nodeTypeRegistry).filter(
-    ([, entry]) =>
+    ([type, entry]) =>
       !entry.hideFromModal &&
+      (isWindows || type !== 'wsl-claude-terminal') &&
       (!q || entry.label.toLowerCase().includes(q) || entry.description.toLowerCase().includes(q))
   )
 })

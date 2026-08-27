@@ -3,14 +3,7 @@ import { computed, ref, watch } from 'vue'
 const DEFAULT_WORKSPACE = {
   id: 'default',
   name: 'Workspace 1',
-  nodes: [
-    {
-      id: 'posiflow',
-      type: 'wsl-claude-terminal',
-      position: { x: 80, y: 80 },
-      data: { name: 'Posiflow', cwd: '/home/elton/posiflow' }
-    }
-  ],
+  nodes: [],
   edges: []
 }
 

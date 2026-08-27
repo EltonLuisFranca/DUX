@@ -5,6 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 
 const WSL_DISTRO = 'Debian'
 const BRIDGE_CMD = 'source ~/.zshrc; cd /mnt/c/Users/57224/dux-fleet/bridge && node server.js'
+const BRIDGE_DIR = join(__dirname, '../../bridge')
 
 const WORKSPACES_FILE = join(app.getPath('userData'), 'workspaces.json')
 
@@ -37,7 +38,11 @@ ipcMain.handle('workspaces:save', (_event, data) => {
 let bridgeProcess = null
 
 function startBridge() {
-  bridgeProcess = spawn('wsl.exe', ['-d', WSL_DISTRO, '--', 'zsh', '-c', BRIDGE_CMD])
+  if (process.platform === 'win32') {
+    bridgeProcess = spawn('wsl.exe', ['-d', WSL_DISTRO, '--', 'zsh', '-c', BRIDGE_CMD])
+  } else {
+    bridgeProcess = spawn('node', ['server.js'], { cwd: BRIDGE_DIR })
+  }
 
   bridgeProcess.stdout.on('data', (chunk) => console.log(`[bridge] ${chunk}`))
   bridgeProcess.stderr.on('data', (chunk) => console.error(`[bridge] ${chunk}`))

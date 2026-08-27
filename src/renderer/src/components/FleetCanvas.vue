@@ -11,11 +11,22 @@
     @drop="handleDrop"
   >
     <Background :gap="16" :color="dotColor" />
+    <Panel v-if="workspace.nodes.length === 0" position="top-left" class="empty-state-panel">
+      <button class="empty-state" @click="openAddNodeModal">
+        <svg viewBox="0 0 20 20" width="20" height="20">
+          <path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        </svg>
+        <span>Adicione um node para começar</span>
+      </button>
+    </Panel>
     <Panel position="bottom-center">
       <ZoomControls />
     </Panel>
 
     <template #node-wsl-claude-terminal="nodeProps">
+      <WslClaudeTerminalNode v-bind="nodeProps" />
+    </template>
+    <template #node-claude-terminal="nodeProps">
       <WslClaudeTerminalNode v-bind="nodeProps" />
     </template>
     <template #node-notes="nodeProps">
@@ -32,7 +43,7 @@ import ZoomControls from './ZoomControls.vue'
 import WslClaudeTerminalNode from './WslClaudeTerminalNode.vue'
 import NotesNode from './NotesNode.vue'
 import { theme } from '../store/themeStore'
-import { onNodeClicked, addNode } from '../store/flowStore'
+import { onNodeClicked, addNode, openAddNodeModal } from '../store/flowStore'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
 
 import '@vue-flow/core/dist/style.css'
@@ -77,5 +88,36 @@ function handleDrop(event) {
   width: 100%;
   height: 100%;
   background: var(--color-bg-app);
+}
+
+.empty-state-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 28px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 12px;
+  background: var(--color-bg-surface-alt);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.empty-state:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-tertiary);
+  background: var(--color-hover);
 }
 </style>

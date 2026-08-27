@@ -1,16 +1,32 @@
 import WslClaudeTerminalSettings from '../components/nodeSettings/WslClaudeTerminalSettings.vue'
 import WslClaudeTerminalCreateForm from '../components/nodeCreate/WslClaudeTerminalCreateForm.vue'
+import ClaudeTerminalSettings from '../components/nodeSettings/ClaudeTerminalSettings.vue'
+import ClaudeTerminalCreateForm from '../components/nodeCreate/ClaudeTerminalCreateForm.vue'
+
+const TERMINAL_ICON =
+  '<rect x="2" y="3" width="16" height="14" rx="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M6 8l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M11 14h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
 
 // registro de tipos de node: cada tipo novo entra aqui com seu próprio
 // formulário de configurações (sidebar) e, opcionalmente, um formulário de
 // criação (quando precisa de input do usuário antes de existir, ex: um caminho)
+//
+// wsl-claude-terminal e claude-terminal renderizam o mesmo componente de node
+// (WslClaudeTerminalNode, ver templates no FleetCanvas) — só o form de criação/
+// settings e o texto mudam; qual dos dois aparece no modal depende do SO (ver AddNodeModal.vue)
 export const nodeTypeRegistry = {
   'wsl-claude-terminal': {
     label: 'Terminal WSL · Claude Code',
     description: 'Sessão interativa do Claude Code rodando dentro do WSL.',
     settingsComponent: WslClaudeTerminalSettings,
     createForm: WslClaudeTerminalCreateForm,
-    icon: '<rect x="2" y="3" width="16" height="14" rx="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M6 8l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M11 14h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
+    icon: TERMINAL_ICON
+  },
+  'claude-terminal': {
+    label: 'Terminal · Claude Code',
+    description: 'Sessão interativa do Claude Code rodando localmente no Linux.',
+    settingsComponent: ClaudeTerminalSettings,
+    createForm: ClaudeTerminalCreateForm,
+    icon: TERMINAL_ICON
   },
   notes: {
     label: 'Nota',
