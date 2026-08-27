@@ -5,37 +5,49 @@
     :style="{ width: activeNode ? `${width}px` : '0' }"
   >
     <div v-if="activeNode" class="sidebar-content" :style="{ width: `${width}px` }">
-      <div class="sidebar-header">
-        <div class="sidebar-heading">
-          <span class="sidebar-title">Configurações do node</span>
-          <span class="sidebar-subtitle">{{ typeLabel }}</span>
+      <div class="sidebar-body">
+        <div class="sidebar-header">
+          <div class="sidebar-heading">
+            <span class="sidebar-title">Configurações do node</span>
+            <span class="sidebar-subtitle">{{ typeLabel }}</span>
+          </div>
+          <button class="close-btn" title="Fechar" @click="closeNodeSettings">
+            <svg viewBox="0 0 16 16" width="12" height="12">
+              <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            </svg>
+          </button>
         </div>
-        <button class="close-btn" title="Fechar" @click="closeNodeSettings">
-          <svg viewBox="0 0 16 16" width="12" height="12">
-            <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-          </svg>
-        </button>
+
+        <component :is="settingsComponent" v-if="settingsComponent" :node="activeNode" />
       </div>
 
-      <component :is="settingsComponent" v-if="settingsComponent" :node="activeNode" />
+      <div class="danger-zone">
+        <span class="danger-zone-label">Área de risco</span>
+        <button class="delete-btn" @click="requestDeleteNode(activeNode.id)">Excluir node</button>
+      </div>
     </div>
 
     <div
       v-if="activeNode"
       class="resize-handle"
       @mousedown="startResize"
-      @mouseenter="showTip = true"
-      @mouseleave="showTip = false"
+      @mouseenter="handleTipEnter"
+      @mouseleave="handleTipLeave"
     >
       <span class="resize-grip" />
-      <div v-if="showTip" class="resize-tooltip"><kbd>Ctrl</kbd> + <kbd>B</kbd> fecha o painel</div>
+      <Transition name="tip-fade">
+        <div v-if="showTip" class="resize-tooltip">
+          <div class="tooltip-row"><kbd>Ctrl</kbd> + <kbd>B</kbd> fecha o painel</div>
+          <div class="tooltip-sub">Drag to resize</div>
+        </div>
+      </Transition>
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { nodes, activeSettingsNodeId, closeNodeSettings } from '../store/flowStore'
+import { nodes, activeSettingsNodeId, closeNodeSettings, requestDeleteNode } from '../store/flowStore'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
 
 const MIN_WIDTH = 220
@@ -51,8 +63,21 @@ const resizing = ref(false)
 const showTip = ref(false)
 let startX = 0
 let startWidth = 0
+let tipTimer = null
+
+function handleTipEnter() {
+  tipTimer = setTimeout(() => {
+    showTip.value = true
+  }, 500)
+}
+
+function handleTipLeave() {
+  clearTimeout(tipTimer)
+  showTip.value = false
+}
 
 function startResize(event) {
+  clearTimeout(tipTimer)
   resizing.value = true
   showTip.value = false
   startX = event.clientX
@@ -86,6 +111,7 @@ function onKeydown(event) {
 onMounted(() => window.addEventListener('keydown', onKeydown, { capture: true }))
 
 onBeforeUnmount(() => {
+  clearTimeout(tipTimer)
   stopResize()
   window.removeEventListener('keydown', onKeydown, { capture: true })
 })
@@ -107,9 +133,17 @@ onBeforeUnmount(() => {
 
 .sidebar-content {
   height: 100%;
-  padding: 14px;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   overflow: hidden;
+}
+
+.sidebar-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
 }
 
 .sidebar-header {
@@ -175,9 +209,9 @@ onBeforeUnmount(() => {
 
 .resize-grip {
   position: relative;
-  right: 2px;
+  right: 3px;
   width: 3px;
-  height: 25px;
+  height: 35px;
   border-radius: 4px;
   background: transparent;
 }
@@ -187,23 +221,44 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.35);
 }
 
+.tip-fade-enter-active,
+.tip-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.tip-fade-enter-from,
+.tip-fade-leave-to {
+  opacity: 0;
+}
+
 .resize-tooltip {
   position: absolute;
   left: 14px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 4px;
-  padding: 5px 9px;
+  padding: 6px 9px;
   white-space: nowrap;
   background: var(--color-bg-surface-alt);
   border: 1px solid var(--color-border-strong);
   border-radius: 6px;
   box-shadow: 0 4px 16px var(--color-shadow);
-  color: var(--color-text-quaternary);
   font-size: 11px;
   pointer-events: none;
+}
+
+.tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-quaternary);
+}
+
+.tooltip-sub {
+  font-size: 10px;
+  color: var(--color-text-tertiary);
 }
 
 .resize-tooltip kbd {
@@ -214,5 +269,38 @@ onBeforeUnmount(() => {
   font-family: inherit;
   font-size: 10.5px;
   color: var(--color-text-primary);
+}
+
+.danger-zone {
+  flex-shrink: 0;
+  padding: 14px;
+  border-top: 1px solid var(--color-border);
+  background: rgba(255, 107, 107, 0.05);
+}
+
+.danger-zone-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ff6b6b;
+}
+
+.delete-btn {
+  width: 100%;
+  height: 30px;
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  border-radius: 6px;
+  background: transparent;
+  color: #ff6b6b;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.delete-btn:hover {
+  background: rgba(255, 107, 107, 0.1);
 }
 </style>

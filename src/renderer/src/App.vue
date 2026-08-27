@@ -6,6 +6,7 @@
       <FleetCanvas />
     </div>
     <AddNodeModal />
+    <ConfirmDeleteNodeModal />
   </div>
 </template>
 
@@ -14,4 +15,5 @@ import TitleBar from './components/TitleBar.vue'
 import FleetCanvas from './components/FleetCanvas.vue'
 import NodeSettingsSidebar from './components/NodeSettingsSidebar.vue'
 import AddNodeModal from './components/AddNodeModal.vue'
+import ConfirmDeleteNodeModal from './components/ConfirmDeleteNodeModal.vue'
 </script>

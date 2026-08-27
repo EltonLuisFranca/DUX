@@ -30,6 +30,27 @@ export function updateNodeData(id, patch) {
   if (node) Object.assign(node.data, patch)
 }
 
+export function removeNode(id) {
+  const index = nodes.value.findIndex((n) => n.id === id)
+  if (index !== -1) nodes.value.splice(index, 1)
+  if (activeSettingsNodeId.value === id) activeSettingsNodeId.value = null
+}
+
+export const nodePendingDeleteId = ref(null)
+
+export function requestDeleteNode(id) {
+  nodePendingDeleteId.value = id
+}
+
+export function cancelDeleteNode() {
+  nodePendingDeleteId.value = null
+}
+
+export function confirmDeleteNode() {
+  if (nodePendingDeleteId.value) removeNode(nodePendingDeleteId.value)
+  nodePendingDeleteId.value = null
+}
+
 const NODE_WIDTH = 480
 const NODE_GAP = 60
 
