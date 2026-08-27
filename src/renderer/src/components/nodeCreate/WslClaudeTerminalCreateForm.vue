@@ -8,15 +8,37 @@
     </button>
 
     <label class="field-label" for="new-node-cwd">Diretório no WSL</label>
-    <input
-      id="new-node-cwd"
-      ref="pathInput"
-      v-model="path"
-      class="field-input"
-      type="text"
-      placeholder="~/meu-projeto"
-      @keyup.enter="submit"
-    />
+    <div class="path-field">
+      <input
+        id="new-node-cwd"
+        ref="pathInput"
+        v-model="path"
+        class="field-input"
+        type="text"
+        placeholder="~/meu-projeto"
+        autocomplete="off"
+        @focus="handleFocus"
+        @blur="showDropdown = false"
+        @keyup.enter="submit"
+      />
+
+      <Teleport to="body">
+        <ul v-if="showDropdown && entries.length" class="dir-list" :style="dropdownStyle">
+          <li v-for="entry in entries" :key="entry" @mousedown.prevent="drillInto(entry)">
+            <svg viewBox="0 0 16 16" width="12" height="12">
+              <path
+                d="M2 4.5a1 1 0 0 1 1-1h3l1.2 1.5H13a1 1 0 0 1 1 1V11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4.5z"
+                stroke="currentColor"
+                stroke-width="1.2"
+                stroke-linejoin="round"
+                fill="none"
+              />
+            </svg>
+            {{ entry }}
+          </li>
+        </ul>
+      </Teleport>
+    </div>
 
     <p class="status" :class="status">
       <span v-if="status === 'checking'">Verificando...</span>
@@ -37,8 +59,24 @@ const emit = defineEmits(['submit', 'cancel'])
 const path = ref('~')
 const status = ref('idle')
 const resolvedPath = ref('')
+const entries = ref([])
+const showDropdown = ref(false)
 const pathInput = ref(null)
+const dropdownStyle = ref({})
 let debounceTimer = null
+
+function handleFocus() {
+  showDropdown.value = true
+  const rect = pathInput.value?.getBoundingClientRect()
+  if (!rect) return
+  dropdownStyle.value = {
+    position: 'fixed',
+    top: `${rect.bottom + 4}px`,
+    left: `${rect.left}px`,
+    width: `${rect.width}px`,
+    zIndex: 20
+  }
+}
 
 async function validate() {
   const current = path.value
@@ -47,12 +85,19 @@ async function validate() {
   if (current !== path.value) return
   status.value = result.valid ? 'valid' : 'invalid'
   resolvedPath.value = result.resolved || ''
+  entries.value = result.entries || []
 }
 
 watch(path, () => {
   clearTimeout(debounceTimer)
   debounceTimer = setTimeout(validate, 400)
 })
+
+function drillInto(entry) {
+  const trimmed = path.value.replace(/\/+$/, '')
+  path.value = trimmed ? `${trimmed}/${entry}` : entry
+  pathInput.value?.focus()
+}
 
 function submit() {
   if (status.value !== 'valid') return
@@ -96,6 +141,10 @@ onMounted(() => {
   color: var(--color-text-secondary);
 }
 
+.path-field {
+  position: relative;
+}
+
 .field-input {
   width: 100%;
   height: 30px;
@@ -111,6 +160,38 @@ onMounted(() => {
 .field-input:focus {
   outline: none;
   border-color: var(--color-text-secondary);
+}
+
+.dir-list {
+  max-height: 160px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--color-bg-surface-alt);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px var(--color-shadow);
+}
+
+.dir-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.dir-list li svg {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+.dir-list li:hover {
+  background: var(--color-hover);
 }
 
 .status {

@@ -1,14 +1,14 @@
 <template>
-  <div v-if="node" class="modal-backdrop" @mousedown.self="cancelDeleteNode">
+  <div v-if="workspace" class="modal-backdrop" @mousedown.self="cancelDeleteWorkspace">
     <div class="modal">
-      <span class="modal-title">Excluir node?</span>
+      <span class="modal-title">Excluir workspace?</span>
       <p class="modal-message">
-        Isso vai encerrar a sessão e remover <strong>{{ node.data.name }}</strong> do canvas. Essa ação não pode
-        ser desfeita.
+        Isso vai encerrar todas as sessões e remover <strong>{{ workspace.name }}</strong> e seus nodes. Essa
+        ação não pode ser desfeita.
       </p>
       <div class="modal-actions">
-        <button class="btn-secondary" @click="cancelDeleteNode">Cancelar</button>
-        <button class="btn-danger" @click="confirmDeleteNode">Excluir</button>
+        <button class="btn-secondary" @click="cancelDeleteWorkspace">Cancelar</button>
+        <button class="btn-danger" @click="confirmDeleteWorkspace">Excluir</button>
       </div>
     </div>
   </div>
@@ -16,9 +16,9 @@
 
 <script setup>
 import { computed } from 'vue'
-import { activeWorkspace, nodePendingDeleteId, cancelDeleteNode, confirmDeleteNode } from '../store/flowStore'
+import { workspaces, workspacePendingDeleteId, cancelDeleteWorkspace, confirmDeleteWorkspace } from '../store/flowStore'
 
-const node = computed(() => activeWorkspace.value.nodes.find((n) => n.id === nodePendingDeleteId.value) ?? null)
+const workspace = computed(() => workspaces.value.find((w) => w.id === workspacePendingDeleteId.value) ?? null)
 </script>
 
 <style scoped>

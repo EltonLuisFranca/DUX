@@ -21,6 +21,18 @@ function isDirectory(target) {
   }
 }
 
+function listSubdirectories(target) {
+  try {
+    return fs
+      .readdirSync(target, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+      .map((entry) => entry.name)
+      .sort((a, b) => a.localeCompare(b))
+  } catch {
+    return []
+  }
+}
+
 const wss = new WebSocketServer({ host: '127.0.0.1', port: PORT })
 
 wss.on('connection', (ws) => {
@@ -72,7 +84,9 @@ wss.on('connection', (ws) => {
       }
     } else if (msg.type === 'checkPath') {
       const resolved = resolveCwd(msg.path)
-      ws.send(JSON.stringify({ type: 'pathCheck', path: msg.path, resolved, valid: isDirectory(resolved) }))
+      const valid = isDirectory(resolved)
+      const entries = valid ? listSubdirectories(resolved) : []
+      ws.send(JSON.stringify({ type: 'pathCheck', path: msg.path, resolved, valid, entries }))
     }
   })
 

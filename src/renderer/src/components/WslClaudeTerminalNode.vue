@@ -1,6 +1,10 @@
 <template>
-  <div class="agent-node">
-    <div class="agent-header">
+  <div
+    class="agent-node"
+    :class="{ selected }"
+    :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
+  >
+    <div class="agent-header" :style="{ background: data.headerColor || undefined }">
       <span class="status-dot" :class="status" />
       <span class="agent-title">{{ data.name }}</span>
       <span class="agent-path">{{ data.cwd }}</span>
@@ -23,6 +27,17 @@
       </button>
     </div>
     <div ref="termEl" class="agent-term nodrag nowheel nopan"></div>
+
+    <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
+      <svg viewBox="0 0 16 16" width="11" height="11">
+        <path
+          d="M13 3L3 13M13 8.5L8.5 13M13 13.5L13.5 13"
+          stroke="currentColor"
+          stroke-width="1.4"
+          stroke-linecap="round"
+        />
+      </svg>
+    </div>
   </div>
 </template>
 
@@ -30,17 +45,26 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { useVueFlow } from '@vue-flow/core'
 import '@xterm/xterm/css/xterm.css'
-import { toggleNodeSettings } from '../store/flowStore'
+import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { theme, XTERM_THEMES } from '../store/themeStore'
+
+const MIN_NODE_WIDTH = 320
+const MIN_NODE_HEIGHT = 220
 
 const props = defineProps({
   id: { type: String, required: true },
-  data: { type: Object, required: true }
+  data: { type: Object, required: true },
+  selected: { type: Boolean, default: false }
 })
+
+const { viewport } = useVueFlow()
 
 const termEl = ref(null)
 const status = ref('connecting')
+const nodeWidth = ref(props.data.width || 480)
+const nodeHeight = ref(props.data.height || 344)
 
 let term = null
 let fitAddon = null
@@ -49,6 +73,35 @@ let resizeObserver = null
 let retryTimer = null
 let stopThemeWatch = null
 let stopCwdWatch = null
+let resizeStartX = 0
+let resizeStartY = 0
+let resizeStartW = 0
+let resizeStartH = 0
+
+function startResize(event) {
+  resizeStartX = event.clientX
+  resizeStartY = event.clientY
+  resizeStartW = nodeWidth.value
+  resizeStartH = nodeHeight.value
+  window.addEventListener('mousemove', onResizeMove)
+  window.addEventListener('mouseup', stopResize)
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+function onResizeMove(event) {
+  const zoom = viewport.value.zoom || 1
+  const dx = (event.clientX - resizeStartX) / zoom
+  const dy = (event.clientY - resizeStartY) / zoom
+  nodeWidth.value = Math.max(MIN_NODE_WIDTH, Math.round(resizeStartW + dx))
+  nodeHeight.value = Math.max(MIN_NODE_HEIGHT, Math.round(resizeStartH + dy))
+}
+
+function stopResize() {
+  window.removeEventListener('mousemove', onResizeMove)
+  window.removeEventListener('mouseup', stopResize)
+  updateNodeData(props.id, { width: nodeWidth.value, height: nodeHeight.value })
+}
 
 function sendResize() {
   if (!term || !ws || ws.readyState !== WebSocket.OPEN) return
@@ -149,6 +202,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('mousemove', onResizeMove)
+  window.removeEventListener('mouseup', stopResize)
   resizeObserver?.disconnect()
   stopThemeWatch?.()
   stopCwdWatch?.()
@@ -159,8 +214,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .agent-node {
-  width: 480px;
-  height: 344px;
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--color-bg-surface);
@@ -168,6 +222,10 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 8px 24px var(--color-shadow);
+}
+
+.agent-node.selected {
+  border-color: var(--selected-color);
 }
 
 .agent-header {
@@ -241,5 +299,26 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
   padding: 6px;
+}
+
+.resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 3px;
+  box-sizing: border-box;
+  color: var(--color-text-tertiary);
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.agent-node:hover .resize-handle {
+  opacity: 1;
 }
 </style>

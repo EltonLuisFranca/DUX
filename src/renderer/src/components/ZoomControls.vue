@@ -1,10 +1,16 @@
 <template>
   <div ref="rootRef" class="zoom-controls">
-    <button class="zoom-btn" title="Diminuir zoom" @click="handleZoomOut">
-      <svg viewBox="0 0 16 16" width="14" height="14">
-        <path d="M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-      </svg>
-    </button>
+    <WorkspaceSwitcher />
+
+    <span class="toolbar-divider" />
+
+    <AppTooltip label="Diminuir zoom">
+      <button class="zoom-btn" @click="handleZoomOut">
+        <svg viewBox="0 0 16 16" width="14" height="14">
+          <path d="M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        </svg>
+      </button>
+    </AppTooltip>
 
     <div class="zoom-level">
       <button class="zoom-percent" @click="open = !open">
@@ -28,26 +34,32 @@
       </ul>
     </div>
 
-    <button class="zoom-btn" title="Aumentar zoom" @click="handleZoomIn">
-      <svg viewBox="0 0 16 16" width="14" height="14">
-        <path d="M3 8h10M8 3v10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-      </svg>
-    </button>
+    <AppTooltip label="Aumentar zoom">
+      <button class="zoom-btn" @click="handleZoomIn">
+        <svg viewBox="0 0 16 16" width="14" height="14">
+          <path d="M3 8h10M8 3v10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        </svg>
+      </button>
+    </AppTooltip>
 
     <span class="toolbar-divider" />
 
-    <button class="zoom-btn" title="Adicionar node" @click="openAddNodeModal">
-      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="2.5" y="2.5" width="11" height="11" rx="2.5" />
-        <path d="M8 5.5v5M5.5 8h5" />
-      </svg>
-    </button>
+    <AppTooltip label="Adicionar node" shortcut="Ctrl+N">
+      <button class="zoom-btn" @click="openAddNodeModal">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2.5" y="2.5" width="11" height="11" rx="2.5" />
+          <path d="M8 5.5v5M5.5 8h5" />
+        </svg>
+      </button>
+    </AppTooltip>
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useVueFlow } from '@vue-flow/core'
+import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
+import AppTooltip from './AppTooltip.vue'
 import { openAddNodeModal } from '../store/flowStore'
 
 const { zoomIn, zoomOut, zoomTo, fitView, viewport } = useVueFlow()
@@ -75,8 +87,8 @@ const handleClickOutside = (event) => {
   if (rootRef.value && !rootRef.value.contains(event.target)) open.value = false
 }
 
-onMounted(() => document.addEventListener('mousedown', handleClickOutside))
-onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutside))
+onMounted(() => document.addEventListener('mousedown', handleClickOutside, { capture: true }))
+onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutside, { capture: true }))
 </script>
 
 <style scoped>

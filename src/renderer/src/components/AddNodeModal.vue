@@ -56,8 +56,8 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
-import { addNode, closeAddNodeModal, isAddNodeModalOpen } from '../store/flowStore'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { addNode, closeAddNodeModal, isAddNodeModalOpen, openAddNodeModal } from '../store/flowStore'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
 
 const query = ref('')
@@ -74,6 +74,18 @@ const filteredEntries = computed(() => {
 watch(isAddNodeModalOpen, (open) => {
   if (open) nextTick(() => searchInput.value?.focus())
 })
+
+// captura antes do xterm.js pra abrir mesmo com o terminal focado
+function onKeydown(event) {
+  if (event.ctrlKey && event.key.toLowerCase() === 'n') {
+    event.preventDefault()
+    event.stopPropagation()
+    openAddNodeModal()
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', onKeydown, { capture: true }))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, { capture: true }))
 
 function close() {
   query.value = ''

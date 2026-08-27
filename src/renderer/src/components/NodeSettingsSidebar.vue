@@ -18,7 +18,21 @@
           </button>
         </div>
 
-        <component :is="settingsComponent" v-if="settingsComponent" :node="activeNode" />
+        <div class="tabs">
+          <button class="tab" :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">
+            Configurações
+          </button>
+          <button class="tab" :class="{ active: activeTab === 'visual' }" @click="activeTab = 'visual'">
+            Visual
+          </button>
+        </div>
+
+        <component
+          :is="settingsComponent"
+          v-if="activeTab === 'settings' && settingsComponent"
+          :node="activeNode"
+        />
+        <NodeVisualSettings v-else-if="activeTab === 'visual'" :node="activeNode" />
       </div>
 
       <div class="danger-zone">
@@ -46,17 +60,25 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { nodes, activeSettingsNodeId, closeNodeSettings, requestDeleteNode } from '../store/flowStore'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { activeWorkspace, activeSettingsNodeId, closeNodeSettings, requestDeleteNode } from '../store/flowStore'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
+import NodeVisualSettings from './NodeVisualSettings.vue'
 
 const MIN_WIDTH = 220
 const MAX_WIDTH = 440
 
-const activeNode = computed(() => nodes.value.find((n) => n.id === activeSettingsNodeId.value) ?? null)
+const activeNode = computed(
+  () => activeWorkspace.value.nodes.find((n) => n.id === activeSettingsNodeId.value) ?? null
+)
 const typeEntry = computed(() => (activeNode.value ? nodeTypeRegistry[activeNode.value.type] : null))
 const typeLabel = computed(() => typeEntry.value?.label ?? '')
 const settingsComponent = computed(() => typeEntry.value?.settingsComponent ?? null)
+
+const activeTab = ref('settings')
+watch(activeSettingsNodeId, () => {
+  activeTab.value = 'settings'
+})
 
 const width = ref(260)
 const resizing = ref(false)
@@ -191,6 +213,36 @@ onBeforeUnmount(() => {
 
 .close-btn:hover {
   background: var(--color-hover);
+  color: var(--color-text-primary);
+}
+
+.tabs {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 16px;
+  padding: 3px;
+  background: var(--color-bg-surface);
+  border-radius: 8px;
+}
+
+.tab {
+  flex: 1;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 6px;
+  background: var(--color-bg-app);
+  color: var(--color-text-tertiary);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--color-text-primary);
+}
+
+.tab.active {
+  background: var(--color-bg-surface-raised);
   color: var(--color-text-primary);
 }
 

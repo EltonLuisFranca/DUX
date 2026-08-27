@@ -1,9 +1,38 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { spawn } from 'child_process'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
 
 const WSL_DISTRO = 'Debian'
 const BRIDGE_CMD = 'source ~/.zshrc; cd /mnt/c/Users/57224/dux-fleet/bridge && node server.js'
+
+const WORKSPACES_FILE = join(app.getPath('userData'), 'workspaces.json')
+
+function loadWorkspacesFromDisk() {
+  try {
+    if (!existsSync(WORKSPACES_FILE)) return null
+    return JSON.parse(readFileSync(WORKSPACES_FILE, 'utf-8'))
+  } catch (err) {
+    console.error('[workspaces] failed to load', err)
+    return null
+  }
+}
+
+function saveWorkspacesToDisk(data) {
+  try {
+    writeFileSync(WORKSPACES_FILE, JSON.stringify(data, null, 2))
+  } catch (err) {
+    console.error('[workspaces] failed to save', err)
+  }
+}
+
+ipcMain.on('workspaces:load-sync', (event) => {
+  event.returnValue = loadWorkspacesFromDisk()
+})
+
+ipcMain.handle('workspaces:save', (_event, data) => {
+  saveWorkspacesToDisk(data)
+})
 
 let bridgeProcess = null
 
