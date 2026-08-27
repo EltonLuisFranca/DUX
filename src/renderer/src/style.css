@@ -14,6 +14,9 @@
   --color-text-quaternary: #d4d4d8;
   --color-dot: #55555e;
   --color-shadow: rgba(0, 0, 0, 0.4);
+  --color-notes-bg: #332c14;
+  --color-notes-header: #3d3418;
+  --color-notes-border: #8a6d1f;
 }
 
 :root[data-theme='light'] {
@@ -32,6 +35,9 @@
   --color-text-quaternary: #3f3f46;
   --color-dot: #c4c4cc;
   --color-shadow: rgba(0, 0, 0, 0.12);
+  --color-notes-bg: #fef3c7;
+  --color-notes-header: #fde68a;
+  --color-notes-border: #fbbf24;
 }
 
 * {

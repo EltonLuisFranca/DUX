@@ -24,7 +24,7 @@ let timer = null
 function handleEnter() {
   timer = setTimeout(() => {
     show.value = true
-  }, 500)
+  }, 250)
 }
 
 function handleLeave() {

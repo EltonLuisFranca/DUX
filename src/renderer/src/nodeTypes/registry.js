@@ -11,5 +11,15 @@ export const nodeTypeRegistry = {
     settingsComponent: WslClaudeTerminalSettings,
     createForm: WslClaudeTerminalCreateForm,
     icon: '<rect x="2" y="3" width="16" height="14" rx="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M6 8l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M11 14h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
+  },
+  notes: {
+    label: 'Nota',
+    description: 'Bloco de notas simples, sem terminal — pra anotações e lembretes.',
+    createData: () => ({ name: 'Nova nota', content: '' }),
+    // criada arrastando o ícone da barra de zoom pro canvas, não pelo modal
+    hideFromModal: true,
+    // fica sempre atrás dos outros tipos de node
+    defaultZIndex: -1,
+    icon: '<path d="M3 2.5h7l3 3V13a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M10 2.5V5.5h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M5 8h6M5 10.5h6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'
   }
 }

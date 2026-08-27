@@ -108,10 +108,14 @@ export function toggleNodeSettings(id) {
 }
 
 // com a sidebar já aberta, clicar em outro node troca pra mostrar as
-// configurações dele, em vez de deixar aberto no node errado
-export function onNodeClicked(id) {
-  if (activeSettingsNodeId.value && activeSettingsNodeId.value !== id) {
+// configurações dele; se o tipo clicado não tem painel de configurações
+// (ex: notas), só fecha em vez de tentar mostrar algo errado
+export function onNodeClicked(id, hasSettings) {
+  if (!activeSettingsNodeId.value || activeSettingsNodeId.value === id) return
+  if (hasSettings) {
     activeSettingsNodeId.value = id
+  } else {
+    closeNodeSettings()
   }
 }
 
@@ -144,14 +148,19 @@ export function confirmDeleteNode() {
 const NODE_WIDTH = 480
 const NODE_GAP = 60
 
-export function addNode(type, data) {
+export function addNode(type, data, position, zIndex = 0) {
   const targetNodes = activeWorkspace.value.nodes
-  const maxX = targetNodes.reduce((max, n) => Math.max(max, n.position.x), 80 - NODE_WIDTH - NODE_GAP)
+  let resolvedPosition = position
+  if (!resolvedPosition) {
+    const maxX = targetNodes.reduce((max, n) => Math.max(max, n.position.x), 80 - NODE_WIDTH - NODE_GAP)
+    resolvedPosition = { x: maxX + NODE_WIDTH + NODE_GAP, y: 80 }
+  }
   const id = crypto.randomUUID()
   targetNodes.push({
     id,
     type,
-    position: { x: maxX + NODE_WIDTH + NODE_GAP, y: 80 },
+    position: resolvedPosition,
+    zIndex,
     data
   })
   return id

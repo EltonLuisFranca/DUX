@@ -67,7 +67,9 @@ const selectedType = ref(null)
 const filteredEntries = computed(() => {
   const q = query.value.trim().toLowerCase()
   return Object.entries(nodeTypeRegistry).filter(
-    ([, entry]) => !q || entry.label.toLowerCase().includes(q) || entry.description.toLowerCase().includes(q)
+    ([, entry]) =>
+      !entry.hideFromModal &&
+      (!q || entry.label.toLowerCase().includes(q) || entry.description.toLowerCase().includes(q))
   )
 })
 
@@ -97,13 +99,14 @@ function handleSelect(type, entry) {
   if (entry.createForm) {
     selectedType.value = type
   } else {
-    addNode(type, entry.createData())
+    addNode(type, entry.createData(), undefined, entry.defaultZIndex ?? 0)
     close()
   }
 }
 
 function handleFormSubmit(data) {
-  addNode(selectedType.value, data)
+  const entry = nodeTypeRegistry[selectedType.value]
+  addNode(selectedType.value, data, undefined, entry?.defaultZIndex ?? 0)
   close()
 }
 </script>

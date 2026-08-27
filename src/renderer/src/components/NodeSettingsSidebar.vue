@@ -90,7 +90,7 @@ let tipTimer = null
 function handleTipEnter() {
   tipTimer = setTimeout(() => {
     showTip.value = true
-  }, 500)
+  }, 250)
 }
 
 function handleTipLeave() {

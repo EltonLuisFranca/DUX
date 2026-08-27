@@ -52,6 +52,16 @@
         </svg>
       </button>
     </AppTooltip>
+
+    <AppTooltip label="Arraste para o canvas">
+      <button class="zoom-btn" draggable="true" @dragstart="handleNotesDragStart">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 2.5h7l3 3V13a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5z" />
+          <path d="M10 2.5V5.5h3" />
+          <path d="M5 8h6M5 10.5h6" />
+        </svg>
+      </button>
+    </AppTooltip>
   </div>
 </template>
 
@@ -61,6 +71,11 @@ import { useVueFlow } from '@vue-flow/core'
 import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
 import AppTooltip from './AppTooltip.vue'
 import { openAddNodeModal } from '../store/flowStore'
+
+function handleNotesDragStart(event) {
+  event.dataTransfer.setData('application/dux-node-type', 'notes')
+  event.dataTransfer.effectAllowed = 'move'
+}
 
 const { zoomIn, zoomOut, zoomTo, fitView, viewport } = useVueFlow()
 
