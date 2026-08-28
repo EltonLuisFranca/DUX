@@ -11,8 +11,9 @@
     "dist:publish": "electron-vite build && electron-builder --publish always"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Uzuno",
+  "license": "UNLICENSED",
+  "private": true,
   "type": "commonjs",
   "build": {
     "appId": "com.eltonfranca.dux",

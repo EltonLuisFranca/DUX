@@ -77,6 +77,7 @@ let retryTimer = null
 let stopThemeWatch = null
 let stopCwdWatch = null
 let stopNameWatch = null
+let renameDebounceTimer = null
 let resizeStartX = 0
 let resizeStartY = 0
 let resizeStartW = 0
@@ -213,9 +214,12 @@ onMounted(async () => {
   stopNameWatch = watch(
     () => props.data.name,
     (name) => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'rename', sessionId: props.id, name }))
-      }
+      clearTimeout(renameDebounceTimer)
+      renameDebounceTimer = setTimeout(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'rename', sessionId: props.id, name }))
+        }
+      }, 500)
     }
   )
 
@@ -234,6 +238,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('mousemove', onResizeMove)
   window.removeEventListener('mouseup', stopResize)
   resizeObserver?.disconnect()
+  clearTimeout(renameDebounceTimer)
   stopThemeWatch?.()
   stopCwdWatch?.()
   stopNameWatch?.()

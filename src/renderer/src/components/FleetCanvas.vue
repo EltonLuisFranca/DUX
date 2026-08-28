@@ -77,7 +77,8 @@ const {
   getNodes,
   getSelectedNodes,
   addSelectedNodes,
-  removeSelectedNodes
+  removeSelectedNodes,
+  addEdges
 } = useVueFlow()
 
 const dotColor = computed(() => (theme.value === 'light' ? '#c4c4cc' : '#55555e'))
@@ -92,6 +93,7 @@ function isTerminalNode(id) {
 }
 
 function handleConnect(connection) {
+  addEdges([connection])
   if (!isTerminalNode(connection.source) || !isTerminalNode(connection.target)) return
   linkAgents(connection.source, connection.target)
 }

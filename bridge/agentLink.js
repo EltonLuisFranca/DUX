@@ -135,8 +135,19 @@ function pumpQueue(sessionId) {
   const prompt =
     `[DUX] Mensagem do agente "${job.fromName}": ${job.message} ` +
     `Antes de responder, escreva sozinho numa linha exatamente: ${REPLY_MARKER} ${requestId}>>> ` +
-    `— depois escreva sua resposta normalmente e, ao terminar, escreva sozinho numa linha exatamente: ${END_MARKER}\n`
-  session.ptyProcess.write(prompt)
+    `— depois escreva sua resposta normalmente e, ao terminar, escreva sozinho numa linha exatamente: ${END_MARKER}`
+  writeAsMessage(session.ptyProcess, prompt)
+}
+
+// escreve o texto e o Enter como dois eventos separados, com um intervalo
+// entre eles — a maioria dos TUIs (Claude Code incluso) trata uma rajada única
+// e grande de bytes terminada em \n como "colar texto com quebra de linha
+// dentro do campo", não como "digitar e confirmar com Enter". Separar os dois
+// imita o que um humano realmente faz e evita o texto ficar só sentado no
+// campo de input, sem ser enviado
+function writeAsMessage(ptyProcess, text) {
+  ptyProcess.write(text)
+  setTimeout(() => ptyProcess.write('\r'), 80)
 }
 
 function ask(fromSessionId, toName, message) {
@@ -195,7 +206,7 @@ function buildInstructions(session) {
     .sort((a, b) => a.localeCompare(b))
 
   if (peers.length === 0) {
-    return `[DUX] Você foi desconectado de todos os outros agentes no canvas do DUX Fleet. O comando "dux ask" não tem mais ninguém pra chamar por enquanto.\n`
+    return `[DUX] Você foi desconectado de todos os outros agentes no canvas do DUX Fleet. O comando "dux ask" não tem mais ninguém pra chamar por enquanto.`
   }
 
   const peerList = peers.map((name) => `"${name}"`).join(', ')
@@ -205,14 +216,14 @@ function buildInstructions(session) {
     `Para pedir algo a um deles e aguardar a resposta, rode no shell: dux ask "<nome do agente>" "<sua mensagem>" ` +
     `— o comando bloqueia até a resposta chegar e a imprime no stdout. Use o nome exatamente como listado. ` +
     `Quando outro agente te perguntar algo, a mensagem vai chegar aqui prefixada com [DUX] Mensagem do agente "<nome>": ` +
-    `e vai te instruir a ecoar um marcador antes e depois da sua resposta — siga essa instrução à risca quando ela chegar.\n`
+    `e vai te instruir a ecoar um marcador antes e depois da sua resposta — siga essa instrução à risca quando ela chegar.`
   )
 }
 
 function sendLinkInstructions(sessionId) {
   const session = sessions.get(sessionId)
   if (!session) return
-  session.ptyProcess.write(buildInstructions(session))
+  writeAsMessage(session.ptyProcess, buildInstructions(session))
 }
 
 module.exports = {
