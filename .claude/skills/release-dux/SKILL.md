@@ -102,6 +102,21 @@ gh api -X PATCH repos/EltonLuisFranca/DUX/releases/<id-da-completa> \
   -f draft=false -f name="DUX vX.Y.Z" -f body="<notas da release>"
 ```
 
+**Passo crítico, não pule:** publicar uma release que estava em draft via
+PATCH **não recalcula automaticamente qual release é "Latest"** — o
+GitHub às vezes mantém a marca "Latest" numa release bem mais antiga (já
+vimos isso deixar a v1.0.1 marcada como Latest com v1.0.3 já publicada).
+Como o `electron-updater` consulta exatamente esse endpoint
+(`/releases/latest`) para checar updates, isso faz o app **nunca
+detectar a versão nova**, sem erro nenhum visível. Sempre confirme e
+force se necessário:
+
+```bash
+gh api repos/EltonLuisFranca/DUX/releases/latest -q '.tag_name'
+# se não for a versão que você acabou de publicar:
+gh api -X PATCH repos/EltonLuisFranca/DUX/releases/<id-da-completa> -f make_latest=true
+```
+
 ## 5. Confirmar que os assets estão acessíveis de verdade
 
 Não confie só no `gh release view` — teste o download anônimo real, que é
