@@ -1,6 +1,6 @@
 <template>
   <div class="window-shell">
-    <TitleBar title="DUX Fleet" />
+    <TitleBar title="DUX" />
     <div class="canvas-area">
       <NodeSettingsSidebar />
       <div class="canvas-stack">

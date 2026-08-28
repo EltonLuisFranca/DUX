@@ -16,7 +16,7 @@
   "type": "commonjs",
   "build": {
     "appId": "com.eltonfranca.dux",
-    "productName": "DUX Fleet",
+    "productName": "DUX",
     "files": [
       "out/**/*",
       "bridge/**/*",

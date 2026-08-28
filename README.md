@@ -1,4 +1,4 @@
-# DUX Fleet
+# DUX
 
 App de desktop (Windows) para visualizar e interagir com múltiplas sessões do [Claude Code](https://claude.com/claude-code) rodando dentro do WSL, cada uma como um node num canvas com zoom/pan — em vez de alternar entre vários terminais/janelas manualmente.
 
