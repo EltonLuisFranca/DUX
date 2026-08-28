@@ -3,15 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <style>
+      html,
       body {
         margin: 0;
+        height: 100%;
+        background: transparent;
+      }
+      .window-shell {
         height: 100vh;
+        box-sizing: border-box;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         gap: 14px;
         background: #17171b;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
         color: #d4d4d8;
         font-family:
           -apple-system,
@@ -20,6 +28,7 @@
           sans-serif;
         -webkit-app-region: drag;
         user-select: none;
+        overflow: hidden;
       }
       .logo {
         width: 48px;
@@ -45,9 +54,11 @@
     </style>
   </head>
   <body>
-    <img class="logo" src="../../build/icon.png" />
-    <div class="label" id="label">Verificando atualizações...</div>
-    <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
+    <div class="window-shell">
+      <img class="logo" src="../../build/icon.png" />
+      <div class="label" id="label">Verificando atualizações...</div>
+      <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
+    </div>
     <script>
       const { ipcRenderer } = require('electron')
       ipcRenderer.on('splash:status', (_event, { label, percent }) => {

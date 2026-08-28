@@ -79,7 +79,8 @@ function checkForUpdateBeforeLaunch() {
       frame: false,
       resizable: false,
       show: true,
-      backgroundColor: '#17171b',
+      transparent: true,
+      backgroundColor: '#00000000',
       webPreferences: { nodeIntegration: true, contextIsolation: false }
     })
     splash.loadFile(join(__dirname, 'splash.html'))
