@@ -13,7 +13,7 @@
     @connect="handleConnect"
     @edges-change="handleEdgesChange"
   >
-    <Background :gap="16" :color="dotColor" />
+    <Background :gap="16" :color="dotColor" :variant="canvasVariant" />
     <Panel v-if="workspace.nodes.length === 0" position="top-left" class="empty-state-panel">
       <button class="empty-state" @click="openAddNodeModal">
         <svg viewBox="0 0 20 20" width="20" height="20">
@@ -56,7 +56,7 @@ import WslClaudeTerminalNode from './WslClaudeTerminalNode.vue'
 import NotesNode from './NotesNode.vue'
 import BrowserNode from './BrowserNode.vue'
 import OllamaNode from './OllamaNode.vue'
-import { theme } from '../store/themeStore'
+import { theme, canvasVariant } from '../store/themeStore'
 import { onNodeClicked, addNode, openAddNodeModal, activeWorkspaceId } from '../store/flowStore'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
 import { linkAgents, unlinkAgents } from '../lib/bridgeClient'

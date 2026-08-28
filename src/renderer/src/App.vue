@@ -7,6 +7,7 @@
         <div v-for="ws in workspaces" :key="ws.id" v-show="ws.id === activeWorkspaceId" class="canvas-slot">
           <FleetCanvas :workspace="ws" />
         </div>
+        <SettingsPopover class="settings-corner" />
       </div>
     </div>
     <AddNodeModal />
@@ -23,6 +24,7 @@ import NodeSettingsSidebar from './components/NodeSettingsSidebar.vue'
 import AddNodeModal from './components/AddNodeModal.vue'
 import ConfirmDeleteNodeModal from './components/ConfirmDeleteNodeModal.vue'
 import ConfirmDeleteWorkspaceModal from './components/ConfirmDeleteWorkspaceModal.vue'
+import SettingsPopover from './components/SettingsPopover.vue'
 import { workspaces, activeWorkspaceId, switchWorkspace, flushPersist } from './store/flowStore'
 
 function goToWorkspace(direction) {
@@ -65,5 +67,12 @@ onBeforeUnmount(() => {
 .canvas-slot {
   position: absolute;
   inset: 0;
+}
+
+.settings-corner {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 30;
 }
 </style>

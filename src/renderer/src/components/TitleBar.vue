@@ -3,42 +3,6 @@
     <div class="spacer" />
     <div class="title">{{ title }}</div>
     <div class="right-controls">
-      <button
-        class="theme-toggle"
-        :title="theme === 'dark' ? 'Tema claro' : 'Tema escuro'"
-        @click="toggleTheme"
-      >
-        <svg
-          v-if="theme === 'dark'"
-          viewBox="0 0 24 24"
-          width="14"
-          height="14"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <circle cx="12" cy="12" r="4" />
-          <path
-            d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"
-          />
-        </svg>
-        <svg
-          v-else
-          viewBox="0 0 24 24"
-          width="14"
-          height="14"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-        </svg>
-      </button>
-
       <div class="traffic-lights">
         <button class="light minimize" aria-label="Minimizar" @click="minimize" />
         <button class="light maximize" aria-label="Maximizar" @click="maximize" />
@@ -49,8 +13,6 @@
 </template>
 
 <script setup>
-import { theme, toggleTheme } from '../store/themeStore'
-
 defineProps({
   title: { type: String, default: '' }
 })
@@ -83,24 +45,6 @@ const maximize = () => window.windowControls?.maximize()
   gap: 10px;
   flex-shrink: 0;
   -webkit-app-region: no-drag;
-}
-
-.theme-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-
-.theme-toggle:hover {
-  background: var(--color-hover);
-  color: var(--color-text-primary);
 }
 
 .traffic-lights {

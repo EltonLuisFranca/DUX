@@ -10,6 +10,10 @@ contextBridge.exposeInMainWorld('platformInfo', {
   platform: process.platform
 })
 
+contextBridge.exposeInMainWorld('appInfo', {
+  version: ipcRenderer.sendSync('app:get-version-sync')
+})
+
 contextBridge.exposeInMainWorld('workspaceStore', {
   loadSync: () => ipcRenderer.sendSync('workspaces:load-sync'),
   save: (data) => ipcRenderer.invoke('workspaces:save', data),

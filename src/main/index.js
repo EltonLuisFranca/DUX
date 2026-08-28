@@ -32,6 +32,10 @@ ipcMain.on('workspaces:load-sync', (event) => {
   event.returnValue = loadWorkspacesFromDisk()
 })
 
+ipcMain.on('app:get-version-sync', (event) => {
+  event.returnValue = app.getVersion()
+})
+
 ipcMain.handle('workspaces:save', (_event, data) => {
   saveWorkspacesToDisk(data)
 })
