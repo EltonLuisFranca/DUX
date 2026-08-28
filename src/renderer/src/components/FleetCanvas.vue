@@ -41,6 +41,9 @@
     <template #node-browser="nodeProps">
       <BrowserNode v-bind="nodeProps" />
     </template>
+    <template #node-ollama="nodeProps">
+      <OllamaNode v-bind="nodeProps" />
+    </template>
   </VueFlow>
 </template>
 
@@ -52,6 +55,7 @@ import ZoomControls from './ZoomControls.vue'
 import WslClaudeTerminalNode from './WslClaudeTerminalNode.vue'
 import NotesNode from './NotesNode.vue'
 import BrowserNode from './BrowserNode.vue'
+import OllamaNode from './OllamaNode.vue'
 import { theme } from '../store/themeStore'
 import { onNodeClicked, addNode, openAddNodeModal, activeWorkspaceId } from '../store/flowStore'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
