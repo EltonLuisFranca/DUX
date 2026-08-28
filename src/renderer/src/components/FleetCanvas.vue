@@ -6,9 +6,12 @@
     :default-viewport="{ x: 0, y: 0, zoom: 1 }"
     :min-zoom="0.25"
     :max-zoom="2"
+    connection-mode="loose"
     @node-click="handleNodeClick"
     @dragover="handleDragOver"
     @drop="handleDrop"
+    @connect="handleConnect"
+    @edges-change="handleEdgesChange"
   >
     <Background :gap="16" :color="dotColor" />
     <Panel v-if="workspace.nodes.length === 0" position="top-left" class="empty-state-panel">
@@ -29,6 +32,9 @@
     <template #node-claude-terminal="nodeProps">
       <WslClaudeTerminalNode v-bind="nodeProps" />
     </template>
+    <template #node-codex-terminal="nodeProps">
+      <WslClaudeTerminalNode v-bind="nodeProps" />
+    </template>
     <template #node-notes="nodeProps">
       <NotesNode v-bind="nodeProps" />
     </template>
@@ -45,21 +51,45 @@ import NotesNode from './NotesNode.vue'
 import { theme } from '../store/themeStore'
 import { onNodeClicked, addNode, openAddNodeModal } from '../store/flowStore'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
+import { linkAgents, unlinkAgents } from '../lib/bridgeClient'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 
-defineProps({
+const TERMINAL_TYPES = ['wsl-claude-terminal', 'claude-terminal', 'codex-terminal']
+
+const props = defineProps({
   workspace: { type: Object, required: true }
 })
 
-const { project, vueFlowRef } = useVueFlow()
+const { project, vueFlowRef, findNode } = useVueFlow()
 
 const dotColor = computed(() => (theme.value === 'light' ? '#c4c4cc' : '#55555e'))
 
 function handleNodeClick({ node }) {
   const hasSettings = Boolean(nodeTypeRegistry[node.type]?.settingsComponent)
   onNodeClicked(node.id, hasSettings)
+}
+
+function isTerminalNode(id) {
+  return TERMINAL_TYPES.includes(findNode(id)?.type)
+}
+
+function handleConnect(connection) {
+  if (!isTerminalNode(connection.source) || !isTerminalNode(connection.target)) return
+  linkAgents(connection.source, connection.target)
+}
+
+// Vue Flow só reporta edges removidas (drag pra fora, tecla delete, etc.) por
+// aqui — não existe um evento "disconnect" dedicado
+function handleEdgesChange(changes) {
+  for (const change of changes) {
+    if (change.type !== 'remove') continue
+    const edge = props.workspace.edges.find((e) => e.id === change.id)
+    if (edge && isTerminalNode(edge.source) && isTerminalNode(edge.target)) {
+      unlinkAgents(edge.source, edge.target)
+    }
+  }
 }
 
 function handleDragOver(event) {

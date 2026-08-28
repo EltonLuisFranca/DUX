@@ -25,3 +25,19 @@ export function checkWslPath(path) {
     ws.onerror = () => finish({ valid: false, error: 'connection' })
   })
 }
+
+function sendControlMessage(message) {
+  const ws = new WebSocket(BRIDGE_URL)
+  ws.onopen = () => {
+    ws.send(JSON.stringify(message))
+    ws.close()
+  }
+}
+
+export function linkAgents(sessionA, sessionB) {
+  sendControlMessage({ type: 'link', sessionA, sessionB })
+}
+
+export function unlinkAgents(sessionA, sessionB) {
+  sendControlMessage({ type: 'unlink', sessionA, sessionB })
+}

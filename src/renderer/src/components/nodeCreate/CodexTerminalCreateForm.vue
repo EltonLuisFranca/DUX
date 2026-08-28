@@ -101,7 +101,7 @@ function drillInto(entry) {
 
 function submit() {
   if (status.value !== 'valid') return
-  emit('submit', { name: 'Novo terminal', cwd: path.value, command: 'claude' })
+  emit('submit', { name: 'Novo terminal', cwd: path.value, command: 'codex' })
 }
 
 onMounted(() => {

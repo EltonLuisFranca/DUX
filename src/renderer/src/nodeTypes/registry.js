@@ -2,6 +2,7 @@ import WslClaudeTerminalSettings from '../components/nodeSettings/WslClaudeTermi
 import WslClaudeTerminalCreateForm from '../components/nodeCreate/WslClaudeTerminalCreateForm.vue'
 import ClaudeTerminalSettings from '../components/nodeSettings/ClaudeTerminalSettings.vue'
 import ClaudeTerminalCreateForm from '../components/nodeCreate/ClaudeTerminalCreateForm.vue'
+import CodexTerminalCreateForm from '../components/nodeCreate/CodexTerminalCreateForm.vue'
 
 const TERMINAL_ICON =
   '<rect x="2" y="3" width="16" height="14" rx="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M6 8l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M11 14h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
@@ -26,6 +27,13 @@ export const nodeTypeRegistry = {
     description: 'Sessão interativa do Claude Code rodando localmente no Linux.',
     settingsComponent: ClaudeTerminalSettings,
     createForm: ClaudeTerminalCreateForm,
+    icon: TERMINAL_ICON
+  },
+  'codex-terminal': {
+    label: 'Terminal · Codex',
+    description: 'Sessão interativa do Codex CLI rodando localmente no Linux.',
+    settingsComponent: ClaudeTerminalSettings,
+    createForm: CodexTerminalCreateForm,
     icon: TERMINAL_ICON
   },
   notes: {

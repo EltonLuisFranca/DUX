@@ -1,0 +1,55 @@
+#!/usr/bin/env node
+const http = require('http')
+
+function fail(message) {
+  process.stderr.write(`dux: ${message}\n`)
+  process.exit(1)
+}
+
+const [command, toName, message] = process.argv.slice(2)
+
+if (command !== 'ask' || !toName || !message) {
+  fail('uso: dux ask "<nome do agente>" "<mensagem>"')
+}
+
+const sessionId = process.env.DUX_SESSION_ID
+const agentPort = process.env.DUX_AGENT_PORT || '4578'
+
+if (!sessionId) {
+  fail('DUX_SESSION_ID não definido — este comando só funciona dentro de um terminal do DUX Fleet')
+}
+
+const payload = JSON.stringify({ from: sessionId, to: toName, message })
+
+const req = http.request(
+  {
+    host: '127.0.0.1',
+    port: Number(agentPort),
+    path: '/ask',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    timeout: 130000
+  },
+  (res) => {
+    let body = ''
+    res.on('data', (chunk) => (body += chunk))
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(body)
+        if (res.statusCode !== 200) fail(parsed.error || `falha (HTTP ${res.statusCode})`)
+        process.stdout.write(`${parsed.answer}\n`)
+      } catch {
+        fail('resposta inválida do bridge')
+      }
+    })
+  }
+)
+
+req.on('timeout', () => {
+  req.destroy()
+  fail('timeout esperando resposta do agente')
+})
+
+req.on('error', (err) => fail(`não foi possível falar com o bridge (${err.message})`))
+
+req.end(payload)

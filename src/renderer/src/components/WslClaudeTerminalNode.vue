@@ -4,6 +4,8 @@
     :class="{ selected }"
     :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
   >
+    <Handle id="left" type="target" :position="Position.Left" class="agent-handle" />
+    <Handle id="right" type="source" :position="Position.Right" class="agent-handle" />
     <div class="agent-header" :style="{ background: data.headerColor || undefined }">
       <span class="status-dot" :class="status" />
       <span class="agent-title">{{ data.name }}</span>
@@ -45,10 +47,11 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { useVueFlow } from '@vue-flow/core'
+import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import '@xterm/xterm/css/xterm.css'
 import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { theme, XTERM_THEMES } from '../store/themeStore'
+import { linkAgents } from '../lib/bridgeClient'
 
 const MIN_NODE_WIDTH = 320
 const MIN_NODE_HEIGHT = 220
@@ -59,7 +62,7 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
-const { viewport } = useVueFlow()
+const { viewport, getConnectedEdges } = useVueFlow()
 
 const termEl = ref(null)
 const status = ref('connecting')
@@ -73,6 +76,7 @@ let resizeObserver = null
 let retryTimer = null
 let stopThemeWatch = null
 let stopCwdWatch = null
+let stopNameWatch = null
 let resizeStartX = 0
 let resizeStartY = 0
 let resizeStartW = 0
@@ -117,12 +121,16 @@ function connect() {
     ws.send(
       JSON.stringify({
         type: 'start',
+        sessionId: props.id,
+        name: props.data.name,
         cwd: props.data.cwd,
+        command: props.data.command,
         cols: term.cols,
         rows: term.rows
       })
     )
     status.value = 'online'
+    relinkExistingEdges()
   }
 
   ws.onmessage = (event) => {
@@ -154,6 +162,18 @@ function disconnect() {
     ws.onclose = null
     ws.close()
     ws = null
+  }
+}
+
+// avisa o bridge sobre as conexões já existentes deste node no canvas (ex: um
+// workspace salvo que reabre com edges entre terminais) — ao criar uma edge
+// nova pelo canvas isso já é feito via evento @connect no FleetCanvas, mas
+// edges que já existiam antes de qualquer terminal conectar não disparam esse
+// evento, então cada lado da edge reafirma o link sozinho ao abrir sua sessão
+function relinkExistingEdges() {
+  for (const edge of getConnectedEdges(props.id)) {
+    const otherId = edge.source === props.id ? edge.target : edge.source
+    linkAgents(props.id, otherId)
   }
 }
 
@@ -190,6 +210,15 @@ onMounted(async () => {
 
   connect()
 
+  stopNameWatch = watch(
+    () => props.data.name,
+    (name) => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'rename', sessionId: props.id, name }))
+      }
+    }
+  )
+
   stopCwdWatch = watch(
     () => props.data.cwd,
     () => {
@@ -207,6 +236,7 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   stopThemeWatch?.()
   stopCwdWatch?.()
+  stopNameWatch?.()
   disconnect()
   term?.dispose()
 })
@@ -222,6 +252,31 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 8px 24px var(--color-shadow);
+}
+
+.agent-handle {
+  width: 10px;
+  height: 10px;
+  background: var(--color-bg-surface);
+  border: 2px solid var(--color-text-tertiary);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.agent-node:hover .agent-handle,
+.agent-handle.vue-flow__handle-connecting,
+.agent-handle.vue-flow__handle-valid {
+  opacity: 1;
+}
+
+.agent-handle.vue-flow__handle-connecting {
+  background: #febc2e;
+  border-color: #febc2e;
+}
+
+.agent-handle.vue-flow__handle-valid {
+  background: #28c840;
+  border-color: #28c840;
 }
 
 .agent-node.selected {
