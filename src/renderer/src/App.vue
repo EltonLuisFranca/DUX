@@ -12,7 +12,6 @@
     <AddNodeModal />
     <ConfirmDeleteNodeModal />
     <ConfirmDeleteWorkspaceModal />
-    <UpdateBanner />
   </div>
 </template>
 
@@ -24,7 +23,6 @@ import NodeSettingsSidebar from './components/NodeSettingsSidebar.vue'
 import AddNodeModal from './components/AddNodeModal.vue'
 import ConfirmDeleteNodeModal from './components/ConfirmDeleteNodeModal.vue'
 import ConfirmDeleteWorkspaceModal from './components/ConfirmDeleteWorkspaceModal.vue'
-import UpdateBanner from './components/UpdateBanner.vue'
 import { workspaces, activeWorkspaceId, switchWorkspace, flushPersist } from './store/flowStore'
 
 function goToWorkspace(direction) {

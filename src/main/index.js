@@ -56,23 +56,58 @@ ipcMain.handle('browser-node:save-screenshot', async (_event, { dataUrl, default
   return { saved: true, filePath }
 })
 
-function setupAutoUpdater(win) {
-  if (!app.isPackaged) return
+// Checagem de atualização feita ANTES de abrir a janela principal: uma tela de
+// splash mostra progresso enquanto baixa. Timeout curto pra nunca travar o
+// startup se o GitHub estiver fora do ar ou sem internet — nesse caso segue
+// direto pra janela principal, sem bloquear o usuário.
+const STARTUP_CHECK_TIMEOUT_MS = 6_000
 
-  autoUpdater.autoDownload = true
-  autoUpdater.autoInstallOnAppQuit = true
+function checkForUpdateBeforeLaunch() {
+  return new Promise((resolve) => {
+    if (!app.isPackaged) {
+      resolve({ willInstall: false })
+      return
+    }
 
-  const send = (channel, payload) => win.webContents.send(channel, payload)
+    const splash = new BrowserWindow({
+      width: 320,
+      height: 200,
+      frame: false,
+      resizable: false,
+      show: true,
+      backgroundColor: '#17171b',
+      webPreferences: { nodeIntegration: true, contextIsolation: false }
+    })
+    splash.loadFile(join(__dirname, 'splash.html'))
 
-  autoUpdater.on('update-available', (info) => send('updater:status', { state: 'available', info }))
-  autoUpdater.on('update-not-available', () => send('updater:status', { state: 'not-available' }))
-  autoUpdater.on('download-progress', (progress) => send('updater:status', { state: 'downloading', progress }))
-  autoUpdater.on('update-downloaded', (info) => send('updater:status', { state: 'downloaded', info }))
-  autoUpdater.on('error', (err) => send('updater:status', { state: 'error', message: err?.message }))
+    const setStatus = (label, percent) => splash.webContents.send('splash:status', { label, percent })
 
-  ipcMain.handle('updater:install-now', () => autoUpdater.quitAndInstall())
+    let settled = false
+    const finish = (willInstall) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeoutHandle)
+      if (!willInstall && !splash.isDestroyed()) splash.close()
+      resolve({ willInstall })
+    }
 
-  autoUpdater.checkForUpdates().catch((err) => console.error('[updater] check failed', err))
+    const timeoutHandle = setTimeout(() => finish(false), STARTUP_CHECK_TIMEOUT_MS)
+
+    autoUpdater.autoDownload = true
+    autoUpdater.once('update-not-available', () => finish(false))
+    autoUpdater.once('error', () => finish(false))
+    autoUpdater.on('download-progress', (progress) => {
+      setStatus('Baixando atualização...', progress.percent)
+    })
+    autoUpdater.once('update-downloaded', () => {
+      setStatus('Atualização pronta, reiniciando...', 100)
+      setTimeout(() => autoUpdater.quitAndInstall(), 600)
+      finish(true)
+    })
+
+    setStatus('Verificando atualizações...')
+    autoUpdater.checkForUpdates().catch(() => finish(false))
+  })
 }
 
 let bridgeProcess = null
@@ -114,10 +149,7 @@ function createWindow() {
     }
   })
 
-  win.once('ready-to-show', () => {
-    win.show()
-    setupAutoUpdater(win)
-  })
+  win.once('ready-to-show', () => win.show())
 
   // Hardening for the browser-node <webview>: force nodeintegration off and
   // strip the preload regardless of what the guest tag's attributes request,
@@ -144,7 +176,10 @@ function createWindow() {
   ipcMain.on('window:close', () => win.close())
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const { willInstall } = await checkForUpdateBeforeLaunch()
+  if (willInstall) return // quitAndInstall vai reiniciar o app na versão nova
+
   startBridge()
   createWindow()
 

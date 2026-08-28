@@ -20,12 +20,3 @@ contextBridge.exposeInMainWorld('browserNodeAPI', {
   saveScreenshot: (dataUrl, defaultName) =>
     ipcRenderer.invoke('browser-node:save-screenshot', { dataUrl, defaultName })
 })
-
-contextBridge.exposeInMainWorld('updaterAPI', {
-  onStatus: (callback) => {
-    const handler = (_event, payload) => callback(payload)
-    ipcRenderer.on('updater:status', handler)
-    return () => ipcRenderer.removeListener('updater:status', handler)
-  },
-  installNow: () => ipcRenderer.invoke('updater:install-now')
-})
