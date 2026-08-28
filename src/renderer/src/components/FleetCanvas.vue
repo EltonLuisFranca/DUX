@@ -42,14 +42,14 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { VueFlow, Panel, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import ZoomControls from './ZoomControls.vue'
 import WslClaudeTerminalNode from './WslClaudeTerminalNode.vue'
 import NotesNode from './NotesNode.vue'
 import { theme } from '../store/themeStore'
-import { onNodeClicked, addNode, openAddNodeModal } from '../store/flowStore'
+import { onNodeClicked, addNode, openAddNodeModal, activeWorkspaceId } from '../store/flowStore'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
 import { linkAgents, unlinkAgents } from '../lib/bridgeClient'
 
@@ -62,7 +62,15 @@ const props = defineProps({
   workspace: { type: Object, required: true }
 })
 
-const { project, vueFlowRef, findNode } = useVueFlow()
+const {
+  project,
+  vueFlowRef,
+  findNode,
+  getNodes,
+  getSelectedNodes,
+  addSelectedNodes,
+  removeSelectedNodes
+} = useVueFlow()
 
 const dotColor = computed(() => (theme.value === 'light' ? '#c4c4cc' : '#55555e'))
 
@@ -111,6 +119,29 @@ function handleDrop(event) {
 
   addNode(type, entry.createData(), position, entry.defaultZIndex ?? 0)
 }
+
+function selectNextNode() {
+  const nodes = getNodes.value
+  if (!nodes.length) return
+  const selected = getSelectedNodes.value
+  const currentIndex = selected.length ? nodes.findIndex((n) => n.id === selected[0].id) : -1
+  const nextNode = nodes[(currentIndex + 1) % nodes.length]
+  removeSelectedNodes(selected)
+  addSelectedNodes([nextNode])
+}
+
+// só o workspace ativo reage — como cada workspace tem seu próprio FleetCanvas
+// montado em paralelo, sem essa checagem o atalho dispararia em todos de uma vez
+function onKeydown(event) {
+  if (event.ctrlKey && event.key === 'Tab' && props.workspace.id === activeWorkspaceId.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    selectNextNode()
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', onKeydown, { capture: true }))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, { capture: true }))
 </script>
 
 <style scoped>
