@@ -3,9 +3,13 @@ import WslClaudeTerminalCreateForm from '../components/nodeCreate/WslClaudeTermi
 import ClaudeTerminalSettings from '../components/nodeSettings/ClaudeTerminalSettings.vue'
 import ClaudeTerminalCreateForm from '../components/nodeCreate/ClaudeTerminalCreateForm.vue'
 import CodexTerminalCreateForm from '../components/nodeCreate/CodexTerminalCreateForm.vue'
+import BrowserCreateForm from '../components/nodeCreate/BrowserCreateForm.vue'
 
 const TERMINAL_ICON =
   '<rect x="2" y="3" width="16" height="14" rx="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M6 8l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M11 14h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
+
+const BROWSER_ICON =
+  '<circle cx="10" cy="10" r="7.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2.5 10h15M10 2.5c2.2 2.1 3.4 4.8 3.4 7.5s-1.2 5.4-3.4 7.5c-2.2-2.1-3.4-4.8-3.4-7.5S7.8 4.6 10 2.5z" stroke="currentColor" stroke-width="1.3" fill="none"/>'
 
 // registro de tipos de node: cada tipo novo entra aqui com seu próprio
 // formulário de configurações (sidebar) e, opcionalmente, um formulário de
@@ -35,6 +39,12 @@ export const nodeTypeRegistry = {
     settingsComponent: ClaudeTerminalSettings,
     createForm: CodexTerminalCreateForm,
     icon: TERMINAL_ICON
+  },
+  browser: {
+    label: 'Navegador',
+    description: 'Uma página web dentro do canvas — abra o preview do seu projeto ali.',
+    createForm: BrowserCreateForm,
+    icon: BROWSER_ICON
   },
   notes: {
     label: 'Nota',

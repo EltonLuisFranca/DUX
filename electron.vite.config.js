@@ -16,6 +16,14 @@ export default defineConfig({
         input: resolve(__dirname, 'src/renderer/index.html')
       }
     },
-    plugins: [vue()]
+    plugins: [
+      vue({
+        template: {
+          compilerOptions: {
+            isCustomElement: (tag) => tag === 'webview'
+          }
+        }
+      })
+    ]
   }
 })

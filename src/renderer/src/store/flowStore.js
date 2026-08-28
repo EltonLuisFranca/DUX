@@ -27,14 +27,26 @@ export const activeSettingsNodeId = ref(null)
 
 let saveTimer = null
 
+function snapshot() {
+  return {
+    workspaces: workspaces.value,
+    activeWorkspaceId: activeWorkspaceId.value
+  }
+}
+
 function persist() {
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
-    window.workspaceStore?.save?.({
-      workspaces: workspaces.value,
-      activeWorkspaceId: activeWorkspaceId.value
-    })
+    window.workspaceStore?.save?.(snapshot())
   }, 400)
+}
+
+// Chamado no beforeunload da janela: sem isso, fechar o app logo após uma
+// mudança pode encerrar o renderer antes do debounce de 400ms rodar, perdendo
+// a alteração — o save aqui é síncrono, então roda por completo antes de fechar.
+export function flushPersist() {
+  clearTimeout(saveTimer)
+  window.workspaceStore?.saveSync?.(snapshot())
 }
 
 // deep watch pega mudanças em qualquer node/edge de qualquer workspace,

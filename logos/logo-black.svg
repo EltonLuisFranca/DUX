@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 160" width="520" height="160" fill="none">
+  <defs><clipPath id="c"><rect x="0" y="0" width="136" height="181" rx="4" ry="4"></rect></clipPath></defs>
+  <g transform="translate(8 15) scale(0.7065)">
+    <g fill="#000000">
+      <rect x="0" y="0" width="44" height="62" rx="10" ry="10"></rect>
+      <rect x="0" y="28" width="44" height="34" rx="3" ry="3"></rect>
+      <rect x="0" y="72" width="44" height="40" rx="3" ry="3"></rect>
+      <rect x="0" y="122" width="44" height="62" rx="10" ry="10"></rect>
+      <rect x="0" y="122" width="44" height="34" rx="3" ry="3"></rect>
+    </g>
+    <g transform="translate(57 1.5)" clip-path="url(#c)">
+      <rect x="88" y="-55" width="42" height="170" rx="21" ry="21" fill="#000000" transform="rotate(-45 109 94)"></rect>
+      <rect x="88" y="73" width="42" height="170" rx="21" ry="21" fill="#000000" transform="rotate(45 109 94)"></rect>
+    </g>
+  </g>
+  <text x="180" y="100" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="800" font-size="104" letter-spacing="1" fill="#000000">DUX</text>
+  <text x="182" y="136" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="500" font-size="23" letter-spacing="5.5" fill="#000000">BY UZUNO.TECH</text>
+</svg>

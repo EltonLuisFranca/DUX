@@ -12,6 +12,7 @@
     <AddNodeModal />
     <ConfirmDeleteNodeModal />
     <ConfirmDeleteWorkspaceModal />
+    <UpdateBanner />
   </div>
 </template>
 
@@ -23,7 +24,8 @@ import NodeSettingsSidebar from './components/NodeSettingsSidebar.vue'
 import AddNodeModal from './components/AddNodeModal.vue'
 import ConfirmDeleteNodeModal from './components/ConfirmDeleteNodeModal.vue'
 import ConfirmDeleteWorkspaceModal from './components/ConfirmDeleteWorkspaceModal.vue'
-import { workspaces, activeWorkspaceId, switchWorkspace } from './store/flowStore'
+import UpdateBanner from './components/UpdateBanner.vue'
+import { workspaces, activeWorkspaceId, switchWorkspace, flushPersist } from './store/flowStore'
 
 function goToWorkspace(direction) {
   const currentIndex = workspaces.value.findIndex((w) => w.id === activeWorkspaceId.value)
@@ -45,8 +47,14 @@ function onKeydown(event) {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown, { capture: true }))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, { capture: true }))
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown, { capture: true })
+  window.addEventListener('beforeunload', flushPersist)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown, { capture: true })
+  window.removeEventListener('beforeunload', flushPersist)
+})
 </script>
 
 <style scoped>
