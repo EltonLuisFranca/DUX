@@ -2,11 +2,11 @@ const IDLE_MS = 900
 const ASK_TIMEOUT_MS = 120000
 const REPLY_MARKER = '<<<DUX_REPLY'
 const END_MARKER = '<<<DUX_END>>>'
-// Envolvem as instruções de setup de link (não as mensagens dux ask em si) —
-// o terminal xterm.js do renderer usa esse par pra suprimir da tela só esse
-// texto de configuração, sem esconder a conversa real entre agentes.
+// Prefixa as instruções de setup de link (não as mensagens dux ask em si) —
+// o terminal xterm.js do renderer usa esse marcador pra trocar por um aviso
+// curto ("conexão atualizada") antes do texto completo, já que não dá pra
+// esconder de forma confiável o eco que a TUI do Claude Code redesenha.
 const SETUP_START_MARKER = '<<<DUX_SETUP>>>'
-const SETUP_END_MARKER = '<<<DUX_SETUP_END>>>'
 
 // sessionId -> { name, cwd, ptyProcess, links: Set<sessionId>, lastDataAt,
 //                rawBuffer, expectedReplyId, queue: [], pending: null }
@@ -228,7 +228,7 @@ function buildInstructions(session) {
 function sendLinkInstructions(sessionId) {
   const session = sessions.get(sessionId)
   if (!session) return
-  const wrapped = `${SETUP_START_MARKER}${buildInstructions(session)}${SETUP_END_MARKER}`
+  const wrapped = `${SETUP_START_MARKER}${buildInstructions(session)}`
   writeAsMessage(session.ptyProcess, wrapped)
 }
 

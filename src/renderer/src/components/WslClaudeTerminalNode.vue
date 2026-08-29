@@ -85,84 +85,34 @@ let resizeStartY = 0
 let resizeStartW = 0
 let resizeStartH = 0
 
-// Suprime da tela o texto de setup automático que o bridge injeta no
-// terminal ao conectar/desconectar links entre agentes (envolvido nesses
-// marcadores) — o Claude Code dentro do PTY continua recebendo essa
-// instrução normalmente, só não aparece pro usuário. Precisa ser uma state
-// machine porque os bytes chegam em pedaços via WebSocket e um marcador pode
-// ficar dividido entre dois eventos onmessage consecutivos.
+// A TUI do Claude Code redesenha a linha de input via sequências ANSI
+// conforme processa o texto injetado — não dá pra confiavelmente "esconder"
+// um trecho específico do stream sem um parser ANSI completo (o texto pode
+// ser reescrito/fragmentado de formas imprevisíveis). Em vez disso, ecoa a
+// instrução de setup normalmente, mas o bridge a envolve num marcador que
+// dispara uma linha de aviso curta ANTES dela — não esconde, mas deixa claro
+// que aquele bloco é mensagem de sistema, não algo que o usuário digitou.
 const SETUP_START_MARKER = '<<<DUX_SETUP>>>'
-const SETUP_END_MARKER = '<<<DUX_SETUP_END>>>'
-let insideSetupBlock = false
 let pendingTail = ''
-let flushTailTimer = null
-let setupBlockWatchdog = null
-
-// Se nada mais chegar por um tempinho, o texto retido (até 15 bytes, o
-// tamanho do marcador menos 1) provavelmente não fazia parte de um marcador
-// — nesse caso, sem esse flush, ficaria preso na tela pra sempre.
-function scheduleFlushTail() {
-  clearTimeout(flushTailTimer)
-  flushTailTimer = setTimeout(() => {
-    if (pendingTail && !insideSetupBlock) {
-      term.write(pendingTail)
-      pendingTail = ''
-    }
-  }, 120)
-}
-
-// Rede de segurança: se por algum motivo o marcador de fim nunca chegar
-// (bug, mensagem cortada por uma reconexão no meio), sair do modo "suprimir"
-// depois de alguns segundos evita esconder TODO o output futuro do terminal
-// pra sempre — um bug bem pior do que a instrução de setup aparecer uma vez.
-function enterSetupBlock() {
-  insideSetupBlock = true
-  clearTimeout(setupBlockWatchdog)
-  setupBlockWatchdog = setTimeout(() => {
-    insideSetupBlock = false
-  }, 5000)
-}
-
-function exitSetupBlock() {
-  insideSetupBlock = false
-  clearTimeout(setupBlockWatchdog)
-}
 
 function writeFiltered(chunk) {
-  let text = pendingTail + chunk
-  pendingTail = ''
+  const text = pendingTail + chunk
+  const markerIndex = text.indexOf(SETUP_START_MARKER)
 
-  while (text.length > 0) {
-    if (insideSetupBlock) {
-      const endIndex = text.indexOf(SETUP_END_MARKER)
-      if (endIndex === -1) {
-        // marcador de fim pode estar cortado no limite do chunk — guarda a
-        // cauda pro próximo pedaço em vez de arriscar um falso negativo
-        pendingTail = text.slice(-SETUP_END_MARKER.length + 1)
-        text = ''
-        break
-      }
-      text = text.slice(endIndex + SETUP_END_MARKER.length)
-      exitSetupBlock()
-      continue
-    }
-
-    const startIndex = text.indexOf(SETUP_START_MARKER)
-    if (startIndex === -1) {
-      const tailKeep = Math.min(text.length, SETUP_START_MARKER.length - 1)
-      const safeToWrite = text.slice(0, text.length - tailKeep)
-      if (safeToWrite) term.write(safeToWrite)
-      pendingTail = text.slice(text.length - tailKeep)
-      text = ''
-      break
-    }
-
-    if (startIndex > 0) term.write(text.slice(0, startIndex))
-    text = text.slice(startIndex + SETUP_START_MARKER.length)
-    enterSetupBlock()
+  if (markerIndex === -1) {
+    // guarda uma cauda pequena caso o marcador esteja cortado bem no limite
+    // entre este chunk e o próximo — sem isso, um corte infeliz faria o
+    // aviso nunca aparecer (o texto real ainda apareceria normalmente)
+    const tailKeep = Math.min(text.length, SETUP_START_MARKER.length - 1)
+    term.write(text.slice(0, text.length - tailKeep))
+    pendingTail = text.slice(text.length - tailKeep)
+    return
   }
 
-  if (pendingTail) scheduleFlushTail()
+  pendingTail = ''
+  if (markerIndex > 0) term.write(text.slice(0, markerIndex))
+  term.write('\r\n\x1b[2m🔗 conexão com agente atualizada\x1b[0m\r\n')
+  term.write(text.slice(markerIndex + SETUP_START_MARKER.length))
 }
 
 function startResize(event) {
@@ -329,8 +279,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('mouseup', stopResize)
   resizeObserver?.disconnect()
   clearTimeout(renameDebounceTimer)
-  clearTimeout(flushTailTimer)
-  clearTimeout(setupBlockWatchdog)
   stopThemeWatch?.()
   stopCwdWatch?.()
   stopNameWatch?.()
