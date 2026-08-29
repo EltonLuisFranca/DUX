@@ -8,6 +8,16 @@ const END_MARKER = '<<<DUX_END>>>'
 // esconder de forma confiável o eco que a TUI do Claude Code redesenha.
 const SETUP_START_MARKER = '<<<DUX_SETUP>>>'
 
+// Envolve o texto injetado pelo DUX (mensagens [DUX]) com cor ANSI ciano —
+// só decoração visual no terminal, o Claude Code recebe o mesmo texto puro
+// de qualquer forma (as sequências de escape não alteram o conteúdo, o
+// terminal só as interpreta como estilo). Ajuda a diferenciar de relance o
+// que veio do DUX do que o usuário/agente escreveu.
+const DUX_ICON = '🤖'
+function decorateDuxMessage(text) {
+  return `\x1b[36m${DUX_ICON} ${text}\x1b[0m`
+}
+
 // sessionId -> { name, cwd, ptyProcess, links: Set<sessionId>, lastDataAt,
 //                rawBuffer, expectedReplyId, queue: [], pending: null }
 const sessions = new Map()
@@ -137,13 +147,14 @@ function pumpQueue(sessionId) {
     }
   }
 
-  const prompt =
+  const prompt = decorateDuxMessage(
     `[DUX] Mensagem recebida via "dux ask", enviada pelo terminal do agente "${job.fromName}" (outro terminal ` +
-    `no mesmo canvas do DUX, não o usuário deste terminal diretamente): ${job.message}\n` +
-    `Se você (ou o usuário deste terminal) decidir responder, o DUX está esperando a resposta chegar cercada ` +
-    `por um marcador específico pra saber repassá-la de volta pro "dux ask" que está bloqueado esperando: escreva ` +
-    `sozinho numa linha exatamente "${REPLY_MARKER} ${requestId}>>>", depois a resposta normalmente, e ao terminar ` +
-    `escreva sozinho numa linha exatamente "${END_MARKER}". Sem isso, o outro terminal fica esperando até dar timeout.`
+      `no mesmo canvas do DUX, não o usuário deste terminal diretamente): ${job.message}\n` +
+      `Se você (ou o usuário deste terminal) decidir responder, o DUX está esperando a resposta chegar cercada ` +
+      `por um marcador específico pra saber repassá-la de volta pro "dux ask" que está bloqueado esperando: escreva ` +
+      `sozinho numa linha exatamente "${REPLY_MARKER} ${requestId}>>>", depois a resposta normalmente, e ao terminar ` +
+      `escreva sozinho numa linha exatamente "${END_MARKER}". Sem isso, o outro terminal fica esperando até dar timeout.`
+  )
   writeAsMessage(session.ptyProcess, prompt)
 }
 
@@ -292,7 +303,7 @@ function sendLinkInstructions(sessionId, waitedMs = 0) {
     return
   }
 
-  const wrapped = `${SETUP_START_MARKER}${buildInstructions(session)}`
+  const wrapped = `${SETUP_START_MARKER}${decorateDuxMessage(buildInstructions(session))}`
   writeAsMessage(session.ptyProcess, wrapped)
 }
 

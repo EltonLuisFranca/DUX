@@ -111,7 +111,7 @@ function writeFiltered(chunk) {
 
   pendingTail = ''
   if (markerIndex > 0) term.write(text.slice(0, markerIndex))
-  term.write('\r\n\x1b[2m🔗 conexão com agente atualizada\x1b[0m\r\n')
+  term.write('\r\n\x1b[36m🔗 conexão com agente atualizada\x1b[0m\r\n')
   term.write(text.slice(markerIndex + SETUP_START_MARKER.length))
 }
 
