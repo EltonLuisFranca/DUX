@@ -25,6 +25,18 @@
           />
         </div>
 
+        <div v-if="!query.trim()" class="modal-tabs">
+          <button
+            v-for="cat in categories"
+            :key="cat"
+            class="modal-tab"
+            :class="{ active: activeCategory === cat }"
+            @click="activeCategory = cat"
+          >
+            {{ CATEGORY_LABELS[cat] }}
+          </button>
+        </div>
+
         <div class="modal-list">
           <button
             v-for="[type, entry] in filteredEntries"
@@ -58,22 +70,38 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { addNode, closeAddNodeModal, isAddNodeModalOpen, openAddNodeModal } from '../store/flowStore'
-import { nodeTypeRegistry } from '../nodeTypes/registry'
+import { nodeTypeRegistry, CATEGORY_LABELS } from '../nodeTypes/registry'
 
 const query = ref('')
 const searchInput = ref(null)
 const selectedType = ref(null)
+const activeCategory = ref(Object.keys(CATEGORY_LABELS)[0])
 
 const isWindows = window.platformInfo?.platform === 'win32'
 
+const visibleEntries = computed(() =>
+  Object.entries(nodeTypeRegistry).filter(
+    ([type, entry]) => !entry.hideFromModal && (isWindows || type !== 'wsl-claude-terminal')
+  )
+)
+
+// abas com pelo menos um item visível na plataforma atual, na ordem
+// declarada em CATEGORY_LABELS
+const categories = computed(() => {
+  const present = new Set(visibleEntries.value.map(([, entry]) => entry.category))
+  return Object.keys(CATEGORY_LABELS).filter((cat) => present.has(cat))
+})
+
+// digitando algo na busca, ignora a aba ativa e procura em tudo — só volta a
+// filtrar por categoria quando o campo de busca está vazio
 const filteredEntries = computed(() => {
   const q = query.value.trim().toLowerCase()
-  return Object.entries(nodeTypeRegistry).filter(
-    ([type, entry]) =>
-      !entry.hideFromModal &&
-      (isWindows || type !== 'wsl-claude-terminal') &&
-      (!q || entry.label.toLowerCase().includes(q) || entry.description.toLowerCase().includes(q))
-  )
+  if (q) {
+    return visibleEntries.value.filter(
+      ([, entry]) => entry.label.toLowerCase().includes(q) || entry.description.toLowerCase().includes(q)
+    )
+  }
+  return visibleEntries.value.filter(([, entry]) => entry.category === activeCategory.value)
 })
 
 watch(isAddNodeModalOpen, (open) => {
@@ -203,6 +231,39 @@ function handleFormSubmit(data) {
 
 .search-input::placeholder {
   color: var(--color-text-tertiary);
+}
+
+.modal-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 8px 10px 0;
+  padding: 2px;
+  flex-shrink: 0;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+}
+
+.modal-tab {
+  flex: 1;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.modal-tab:hover {
+  color: var(--color-text-primary);
+}
+
+.modal-tab.active {
+  background: var(--color-hover);
+  color: var(--color-text-primary);
+  font-weight: 600;
 }
 
 .modal-list {

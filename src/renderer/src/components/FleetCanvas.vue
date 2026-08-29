@@ -23,7 +23,8 @@
         <span>Adicione um node para começar</span>
       </button>
     </Panel>
-    <Panel position="bottom-center">
+    <Panel position="bottom-center" class="bottom-toolbar-stack">
+      <VoiceInputBadge />
       <ZoomControls />
     </Panel>
 
@@ -45,6 +46,18 @@
     <template #node-ollama="nodeProps">
       <OllamaNode v-bind="nodeProps" />
     </template>
+    <template #node-git="nodeProps">
+      <GitNode v-bind="nodeProps" />
+    </template>
+    <template #node-image="nodeProps">
+      <ImageNode v-bind="nodeProps" />
+    </template>
+    <template #node-http="nodeProps">
+      <HttpNode v-bind="nodeProps" />
+    </template>
+    <template #node-pomodoro="nodeProps">
+      <PomodoroNode v-bind="nodeProps" />
+    </template>
   </VueFlow>
 </template>
 
@@ -53,12 +66,17 @@ import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { VueFlow, Panel, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import ZoomControls from './ZoomControls.vue'
+import VoiceInputBadge from './VoiceInputBadge.vue'
 import WslClaudeTerminalNode from './WslClaudeTerminalNode.vue'
 import NotesNode from './NotesNode.vue'
 import BrowserNode from './BrowserNode.vue'
 import OllamaNode from './OllamaNode.vue'
+import GitNode from './GitNode.vue'
+import ImageNode from './ImageNode.vue'
+import HttpNode from './HttpNode.vue'
+import PomodoroNode from './PomodoroNode.vue'
 import { theme, canvasVariant, edgeStyle } from '../store/themeStore'
-import { onNodeClicked, addNode, openAddNodeModal, activeWorkspaceId } from '../store/flowStore'
+import { onNodeClicked, addNode, openAddNodeModal, activeWorkspaceId, setActiveTerminal } from '../store/flowStore'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
 import { linkAgents, unlinkAgents } from '../lib/bridgeClient'
 
@@ -96,6 +114,7 @@ watch(edgeStyle, (style) => {
 function handleNodeClick({ node }) {
   const hasSettings = Boolean(nodeTypeRegistry[node.type]?.settingsComponent)
   onNodeClicked(node.id, hasSettings)
+  if (TERMINAL_TYPES.includes(node.type)) setActiveTerminal(node.id)
 }
 
 function isTerminalNode(id) {
@@ -178,6 +197,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, { capture
   align-items: center;
   justify-content: center;
   pointer-events: none;
+}
+
+.bottom-toolbar-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
 }
 
 .empty-state {

@@ -2,6 +2,7 @@ const fs = require('fs')
 const http = require('http')
 const os = require('os')
 const path = require('path')
+const { execFile } = require('child_process')
 const pty = require('node-pty')
 const { WebSocketServer, WebSocket } = require('ws')
 const agentLink = require('./agentLink')
@@ -44,6 +45,63 @@ function listSubdirectories(target) {
   }
 }
 
+const GIT_STATUS_CODE_MAP = {
+  M: 'modified',
+  A: 'added',
+  D: 'deleted',
+  R: 'renamed',
+  C: 'copied',
+  U: 'unmerged',
+  '?': 'untracked'
+}
+
+// execFile (não exec/spawn com shell) evita injeção de comando — cwd vem de
+// um path que o usuário já escolheu/validou no node, mas nunca interpolamos
+// ele numa string de shell.
+function runGit(args, cwd) {
+  return new Promise((resolve) => {
+    execFile('git', args, { cwd, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+      resolve({ ok: !error, stdout: stdout || '', stderr: stderr || '' })
+    })
+  })
+}
+
+function parsePorcelainStatus(stdout) {
+  return stdout
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const indexCode = line[0]
+      const worktreeCode = line[1]
+      const file = line.slice(3)
+      const code = indexCode !== ' ' && indexCode !== '?' ? indexCode : worktreeCode
+      return {
+        file,
+        status: GIT_STATUS_CODE_MAP[code] || 'unknown',
+        staged: indexCode !== ' ' && indexCode !== '?'
+      }
+    })
+}
+
+async function getGitInfo(cwd) {
+  const branchResult = await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], cwd)
+  if (!branchResult.ok) {
+    return { valid: false, error: branchResult.stderr.trim() || 'não é um repositório git' }
+  }
+
+  const [statusResult, diffResult] = await Promise.all([
+    runGit(['status', '--porcelain=v1'], cwd),
+    runGit(['diff', 'HEAD'], cwd)
+  ])
+
+  return {
+    valid: true,
+    branch: branchResult.stdout.trim(),
+    files: parsePorcelainStatus(statusResult.stdout),
+    diff: diffResult.stdout
+  }
+}
+
 const wss = new WebSocketServer({ host: '127.0.0.1', port: PORT })
 
 wss.on('connection', (ws) => {
@@ -71,7 +129,12 @@ wss.on('connection', (ws) => {
       sessionId = msg.sessionId || null
       const command = ALLOWED_COMMANDS[msg.command] || ALLOWED_COMMANDS.claude
 
-      ptyProcess = pty.spawn('zsh', ['-lc', command], {
+      // -i (além de -l) é necessário: alguns setups de dotfiles (nvm.sh
+      // incluso, aqui) só rodam sua inicialização de PATH quando o shell é
+      // interativo — um simples "zsh -lc claude" spawnado por um processo pai
+      // não-interativo (como o Electron) acaba sem PATH nenhum de nvm/asdf/
+      // etc., e comandos instalados por eles somem com "command not found".
+      ptyProcess = pty.spawn('zsh', ['-lic', command], {
         name: 'xterm-256color',
         cols: msg.cols || 80,
         rows: msg.rows || 24,
@@ -113,6 +176,11 @@ wss.on('connection', (ws) => {
       const valid = isDirectory(resolved)
       const entries = valid ? listSubdirectories(resolved) : []
       ws.send(JSON.stringify({ type: 'pathCheck', path: msg.path, resolved, valid, entries }))
+    } else if (msg.type === 'gitStatus') {
+      const resolved = resolveCwd(msg.path)
+      getGitInfo(resolved).then((info) => {
+        ws.send(JSON.stringify({ type: 'gitStatusResult', requestId: msg.requestId, ...info }))
+      })
     } else if (msg.type === 'link') {
       agentLink.linkSessions(msg.sessionA, msg.sessionB)
     } else if (msg.type === 'unlink') {

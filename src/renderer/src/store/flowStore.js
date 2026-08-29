@@ -1,17 +1,31 @@
-import { computed, ref, watch } from 'vue'
+import { computed, ref, toRaw, watch } from 'vue'
 import { apiFetch, authToken } from './authStore'
 
-const DEFAULT_WORKSPACE = {
-  id: 'default',
-  name: 'Workspace 1',
-  nodes: [],
-  edges: []
+// id precisa ser um UUID de verdade — a coluna workspace_id no backend é
+// `uuid`, e o Postgres rejeita qualquer outro formato com erro 500 no sync.
+function createDefaultWorkspace() {
+  return {
+    id: crypto.randomUUID(),
+    name: 'Workspace 1',
+    nodes: [],
+    edges: []
+  }
 }
 
 const persisted = window.workspaceStore?.loadSync?.() ?? null
 
+// Instalações antigas (antes da sync por workspace) podem ter persistido o
+// workspace inicial com id literal "default", que não é um UUID válido —
+// gera um novo id real na primeira leitura pra parar de quebrar o sync,
+// preservando nome/nodes/edges já existentes.
+function migrateLegacyWorkspaceIds(list) {
+  return list.map((w) => (w.id === 'default' ? { ...w, id: crypto.randomUUID() } : w))
+}
+
 export const workspaces = ref(
-  Array.isArray(persisted?.workspaces) && persisted.workspaces.length ? persisted.workspaces : [DEFAULT_WORKSPACE]
+  Array.isArray(persisted?.workspaces) && persisted.workspaces.length
+    ? migrateLegacyWorkspaceIds(persisted.workspaces)
+    : [createDefaultWorkspace()]
 )
 
 // Timestamp da última vez que cada workspace foi sincronizado com sucesso
@@ -37,13 +51,25 @@ export const activeWorkspace = computed(
 
 export const activeSettingsNodeId = ref(null)
 
+// Terminal que recebe o texto ditado por voz — o último node de terminal
+// clicado, não persistido (só faz sentido durante a sessão atual da janela).
+export const activeTerminalId = ref(null)
+
+export function setActiveTerminal(id) {
+  activeTerminalId.value = id
+}
+
 let saveTimer = null
 
+// toRaw() é essencial aqui: isto atravessa ipcRenderer.invoke, que usa
+// structured clone internamente — o algoritmo não sabe lidar com o Proxy
+// reativo do Vue e lança "could not be cloned" mesmo quando o conteúdo em si
+// é serializável.
 function snapshot() {
   return {
-    workspaces: workspaces.value,
+    workspaces: toRaw(workspaces.value),
     activeWorkspaceId: activeWorkspaceId.value,
-    syncedAt: syncedAt.value,
+    syncedAt: toRaw(syncedAt.value),
     pendingDeletes: [...pendingDeletes.value]
   }
 }
@@ -108,6 +134,13 @@ watch(
   },
   { deep: true }
 )
+
+// Sem isto, um app que abre sem nenhuma edição do usuário nunca grava
+// workspaces.json (o watch acima só reage a mudanças subsequentes) — cada
+// boot recomeça do zero (nada persistido pra carregar) e, se a migração de
+// id "default" tiver rodado, gera um UUID novo a cada vez, duplicando o
+// workspace no servidor a cada reinício.
+persistLocal()
 
 // Ao logar (ou reabrir o app já logado), busca todos os workspaces remotos e
 // faz merge com os locais por id + updated_at — nunca substitui tudo de uma

@@ -1,7 +1,8 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electron'
 import { join } from 'path'
 import { spawn } from 'child_process'
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, renameSync, createWriteStream } from 'fs'
+import { pipeline } from 'stream/promises'
 import { autoUpdater } from 'electron-updater'
 
 const WSL_DISTRO = 'Debian'
@@ -162,6 +163,101 @@ ipcMain.handle('auth:api-fetch', async (_event, { path, method = 'GET', body }) 
   }
 })
 
+// Requisição do node HTTP roda aqui (main process) pelo mesmo motivo do
+// auth:api-fetch acima: fetch() no renderer é sujeito a CORS, e boa parte
+// das APIs que alguém quer testar não libera origem nenhuma — o app desktop
+// não deveria ficar refém disso.
+ipcMain.handle('http-node:request', async (_event, { url, method = 'GET', headers = {}, body }) => {
+  const startedAt = Date.now()
+  try {
+    const response = await fetch(url, {
+      method,
+      headers,
+      ...(body ? { body } : {})
+    })
+
+    const responseHeaders = {}
+    response.headers.forEach((value, key) => {
+      responseHeaders[key] = value
+    })
+
+    const text = await response.text()
+    return {
+      ok: true,
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+      body: text,
+      durationMs: Date.now() - startedAt
+    }
+  } catch (err) {
+    return { ok: false, error: err.message, durationMs: Date.now() - startedAt }
+  }
+})
+
+// Modelo fica em userData, não empacotado no instalador nem em node_modules —
+// é baixado sob demanda na primeira transcrição (~148MB pro modelo "base").
+// O binário whisper-cli em si é que vai empacotado (via asarUnpack), porque
+// nodejs-whisper resolve seu caminho de forma fixa relativa ao próprio
+// node_modules, sem permitir apontar pra outro lugar.
+const WHISPER_MODEL_DIR = join(app.getPath('userData'), 'whisper-models')
+const WHISPER_MODEL_NAME = 'base'
+const WHISPER_MODEL_FILE = 'ggml-base.bin'
+const WHISPER_MODEL_URL = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${WHISPER_MODEL_FILE}`
+
+// Baixado manualmente via fetch em vez de usar autoDownloadModelName do
+// nodejs-whisper: essa opção dispara um shell script (download-ggml-model.sh)
+// resolvido relativo ao cwd do processo, que só funciona por acaso quando o
+// cwd é a pasta certa — dentro do Electron main process (cwd = raiz do app,
+// não node_modules/nodejs-whisper/cpp/whisper.cpp) ele falha silenciosamente
+// com "Cannot read properties of undefined (reading 'code')".
+async function ensureWhisperModel() {
+  const modelPath = join(WHISPER_MODEL_DIR, WHISPER_MODEL_FILE)
+  if (existsSync(modelPath)) return modelPath
+
+  mkdirSync(WHISPER_MODEL_DIR, { recursive: true })
+  const response = await fetch(WHISPER_MODEL_URL)
+  if (!response.ok) throw new Error(`falha ao baixar modelo: ${response.status}`)
+
+  const tmpPath = `${modelPath}.download`
+  const fileStream = createWriteStream(tmpPath)
+  await pipeline(response.body, fileStream)
+  renameSync(tmpPath, modelPath)
+  return modelPath
+}
+
+ipcMain.handle('voice:transcribe', async (_event, { buffer }) => {
+  const { nodewhisper } = await import('nodejs-whisper')
+  const tmpWavPath = join(app.getPath('temp'), `dux-voice-${Date.now()}.wav`)
+
+  try {
+    await ensureWhisperModel()
+    writeFileSync(tmpWavPath, Buffer.from(buffer))
+    const transcript = await nodewhisper(tmpWavPath, {
+      modelName: WHISPER_MODEL_NAME,
+      modelRootPath: WHISPER_MODEL_DIR,
+      removeWavFileAfterTranscription: true,
+      whisperOptions: {
+        outputInText: false,
+        language: 'pt'
+      }
+    })
+    // whisper.cpp devolve o texto com timestamps por linha
+    // ([00:00:00.000 --> 00:00:02.000]  texto) — mantemos só o texto.
+    const cleaned = transcript
+      .split('\n')
+      .map((line) => line.replace(/^\[[\d:.,\s>-]+\]\s*/, '').trim())
+      .filter(Boolean)
+      .join(' ')
+    return { ok: true, text: cleaned }
+  } catch (err) {
+    console.error('[voice] transcription failed', err)
+    return { ok: false, error: err.message }
+  } finally {
+    if (existsSync(tmpWavPath)) unlinkSync(tmpWavPath)
+  }
+})
+
 ipcMain.handle('browser-node:save-screenshot', async (_event, { dataUrl, defaultName }) => {
   const { canceled, filePath } = await dialog.showSaveDialog({
     defaultPath: defaultName,
@@ -172,6 +268,32 @@ ipcMain.handle('browser-node:save-screenshot', async (_event, { dataUrl, default
   const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
   writeFileSync(filePath, Buffer.from(base64, 'base64'))
   return { saved: true, filePath }
+})
+
+const IMAGE_MIME_BY_EXT = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml'
+}
+
+// A imagem vira data URL e vai direto pro data do node (persistido junto do
+// workspace) — mais simples que gerenciar um path externo que pode mudar ou
+// sumir entre máquinas depois de sincronizado.
+ipcMain.handle('image-node:open-file', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [{ name: 'Imagens', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] }]
+  })
+  if (canceled || !filePaths[0]) return { picked: false }
+
+  const filePath = filePaths[0]
+  const ext = filePath.slice(filePath.lastIndexOf('.')).toLowerCase()
+  const mime = IMAGE_MIME_BY_EXT[ext] || 'application/octet-stream'
+  const base64 = readFileSync(filePath).toString('base64')
+  return { picked: true, dataUrl: `data:${mime};base64,${base64}`, fileName: filePath.split('/').pop() }
 })
 
 // Checagem de atualização feita ANTES de abrir a janela principal: uma tela de

@@ -36,3 +36,15 @@ contextBridge.exposeInMainWorld('authStore', {
     return () => ipcRenderer.removeListener('auth:token-received', listener)
   }
 })
+
+contextBridge.exposeInMainWorld('voiceAPI', {
+  transcribe: (buffer) => ipcRenderer.invoke('voice:transcribe', { buffer })
+})
+
+contextBridge.exposeInMainWorld('imageNodeAPI', {
+  openFile: () => ipcRenderer.invoke('image-node:open-file')
+})
+
+contextBridge.exposeInMainWorld('httpNodeAPI', {
+  request: (options) => ipcRenderer.invoke('http-node:request', options)
+})

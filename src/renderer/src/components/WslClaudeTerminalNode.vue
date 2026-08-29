@@ -52,6 +52,7 @@ import '@xterm/xterm/css/xterm.css'
 import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { theme, XTERM_THEMES } from '../store/themeStore'
 import { linkAgents } from '../lib/bridgeClient'
+import { pendingVoiceInput, consumePendingVoiceInput } from '../store/voiceStore'
 
 const MIN_NODE_WIDTH = 320
 const MIN_NODE_HEIGHT = 220
@@ -77,6 +78,7 @@ let retryTimer = null
 let stopThemeWatch = null
 let stopCwdWatch = null
 let stopNameWatch = null
+let stopVoiceInputWatch = null
 let renameDebounceTimer = null
 let resizeStartX = 0
 let resizeStartY = 0
@@ -232,6 +234,14 @@ onMounted(async () => {
       connect()
     }
   )
+
+  stopVoiceInputWatch = watch(pendingVoiceInput, (pending) => {
+    if (!pending || pending.terminalId !== props.id) return
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'input', data: pending.text }))
+    }
+    consumePendingVoiceInput()
+  })
 })
 
 onBeforeUnmount(() => {
@@ -242,6 +252,7 @@ onBeforeUnmount(() => {
   stopThemeWatch?.()
   stopCwdWatch?.()
   stopNameWatch?.()
+  stopVoiceInputWatch?.()
   disconnect()
   term?.dispose()
 })
