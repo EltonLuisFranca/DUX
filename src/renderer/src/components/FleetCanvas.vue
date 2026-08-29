@@ -58,6 +58,19 @@
     <template #node-pomodoro="nodeProps">
       <PomodoroNode v-bind="nodeProps" />
     </template>
+
+    <template #edge-default="edgeProps">
+      <CustomEdge v-bind="edgeProps" />
+    </template>
+    <template #edge-smoothstep="edgeProps">
+      <CustomEdge v-bind="edgeProps" />
+    </template>
+    <template #edge-step="edgeProps">
+      <CustomEdge v-bind="edgeProps" />
+    </template>
+    <template #edge-straight="edgeProps">
+      <CustomEdge v-bind="edgeProps" />
+    </template>
   </VueFlow>
 </template>
 
@@ -67,6 +80,7 @@ import { VueFlow, Panel, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import ZoomControls from './ZoomControls.vue'
 import VoiceInputBadge from './VoiceInputBadge.vue'
+import CustomEdge from './CustomEdge.vue'
 import WslClaudeTerminalNode from './WslClaudeTerminalNode.vue'
 import NotesNode from './NotesNode.vue'
 import BrowserNode from './BrowserNode.vue'

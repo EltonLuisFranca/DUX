@@ -85,6 +85,86 @@ let resizeStartY = 0
 let resizeStartW = 0
 let resizeStartH = 0
 
+// Suprime da tela o texto de setup automático que o bridge injeta no
+// terminal ao conectar/desconectar links entre agentes (envolvido nesses
+// marcadores) — o Claude Code dentro do PTY continua recebendo essa
+// instrução normalmente, só não aparece pro usuário. Precisa ser uma state
+// machine porque os bytes chegam em pedaços via WebSocket e um marcador pode
+// ficar dividido entre dois eventos onmessage consecutivos.
+const SETUP_START_MARKER = '<<<DUX_SETUP>>>'
+const SETUP_END_MARKER = '<<<DUX_SETUP_END>>>'
+let insideSetupBlock = false
+let pendingTail = ''
+let flushTailTimer = null
+let setupBlockWatchdog = null
+
+// Se nada mais chegar por um tempinho, o texto retido (até 15 bytes, o
+// tamanho do marcador menos 1) provavelmente não fazia parte de um marcador
+// — nesse caso, sem esse flush, ficaria preso na tela pra sempre.
+function scheduleFlushTail() {
+  clearTimeout(flushTailTimer)
+  flushTailTimer = setTimeout(() => {
+    if (pendingTail && !insideSetupBlock) {
+      term.write(pendingTail)
+      pendingTail = ''
+    }
+  }, 120)
+}
+
+// Rede de segurança: se por algum motivo o marcador de fim nunca chegar
+// (bug, mensagem cortada por uma reconexão no meio), sair do modo "suprimir"
+// depois de alguns segundos evita esconder TODO o output futuro do terminal
+// pra sempre — um bug bem pior do que a instrução de setup aparecer uma vez.
+function enterSetupBlock() {
+  insideSetupBlock = true
+  clearTimeout(setupBlockWatchdog)
+  setupBlockWatchdog = setTimeout(() => {
+    insideSetupBlock = false
+  }, 5000)
+}
+
+function exitSetupBlock() {
+  insideSetupBlock = false
+  clearTimeout(setupBlockWatchdog)
+}
+
+function writeFiltered(chunk) {
+  let text = pendingTail + chunk
+  pendingTail = ''
+
+  while (text.length > 0) {
+    if (insideSetupBlock) {
+      const endIndex = text.indexOf(SETUP_END_MARKER)
+      if (endIndex === -1) {
+        // marcador de fim pode estar cortado no limite do chunk — guarda a
+        // cauda pro próximo pedaço em vez de arriscar um falso negativo
+        pendingTail = text.slice(-SETUP_END_MARKER.length + 1)
+        text = ''
+        break
+      }
+      text = text.slice(endIndex + SETUP_END_MARKER.length)
+      exitSetupBlock()
+      continue
+    }
+
+    const startIndex = text.indexOf(SETUP_START_MARKER)
+    if (startIndex === -1) {
+      const tailKeep = Math.min(text.length, SETUP_START_MARKER.length - 1)
+      const safeToWrite = text.slice(0, text.length - tailKeep)
+      if (safeToWrite) term.write(safeToWrite)
+      pendingTail = text.slice(text.length - tailKeep)
+      text = ''
+      break
+    }
+
+    if (startIndex > 0) term.write(text.slice(0, startIndex))
+    text = text.slice(startIndex + SETUP_START_MARKER.length)
+    enterSetupBlock()
+  }
+
+  if (pendingTail) scheduleFlushTail()
+}
+
 function startResize(event) {
   resizeStartX = event.clientX
   resizeStartY = event.clientY
@@ -139,7 +219,7 @@ function connect() {
   ws.onmessage = (event) => {
     const msg = JSON.parse(event.data)
     if (msg.type === 'data') {
-      term.write(msg.data)
+      writeFiltered(msg.data)
     } else if (msg.type === 'exit') {
       status.value = 'offline'
       term.write(`\r\n\r\n[sessão encerrada — código ${msg.exitCode}]\r\n`)
@@ -249,6 +329,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('mouseup', stopResize)
   resizeObserver?.disconnect()
   clearTimeout(renameDebounceTimer)
+  clearTimeout(flushTailTimer)
+  clearTimeout(setupBlockWatchdog)
   stopThemeWatch?.()
   stopCwdWatch?.()
   stopNameWatch?.()
@@ -266,7 +348,6 @@ onBeforeUnmount(() => {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-strong);
   border-radius: 10px;
-  overflow: hidden;
   box-shadow: 0 8px 24px var(--color-shadow);
 }
 
@@ -308,6 +389,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   background: var(--color-bg-app);
   border-bottom: 1px solid var(--color-border);
+  border-radius: 9px 9px 0 0;
 }
 
 .status-dot {
@@ -370,6 +452,8 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
   padding: 6px;
+  overflow: hidden;
+  border-radius: 0 0 9px 9px;
 }
 
 .resize-handle {

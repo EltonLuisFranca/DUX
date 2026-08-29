@@ -119,7 +119,6 @@ function stopResize() {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-strong);
   border-radius: 10px;
-  overflow: hidden;
   box-shadow: 0 8px 24px var(--color-shadow);
 }
 
@@ -140,6 +139,7 @@ function stopResize() {
   object-fit: contain;
   pointer-events: none;
   user-select: none;
+  border-radius: 9px;
 }
 
 .image-empty {
@@ -150,6 +150,7 @@ function stopResize() {
   height: 100%;
   color: var(--color-text-tertiary);
   font-size: 12px;
+  border-radius: 9px;
 }
 
 .image-drag-handle {

@@ -331,7 +331,6 @@ onBeforeUnmount(() => {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-strong);
   border-radius: 10px;
-  overflow: hidden;
   box-shadow: 0 8px 24px var(--color-shadow);
 }
 
@@ -355,6 +354,7 @@ onBeforeUnmount(() => {
   padding: 0 10px;
   background: var(--color-bg-surface-alt);
   border-bottom: 1px solid var(--color-border);
+  border-radius: 9px 9px 0 0;
   cursor: grab;
 }
 
@@ -532,6 +532,7 @@ onBeforeUnmount(() => {
   min-height: 0;
   background: var(--color-bg-app);
   overflow-y: auto;
+  border-radius: 0 0 9px 9px;
 }
 
 .auth-editor {
