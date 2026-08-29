@@ -4,8 +4,20 @@
     :class="{ selected }"
     :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
   >
-    <Handle id="left" type="target" :position="Position.Left" class="image-handle" />
-    <Handle id="right" type="source" :position="Position.Right" class="image-handle" />
+    <Handle
+      id="left"
+      type="target"
+      :position="Position.Left"
+      class="image-handle"
+      :class="{ connected: isLeftConnected }"
+    />
+    <Handle
+      id="right"
+      type="source"
+      :position="Position.Right"
+      class="image-handle"
+      :class="{ connected: isRightConnected }"
+    />
 
     <Transition name="toolbar-fade">
       <div v-if="selected" class="image-toolbar nodrag nowheel">
@@ -60,6 +72,7 @@ import { ref } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { updateNodeData, requestDeleteNode } from '../store/flowStore'
 import AppTooltip from './AppTooltip.vue'
+import { useHandleConnection } from '../lib/useHandleConnection'
 
 const MIN_NODE_WIDTH = 160
 const MIN_NODE_HEIGHT = 120
@@ -71,6 +84,9 @@ const props = defineProps({
 })
 
 const { viewport } = useVueFlow()
+const { isHandleConnected } = useHandleConnection(props.id)
+const isLeftConnected = isHandleConnected('left')
+const isRightConnected = isHandleConnected('right')
 
 const nodeWidth = ref(props.data.width || 360)
 const nodeHeight = ref(props.data.height || 260)
@@ -131,6 +147,12 @@ function stopResize() {
   height: 8px;
   background: var(--color-border-strong);
   border: 2px solid var(--color-bg-surface);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.image-handle.connected {
+  background: #3b82f6;
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
 }
 
 .image-content {

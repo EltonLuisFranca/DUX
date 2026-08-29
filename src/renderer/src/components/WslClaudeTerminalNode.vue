@@ -4,8 +4,20 @@
     :class="{ selected }"
     :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
   >
-    <Handle id="left" type="target" :position="Position.Left" class="agent-handle" />
-    <Handle id="right" type="source" :position="Position.Right" class="agent-handle" />
+    <Handle
+      id="left"
+      type="target"
+      :position="Position.Left"
+      class="agent-handle"
+      :class="{ connected: isLeftConnected }"
+    />
+    <Handle
+      id="right"
+      type="source"
+      :position="Position.Right"
+      class="agent-handle"
+      :class="{ connected: isRightConnected }"
+    />
     <div class="agent-header" :style="{ background: data.headerColor || undefined }">
       <span class="status-dot" :class="status" />
       <span class="agent-title">{{ data.name }}</span>
@@ -53,6 +65,7 @@ import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { theme, XTERM_THEMES } from '../store/themeStore'
 import { linkAgents } from '../lib/bridgeClient'
 import { pendingVoiceInput, consumePendingVoiceInput } from '../store/voiceStore'
+import { useHandleConnection } from '../lib/useHandleConnection'
 
 const MIN_NODE_WIDTH = 320
 const MIN_NODE_HEIGHT = 220
@@ -64,6 +77,9 @@ const props = defineProps({
 })
 
 const { viewport, getConnectedEdges } = useVueFlow()
+const { isHandleConnected } = useHandleConnection(props.id)
+const isLeftConnected = isHandleConnected('left')
+const isRightConnected = isHandleConnected('right')
 
 const termEl = ref(null)
 const status = ref('connecting')
@@ -275,13 +291,20 @@ onBeforeUnmount(() => {
   background: var(--color-bg-surface);
   border: 2px solid var(--color-text-tertiary);
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: opacity 0.12s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .agent-node:hover .agent-handle,
+.agent-handle.connected,
 .agent-handle.vue-flow__handle-connecting,
 .agent-handle.vue-flow__handle-valid {
   opacity: 1;
+}
+
+.agent-handle.connected {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
 }
 
 .agent-handle.vue-flow__handle-connecting {

@@ -4,8 +4,20 @@
     :class="{ selected }"
     :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
   >
-    <Handle id="left" type="target" :position="Position.Left" class="browser-handle" />
-    <Handle id="right" type="source" :position="Position.Right" class="browser-handle" />
+    <Handle
+      id="left"
+      type="target"
+      :position="Position.Left"
+      class="browser-handle"
+      :class="{ connected: isLeftConnected }"
+    />
+    <Handle
+      id="right"
+      type="source"
+      :position="Position.Right"
+      class="browser-handle"
+      :class="{ connected: isRightConnected }"
+    />
 
     <div class="browser-header" :style="{ background: data.headerColor || undefined }">
       <button class="nav-btn nodrag" title="Voltar" :disabled="!canGoBack" @click="goBack">
@@ -95,6 +107,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
+import { useHandleConnection } from '../lib/useHandleConnection'
 
 const MIN_NODE_WIDTH = 360
 const MIN_NODE_HEIGHT = 260
@@ -106,6 +119,9 @@ const props = defineProps({
 })
 
 const { viewport } = useVueFlow()
+const { isHandleConnected } = useHandleConnection(props.id)
+const isLeftConnected = isHandleConnected('left')
+const isRightConnected = isHandleConnected('right')
 
 const webviewEl = ref(null)
 const nodeWidth = ref(props.data.width || 640)
@@ -265,6 +281,13 @@ function stopResize() {
 .browser-handle {
   width: 8px;
   height: 8px;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.browser-handle.connected {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
 }
 
 .browser-header {
