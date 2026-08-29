@@ -149,10 +149,28 @@ function pumpQueue(sessionId) {
 // e grande de bytes terminada em \n como "colar texto com quebra de linha
 // dentro do campo", não como "digitar e confirmar com Enter". Separar os dois
 // imita o que um humano realmente faz e evita o texto ficar só sentado no
-// campo de input, sem ser enviado
+// campo de input, sem ser enviado.
+//
+// Enfileirada por ptyProcess: duas chamadas concorrentes pro mesmo terminal
+// (ex: um bug em outro lugar disparando sendLinkInstructions duas vezes)
+// senão intercalariam o segundo texto no meio do primeiro, antes do \r do
+// primeiro disparar — exatamente o tipo de texto grudado e nunca enviado que
+// já aconteceu aqui uma vez.
+const writeQueues = new WeakMap()
+
 function writeAsMessage(ptyProcess, text) {
-  ptyProcess.write(text)
-  setTimeout(() => ptyProcess.write('\r'), 80)
+  const previous = writeQueues.get(ptyProcess) || Promise.resolve()
+  const next = previous.then(
+    () =>
+      new Promise((resolve) => {
+        ptyProcess.write(text)
+        setTimeout(() => {
+          ptyProcess.write('\r')
+          resolve()
+        }, 80)
+      })
+  )
+  writeQueues.set(ptyProcess, next)
 }
 
 function ask(fromSessionId, toName, message) {
@@ -186,8 +204,14 @@ function linkSessions(sessionIdA, sessionIdB, attemptsLeft = LINK_RETRY_ATTEMPTS
     }
     return
   }
+  // relinkExistingEdges() (WslClaudeTerminalNode.vue) chama isso de novo a
+  // cada reconexão do WebSocket do terminal — sem essa checagem, cada queda
+  // de conexão reenviava as instruções de setup pros dois lados de um link
+  // que já existia, empilhando texto repetido no prompt do usuário.
+  const alreadyLinked = a.links.has(sessionIdB)
   a.links.add(sessionIdB)
   b.links.add(sessionIdA)
+  if (alreadyLinked) return
   sendLinkInstructions(sessionIdA)
   sendLinkInstructions(sessionIdB)
 }
