@@ -33,6 +33,26 @@
 
         <div class="settings-body">
           <section class="settings-section">
+            <h3 class="section-title">Conta</h3>
+
+            <div v-if="isAuthenticated" class="account-profile">
+              <img v-if="user?.avatar" class="account-avatar" :src="user.avatar" alt="" />
+              <div v-else class="account-avatar account-avatar-fallback">
+                {{ (user?.firstname || '?').charAt(0).toUpperCase() }}
+              </div>
+              <div class="account-info">
+                <span class="account-name">{{ [user?.firstname, user?.lastname].filter(Boolean).join(' ') || 'Conectado' }}</span>
+                <span class="account-email">{{ user?.email }}</span>
+              </div>
+              <button class="segmented-btn account-action" @click="logout">Sair</button>
+            </div>
+            <div v-else class="setting-row">
+              <span class="setting-label">Sincronizar entre máquinas</span>
+              <button class="segmented-btn account-action" @click="login">Entrar com Google</button>
+            </div>
+          </section>
+
+          <section class="settings-section">
             <h3 class="section-title">Aparência</h3>
 
             <div class="setting-row">
@@ -80,6 +100,7 @@
 <script setup>
 import { ref } from 'vue'
 import { theme, setTheme, canvasVariant, setCanvasVariant } from '../store/themeStore'
+import { isAuthenticated, user, login, logout } from '../store/authStore'
 
 const open = ref(false)
 const version = window.appInfo?.version ?? '0.0.0'
@@ -226,6 +247,65 @@ const version = window.appInfo?.version ?? '0.0.0'
 .segmented-btn.active {
   background: #3b82f6;
   color: #fff;
+}
+
+.account-action {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  flex-shrink: 0;
+}
+
+.account-action:hover {
+  background: var(--color-hover);
+  color: var(--color-text-primary);
+}
+
+.account-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.account-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.account-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.account-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-email {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .settings-footer {

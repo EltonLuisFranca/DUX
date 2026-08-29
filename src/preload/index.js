@@ -24,3 +24,14 @@ contextBridge.exposeInMainWorld('browserNodeAPI', {
   saveScreenshot: (dataUrl, defaultName) =>
     ipcRenderer.invoke('browser-node:save-screenshot', { dataUrl, defaultName })
 })
+
+contextBridge.exposeInMainWorld('authStore', {
+  login: () => ipcRenderer.invoke('auth:login'),
+  logout: () => ipcRenderer.invoke('auth:logout'),
+  getTokenSync: () => ipcRenderer.sendSync('auth:get-token-sync'),
+  onTokenReceived: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('auth:token-received', listener)
+    return () => ipcRenderer.removeListener('auth:token-received', listener)
+  }
+})

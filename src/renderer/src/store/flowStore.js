@@ -1,4 +1,5 @@
 import { computed, ref, watch } from 'vue'
+import { apiFetch, authToken } from './authStore'
 
 const DEFAULT_WORKSPACE = {
   id: 'default',
@@ -34,11 +35,27 @@ function snapshot() {
   }
 }
 
+let remoteSyncTimer = null
+
+// Sincronização remota é best-effort: falha de rede ou logout não pode
+// quebrar o fluxo local, que continua sendo a fonte de verdade offline.
+function syncToRemote() {
+  if (!authToken.value) return
+  clearTimeout(remoteSyncTimer)
+  remoteSyncTimer = setTimeout(() => {
+    apiFetch('/api/v1/dux/workspace', {
+      method: 'PUT',
+      body: JSON.stringify({ data: snapshot() })
+    }).catch((err) => console.error('[workspaces] remote sync failed', err))
+  }, 1500)
+}
+
 function persist() {
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
     window.workspaceStore?.save?.(snapshot())
   }, 400)
+  syncToRemote()
 }
 
 // Chamado no beforeunload da janela: sem isso, fechar o app logo após uma
@@ -52,6 +69,34 @@ export function flushPersist() {
 // deep watch pega mudanças em qualquer node/edge de qualquer workspace,
 // já que todos ficam montados e rodando em paralelo, não só o ativo
 watch(workspaces, persist, { deep: true })
+
+// Ao logar (ou reabrir o app já logado), busca o snapshot remoto e substitui
+// o estado local — o servidor é a fonte de verdade entre máquinas depois do
+// login. Sem dado remoto ainda (primeiro login), mantém o que já tinha local
+// e sobe como snapshot inicial.
+async function pullFromRemote() {
+  try {
+    const { data } = await apiFetch('/api/v1/dux/workspace')
+    if (data && Array.isArray(data.workspaces) && data.workspaces.length) {
+      workspaces.value = data.workspaces
+      activeWorkspaceId.value = workspaces.value.some((w) => w.id === data.activeWorkspaceId)
+        ? data.activeWorkspaceId
+        : workspaces.value[0].id
+    } else {
+      syncToRemote()
+    }
+  } catch (err) {
+    console.error('[workspaces] remote pull failed', err)
+  }
+}
+
+watch(
+  authToken,
+  (token) => {
+    if (token) pullFromRemote()
+  },
+  { immediate: true }
+)
 
 export function switchWorkspace(id) {
   if (id === activeWorkspaceId.value) return

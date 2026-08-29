@@ -1,14 +1,23 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electron'
 import { join } from 'path'
 import { spawn } from 'child_process'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs'
 import { autoUpdater } from 'electron-updater'
 
 const WSL_DISTRO = 'Debian'
 const BRIDGE_CMD = 'source ~/.zshrc; cd /mnt/c/Users/57224/dux-fleet/bridge && node server.js'
-const BRIDGE_DIR = join(__dirname, '../../bridge')
+// bridge/ está listado em asarUnpack (precisa rodar como processo real, não
+// dentro do arquivo virtual .asar), então empacotado ele vive em
+// app.asar.unpacked/bridge, não em app.asar/../../bridge como o __dirname
+// relativo sugeriria.
+const BRIDGE_DIR = app.isPackaged
+  ? join(__dirname, '../../bridge').replace('app.asar', 'app.asar.unpacked')
+  : join(__dirname, '../../bridge')
 
 const WORKSPACES_FILE = join(app.getPath('userData'), 'workspaces.json')
+const AUTH_FILE = join(app.getPath('userData'), 'auth.dat')
+const AUTH_PROTOCOL = 'dux'
+const UZUNO_API_BASE = 'https://api.uzuno.tech'
 
 function loadWorkspacesFromDisk() {
   try {
@@ -46,6 +55,81 @@ ipcMain.handle('workspaces:save', (_event, data) => {
 ipcMain.on('workspaces:save-sync', (event, data) => {
   saveWorkspacesToDisk(data)
   event.returnValue = true
+})
+
+// safeStorage depende de um keyring do sistema (GNOME Keyring, KWallet,
+// libsecret...) que setups Linux minimalistas (sem DE completo) não têm —
+// nesse caso isEncryptionAvailable() é false e ele nunca criptografa nada.
+// Guardamos texto puro como fallback nesses casos, prefixado pra saber qual
+// formato reler: perder o token em texto puro é bem melhor que travar login
+// silenciosamente pra uma fatia real dos usuários Linux.
+const PLAINTEXT_PREFIX = Buffer.from('dux-plain:')
+
+function loadAuthToken() {
+  try {
+    if (!existsSync(AUTH_FILE)) return null
+    const raw = readFileSync(AUTH_FILE)
+    if (raw.subarray(0, PLAINTEXT_PREFIX.length).equals(PLAINTEXT_PREFIX)) {
+      return raw.subarray(PLAINTEXT_PREFIX.length).toString('utf-8')
+    }
+    if (!safeStorage.isEncryptionAvailable()) return null
+    return safeStorage.decryptString(raw)
+  } catch (err) {
+    console.error('[auth] failed to load token', err)
+    return null
+  }
+}
+
+function saveAuthToken(token) {
+  try {
+    if (safeStorage.isEncryptionAvailable()) {
+      writeFileSync(AUTH_FILE, safeStorage.encryptString(token))
+    } else {
+      console.error('[auth] safeStorage encryption unavailable, persisting token as plaintext')
+      writeFileSync(AUTH_FILE, Buffer.concat([PLAINTEXT_PREFIX, Buffer.from(token, 'utf-8')]))
+    }
+  } catch (err) {
+    console.error('[auth] failed to save token', err)
+  }
+}
+
+function clearAuthToken() {
+  try {
+    if (existsSync(AUTH_FILE)) unlinkSync(AUTH_FILE)
+  } catch (err) {
+    console.error('[auth] failed to clear token', err)
+  }
+}
+
+let mainWindowRef = null
+
+function handleAuthCallbackUrl(url) {
+  let parsed
+  try {
+    parsed = new URL(url)
+  } catch {
+    return
+  }
+  if (parsed.protocol !== `${AUTH_PROTOCOL}:`) return
+
+  const token = parsed.searchParams.get('token')
+  if (!token) return
+
+  saveAuthToken(token)
+  mainWindowRef?.webContents.send('auth:token-received')
+  mainWindowRef?.focus()
+}
+
+ipcMain.handle('auth:login', () => {
+  shell.openExternal(`${UZUNO_API_BASE}/auth/google?client=dux`)
+})
+
+ipcMain.handle('auth:logout', () => {
+  clearAuthToken()
+})
+
+ipcMain.on('auth:get-token-sync', (event) => {
+  event.returnValue = loadAuthToken()
 })
 
 ipcMain.handle('browser-node:save-screenshot', async (_event, { dataUrl, defaultName }) => {
@@ -154,6 +238,11 @@ function createWindow() {
     }
   })
 
+  mainWindowRef = win
+  win.on('closed', () => {
+    if (mainWindowRef === win) mainWindowRef = null
+  })
+
   win.once('ready-to-show', () => win.show())
 
   // Hardening for the browser-node <webview>: force nodeintegration off and
@@ -181,17 +270,50 @@ function createWindow() {
   ipcMain.on('window:close', () => win.close())
 }
 
-app.whenReady().then(async () => {
-  const { willInstall } = await checkForUpdateBeforeLaunch()
-  if (willInstall) return // quitAndInstall vai reiniciar o app na versão nova
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(AUTH_PROTOCOL, process.execPath, [join(__dirname, '../../')])
+  }
+} else {
+  app.setAsDefaultProtocolClient(AUTH_PROTOCOL)
+}
 
-  startBridge()
-  createWindow()
+// Windows/Linux entregam o link dux://... como argv de uma segunda
+// instância do app, não como evento — precisa de single-instance lock pra
+// redirecionar esse argv pra instância já aberta em vez de abrir duas janelas.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+if (!gotSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (_event, argv) => {
+    const authUrl = argv.find((arg) => arg.startsWith(`${AUTH_PROTOCOL}://`))
+    if (authUrl) handleAuthCallbackUrl(authUrl)
+
+    if (mainWindowRef) {
+      if (mainWindowRef.isMinimized()) mainWindowRef.restore()
+      mainWindowRef.focus()
+    }
   })
-})
+
+  // macOS entrega o link via este evento em vez de argv de segunda instância.
+  app.on('open-url', (event, url) => {
+    event.preventDefault()
+    handleAuthCallbackUrl(url)
+  })
+
+  app.whenReady().then(async () => {
+    const { willInstall } = await checkForUpdateBeforeLaunch()
+    if (willInstall) return // quitAndInstall vai reiniciar o app na versão nova
+
+    startBridge()
+    createWindow()
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
+  })
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

@@ -18,6 +18,10 @@
   "build": {
     "appId": "com.eltonfranca.dux",
     "productName": "DUX",
+    "protocols": {
+      "name": "DUX",
+      "schemes": ["dux"]
+    },
     "files": [
       "out/**/*",
       "bridge/**/*",
@@ -42,6 +46,23 @@
       ],
       "category": "Development",
       "maintainer": "Elton Franca"
+    },
+    "pacman": {
+      "depends": [
+        "c-ares",
+        "ffmpeg",
+        "gtk3",
+        "libevent",
+        "libvpx",
+        "libxslt",
+        "libxss",
+        "minizip",
+        "nss",
+        "re2",
+        "snappy",
+        "libnotify",
+        "libappindicator-gtk3"
+      ]
     },
     "publish": {
       "provider": "github",
