@@ -1,6 +1,6 @@
 {
   "name": "dux",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "",
   "main": "./out/main/index.js",
   "scripts": {
@@ -20,16 +20,24 @@
     "productName": "DUX",
     "protocols": {
       "name": "DUX",
-      "schemes": ["dux"]
+      "schemes": [
+        "dux"
+      ]
     },
     "files": [
       "out/**/*",
       "bridge/**/*",
       "!bridge/node_modules/node-pty/build/**/*.o",
-      "!bridge/node_modules/node-pty/build/**/*.node.obj"
+      "!bridge/node_modules/node-pty/build/**/*.node.obj",
+      "!node_modules/nodejs-whisper/cpp/whisper.cpp/{examples,tests,src,include,ggml,models,samples,bindings,grammars}/**/*",
+      "!node_modules/nodejs-whisper/cpp/whisper.cpp/build/**/*.o",
+      "!node_modules/nodejs-whisper/cpp/whisper.cpp/build/CMakeFiles/**/*",
+      "!node_modules/nodejs-whisper/cpp/whisper.cpp/build/**/{test-*,bench,main,parakeet-*}",
+      "!node_modules/nodejs-whisper/cpp/whisper.cpp/.git/**/*"
     ],
     "asarUnpack": [
-      "bridge/**/*"
+      "bridge/**/*",
+      "node_modules/nodejs-whisper/cpp/whisper.cpp/build/bin/**/*"
     ],
     "win": {
       "target": "nsis"
@@ -76,6 +84,7 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "electron-updater": "^6.8.9",
+    "nodejs-whisper": "^0.3.1",
     "vue": "^3.5.42"
   },
   "devDependencies": {
