@@ -19,6 +19,29 @@ const ALLOWED_COMMANDS = {
   codex: 'codex'
 }
 
+// Filtra do env herdado tudo que é específico de COMO este próprio bridge foi
+// lançado, não algo que o terminal do usuário deveria ver:
+// - CLAUDE_*: se o DUX foi aberto de dentro de uma sessão Claude Code (ex: um
+//   dev rodando `npm run dev` a partir de um terminal do Claude Code/VSCode),
+//   o Electron herda CLAUDE_CODE_SESSION_ID/CLAUDE_CODE_CHILD_SESSION/etc
+//   dessa sessão externa — sem filtrar, o Claude Code recém-aberto DENTRO do
+//   DUX se identifica incorretamente como sessão-filha daquela outra sessão
+//   (ex: "Transcript saving is off" por herdar CLAUDE_CODE_CHILD_SESSION).
+// - ELECTRON_RUN_AS_NODE: o main process do Electron seta essa var só pra
+//   este próprio processo bridge rodar como Node puro em vez de tentar abrir
+//   uma janela de app (ver startBridge() em src/main/index.js) — não deve
+//   vazar pro zsh/claude do usuário, que não tem nada a ver com Electron.
+// Nenhum desses prefixos é usado pelo próprio DUX (usa DUX_*), então não há
+// nada legítimo pra perder.
+const ENV_PREFIXES_TO_STRIP = ['CLAUDE_', 'ELECTRON_RUN_AS_NODE']
+
+function buildAgentEnv(extra) {
+  const filtered = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !ENV_PREFIXES_TO_STRIP.some((prefix) => key.startsWith(prefix)))
+  )
+  return { ...filtered, ...extra }
+}
+
 function resolveCwd(input) {
   const raw = input && input.trim() ? input.trim() : '~'
   const expanded = raw === '~' || raw.startsWith('~/') ? path.join(HOME, raw.slice(1)) : raw
@@ -129,22 +152,40 @@ wss.on('connection', (ws) => {
       sessionId = msg.sessionId || null
       const command = ALLOWED_COMMANDS[msg.command] || ALLOWED_COMMANDS.claude
 
+      // Só o Claude Code entende --mcp-config (Codex tem seu próprio
+      // mecanismo de MCP, tratado à parte se algum dia precisar). O JSON
+      // inline evita mexer em qualquer .mcp.json do projeto do usuário — o
+      // servidor MCP (mcp-server.mjs) é um processo próprio por sessão, que
+      // fala com este bridge via HTTP local pra resolver dux_ask.
+      const mcpConfigFlag =
+        command === 'claude' && sessionId
+          ? ` --mcp-config '${JSON.stringify({
+              mcpServers: {
+                dux: {
+                  type: 'stdio',
+                  command: 'node',
+                  args: [path.join(__dirname, 'mcp-server.mjs')],
+                  env: { DUX_SESSION_ID: sessionId, DUX_AGENT_PORT: String(AGENT_PORT) }
+                }
+              }
+            })}'`
+          : ''
+
       // -i (além de -l) é necessário: alguns setups de dotfiles (nvm.sh
       // incluso, aqui) só rodam sua inicialização de PATH quando o shell é
       // interativo — um simples "zsh -lc claude" spawnado por um processo pai
       // não-interativo (como o Electron) acaba sem PATH nenhum de nvm/asdf/
       // etc., e comandos instalados por eles somem com "command not found".
-      ptyProcess = pty.spawn('zsh', ['-lic', command], {
+      ptyProcess = pty.spawn('zsh', ['-lic', `${command}${mcpConfigFlag}`], {
         name: 'xterm-256color',
         cols: msg.cols || 80,
         rows: msg.rows || 24,
         cwd,
-        env: {
-          ...process.env,
+        env: buildAgentEnv({
           PATH: `${BIN_DIR}${path.delimiter}${process.env.PATH}`,
           DUX_SESSION_ID: sessionId || '',
           DUX_AGENT_PORT: String(AGENT_PORT)
-        }
+        })
       })
 
       if (sessionId) {

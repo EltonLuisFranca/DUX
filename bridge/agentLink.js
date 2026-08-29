@@ -40,7 +40,8 @@ function registerSession(sessionId, { name, cwd, ptyProcess }) {
     rawBuffer: '',
     expectedReplyId: null,
     queue: [],
-    pending: null
+    pending: null,
+    dispatching: false
   })
 }
 
@@ -71,14 +72,19 @@ function renameSession(sessionId, name) {
   for (const otherId of session.links) sendLinkInstructions(otherId)
 }
 
-// chamado a cada chunk de dados que sai do PTY. O prompt que injetamos cita,
-// por extenso, tanto a tag de reply quanto a de fim (precisa, pra instruir o
-// agente) — então o eco síncrono do próprio write() sempre contém as DUAS tags
-// já em sequência, uma linha só. Por isso a mera presença de "reply-tag ...
-// end-tag" não basta pra reconhecer uma resposta real: usamos a ÚLTIMA
-// ocorrência da reply-tag (a mais recente e por decisão própria do agente,
-// nunca a primeira, que é sempre o eco do que nós mesmos escrevemos) e só
-// aceitamos o end-tag que vier depois DELA
+// chamado a cada chunk de dados que sai do PTY. Antes esta função exigia DUAS
+// ocorrências da reply-tag (a 1ª seria sempre o eco literal do prompt que nós
+// mesmos escrevemos no PTY, contendo a tag por extenso como instrução; a 2ª,
+// a resposta real do agente) — isso valia enquanto o terminal ecoava o texto
+// bruto injetado. Mas a UI do Claude Code renderiza o prompt recebido como
+// mensagem de chat estilizada, não necessariamente como eco literal byte a
+// byte contendo a tag — na prática só UMA ocorrência real chega no buffer
+// (quando o agente decide responder), e exigir duas fazia o dux_ask nunca
+// resolver, ficando preso até o timeout mesmo com a resposta certa já visível
+// na tela. Aceita a primeira ocorrência da reply-tag seguida do end-tag.
+// eslint-disable-next-line no-control-regex
+const ANSI_ESCAPE_RE = /\x1b\[[0-9;]*[a-zA-Z]/g
+
 function onSessionData(sessionId, chunk) {
   const session = sessions.get(sessionId)
   if (!session) return
@@ -89,19 +95,18 @@ function onSessionData(sessionId, chunk) {
   session.rawBuffer += chunk
 
   const replyTag = `${REPLY_MARKER} ${session.expectedReplyId}>>>`
-  const firstTagIndex = session.rawBuffer.indexOf(replyTag)
-  if (firstTagIndex === -1) return
+  const tagIndex = session.rawBuffer.indexOf(replyTag)
+  if (tagIndex === -1) return
 
-  const lastTagIndex = session.rawBuffer.lastIndexOf(replyTag)
-  // só existe uma ocorrência até agora — ainda é (provavelmente) o eco do
-  // nosso próprio prompt, não uma resposta de verdade; espera mais dados
-  if (lastTagIndex === firstTagIndex) return
-
-  const afterTag = session.rawBuffer.slice(lastTagIndex + replyTag.length)
+  const afterTag = session.rawBuffer.slice(tagIndex + replyTag.length)
   const endIndex = afterTag.indexOf(END_MARKER)
   if (endIndex === -1) return
 
-  const answer = afterTag.slice(0, endIndex).trim()
+  // A UI do Claude Code formata a resposta na tela com códigos ANSI de estilo
+  // (cor, negrito para markdown) — eles ficam misturados no texto bruto do
+  // PTY entre os marcadores, e sem removê-los o "answer" chega ao outro lado
+  // do dux ask com fragmentos tipo "[39m" ou "[38;5;231m" colados no meio.
+  const answer = afterTag.slice(0, endIndex).replace(ANSI_ESCAPE_RE, '').trim()
   const { resolve } = session.pending
   session.pending = null
   session.expectedReplyId = null
@@ -115,11 +120,11 @@ function isIdle(session, thresholdMs = IDLE_MS) {
 }
 
 // tenta despachar a próxima pergunta da fila de um destino, se ele estiver
-// livre (sem pergunta pendente) e ocioso (sem output novo recentemente,
-// heurística de "não está no meio de outra coisa")
+// livre (sem pergunta pendente/despachando) e ocioso (sem output novo
+// recentemente, heurística de "não está no meio de outra coisa")
 function pumpQueue(sessionId) {
   const session = sessions.get(sessionId)
-  if (!session || session.pending || session.queue.length === 0) return
+  if (!session || session.pending || session.dispatching || session.queue.length === 0) return
 
   if (!isIdle(session)) {
     setTimeout(() => pumpQueue(sessionId), IDLE_MS)
@@ -128,26 +133,12 @@ function pumpQueue(sessionId) {
 
   const job = session.queue.shift()
   const requestId = nextRequestId()
-  session.rawBuffer = ''
-  session.expectedReplyId = requestId
 
-  const timeoutHandle = setTimeout(() => {
-    session.pending = null
-    session.expectedReplyId = null
-    job.reject(new Error('timeout esperando resposta do agente'))
-    pumpQueue(sessionId)
-  }, ASK_TIMEOUT_MS)
-
-  session.pending = {
-    resolve: (answer) => {
-      clearTimeout(timeoutHandle)
-      job.resolve(answer)
-    },
-    reject: (err) => {
-      clearTimeout(timeoutHandle)
-      job.reject(err)
-    }
-  }
+  // dispatching bloqueia pumpQueue de rodar de novo pro mesmo destino
+  // enquanto a escrita ainda está em andamento — sem isso, uma pergunta
+  // seguinte poderia começar a ser despachada antes da atual sequer terminar
+  // de ser escrita no PTY.
+  session.dispatching = true
 
   const prompt = decorateDuxMessage(
     `[DUX] Message received via "dux ask", sent by agent terminal "${job.fromName}" (another terminal in the ` +
@@ -157,7 +148,35 @@ function pumpQueue(sessionId) {
       `one line, exactly "${REPLY_MARKER} ${requestId}>>>", then the reply normally, and when done write, alone ` +
       `on one line, exactly "${END_MARKER}". Without this, the other terminal keeps waiting until it times out.`
   )
-  writeAsMessage(session.ptyProcess, prompt)
+
+  // A pergunta em si CITA o marcador de reply por extenso como instrução —
+  // se rawBuffer começasse a acumular antes da escrita terminar, o eco
+  // síncrono dessa própria citação (não uma resposta real do agente) seria
+  // capturado como se fosse a resposta. Só limpa o buffer e passa a
+  // monitorar DEPOIS que a escrita (texto + \r) já aconteceu por completo.
+  writeAsMessage(session.ptyProcess, prompt).then(() => {
+    session.dispatching = false
+    session.rawBuffer = ''
+    session.expectedReplyId = requestId
+
+    const timeoutHandle = setTimeout(() => {
+      session.pending = null
+      session.expectedReplyId = null
+      job.reject(new Error('timeout esperando resposta do agente'))
+      pumpQueue(sessionId)
+    }, ASK_TIMEOUT_MS)
+
+    session.pending = {
+      resolve: (answer) => {
+        clearTimeout(timeoutHandle)
+        job.resolve(answer)
+      },
+      reject: (err) => {
+        clearTimeout(timeoutHandle)
+        job.reject(err)
+      }
+    }
+  })
 }
 
 // escreve o texto e o Enter como dois eventos separados, com um intervalo
@@ -187,6 +206,7 @@ function writeAsMessage(ptyProcess, text) {
       })
   )
   writeQueues.set(ptyProcess, next)
+  return next
 }
 
 function ask(fromSessionId, toName, message) {

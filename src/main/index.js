@@ -386,12 +386,29 @@ function startBridge() {
   if (process.platform === 'win32') {
     bridgeProcess = spawn('wsl.exe', ['-d', WSL_DISTRO, '--', 'zsh', '-c', BRIDGE_CMD])
   } else {
-    bridgeProcess = spawn('node', ['server.js'], { cwd: BRIDGE_DIR })
+    // spawn('node', ...) depende do PATH do processo que lançou o Electron
+    // resolver "node" — funciona quando o Electron herda um shell com nvm/asdf
+    // já carregado, mas falha silenciosamente (ENOENT) quando herda um PATH
+    // mais restrito, ex: lançado direto do desktop/.desktop launcher, sem
+    // nenhum shell profile no meio. process.execPath é o próprio binário que
+    // já está rodando este processo main — sempre resolve, sem depender do
+    // ambiente externo. ELECTRON_RUN_AS_NODE=1 é necessário só nesse spawn:
+    // sem ela, execPath (o binário do Electron) tentaria abrir uma janela de
+    // app em vez de rodar server.js como script Node puro.
+    bridgeProcess = spawn(process.execPath, ['server.js'], {
+      cwd: BRIDGE_DIR,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+    })
   }
 
   bridgeProcess.stdout.on('data', (chunk) => console.log(`[bridge] ${chunk}`))
   bridgeProcess.stderr.on('data', (chunk) => console.error(`[bridge] ${chunk}`))
-  bridgeProcess.on('exit', (code) => console.log(`[bridge] exited with code ${code}`))
+  bridgeProcess.on('exit', (code, signal) => console.log(`[bridge] exited with code ${code} signal ${signal}`))
+  // sem isso, uma falha síncrona do spawn (ex: "node" não resolvido no PATH
+  // deste contexto) emite só 'error', nunca 'exit' — sem handler, vira uma
+  // exceção não tratada que o Electron engole silenciosamente, sem log
+  // nenhum indicando por que o bridge nunca subiu.
+  bridgeProcess.on('error', (err) => console.error('[bridge] failed to spawn', err))
 }
 
 function stopBridge() {
