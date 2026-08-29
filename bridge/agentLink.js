@@ -110,8 +110,8 @@ function onSessionData(sessionId, chunk) {
   pumpQueue(sessionId)
 }
 
-function isIdle(session) {
-  return Date.now() - session.lastDataAt >= IDLE_MS
+function isIdle(session, thresholdMs = IDLE_MS) {
+  return Date.now() - session.lastDataAt >= thresholdMs
 }
 
 // tenta despachar a próxima pergunta da fila de um destino, se ele estiver
@@ -285,6 +285,15 @@ function buildInstructions(session) {
 
 const SETUP_READY_POLL_MS = 200
 const SETUP_READY_MAX_WAIT_MS = 15000
+// Maior que IDLE_MS (900ms, usado pro dux ask esperar resposta) de propósito:
+// um shell "-i" costuma rodar algo tipo fastfetch/neofetch/motd no login antes
+// do Claude Code sequer começar a subir, e isso cria um período de silêncio
+// FALSO entre esse output e o boot real do Claude Code — 900ms cabe
+// facilmente dentro desse intervalo e injeta a instrução cedo demais de novo
+// (reproduzido na prática com um dotfiles que roda fastfetch automaticamente).
+// Esse threshold mais alto é só pra decidir "o terminal já ficou pronto pra
+// receber a primeira coisa", não precisa ser rápido como o do dux ask.
+const SETUP_IDLE_MS = 2500
 
 // Logo após o spawn (registerSession roda no mesmo tick que pty.spawn), o
 // Claude Code ainda está inicializando dentro do PTY — shell profile via -i,
@@ -292,15 +301,16 @@ const SETUP_READY_MAX_WAIT_MS = 15000
 // inicial. Escrever a instrução de setup nesse timing faz o \r se perder ou
 // ser interpretado como parte do boot em vez de "confirmar o prompt": o texto
 // fica sentado no campo de input, nunca enviado (visto na prática). Espera
-// o terminal ficar ocioso (nada saindo do PTY por IDLE_MS) antes de injetar
-// — mesma heurística de "está livre pra receber" que pumpQueue já usa pro
-// dux ask. Desiste depois de um tempo máximo em vez de esperar pra sempre,
-// caso a sessão nunca fique idle por algum motivo.
+// o terminal ficar ocioso por SETUP_IDLE_MS antes de injetar — mesma
+// heurística de "está livre pra receber" que pumpQueue já usa pro dux ask,
+// só que com uma janela de silêncio bem maior (ver comentário acima).
+// Desiste depois de um tempo máximo em vez de esperar pra sempre, caso a
+// sessão nunca fique idle por algum motivo.
 function sendLinkInstructions(sessionId, waitedMs = 0) {
   const session = sessions.get(sessionId)
   if (!session) return
 
-  if (!isIdle(session) && waitedMs < SETUP_READY_MAX_WAIT_MS) {
+  if (!isIdle(session, SETUP_IDLE_MS) && waitedMs < SETUP_READY_MAX_WAIT_MS) {
     setTimeout(() => sendLinkInstructions(sessionId, waitedMs + SETUP_READY_POLL_MS), SETUP_READY_POLL_MS)
     return
   }
