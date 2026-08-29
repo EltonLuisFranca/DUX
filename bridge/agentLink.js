@@ -249,9 +249,28 @@ function buildInstructions(session) {
   )
 }
 
-function sendLinkInstructions(sessionId) {
+const SETUP_READY_POLL_MS = 200
+const SETUP_READY_MAX_WAIT_MS = 15000
+
+// Logo após o spawn (registerSession roda no mesmo tick que pty.spawn), o
+// Claude Code ainda está inicializando dentro do PTY — shell profile via -i,
+// resolução de PATH, o processo Node do próprio Claude Code subindo, splash
+// inicial. Escrever a instrução de setup nesse timing faz o \r se perder ou
+// ser interpretado como parte do boot em vez de "confirmar o prompt": o texto
+// fica sentado no campo de input, nunca enviado (visto na prática). Espera
+// o terminal ficar ocioso (nada saindo do PTY por IDLE_MS) antes de injetar
+// — mesma heurística de "está livre pra receber" que pumpQueue já usa pro
+// dux ask. Desiste depois de um tempo máximo em vez de esperar pra sempre,
+// caso a sessão nunca fique idle por algum motivo.
+function sendLinkInstructions(sessionId, waitedMs = 0) {
   const session = sessions.get(sessionId)
   if (!session) return
+
+  if (!isIdle(session) && waitedMs < SETUP_READY_MAX_WAIT_MS) {
+    setTimeout(() => sendLinkInstructions(sessionId, waitedMs + SETUP_READY_POLL_MS), SETUP_READY_POLL_MS)
+    return
+  }
+
   const wrapped = `${SETUP_START_MARKER}${buildInstructions(session)}`
   writeAsMessage(session.ptyProcess, wrapped)
 }
