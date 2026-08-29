@@ -8,12 +8,17 @@
           <FleetCanvas :workspace="ws" />
         </div>
         <SettingsPopover class="settings-corner" />
-        <UserBadge class="user-badge-corner" />
+        <div class="user-badge-corner">
+          <UserBadge />
+          <JoinRoomInput />
+          <RoomPresenceBadge />
+        </div>
       </div>
     </div>
     <AddNodeModal />
     <ConfirmDeleteNodeModal />
     <ConfirmDeleteWorkspaceModal />
+    <RoomInviteModal />
   </div>
 </template>
 
@@ -27,6 +32,9 @@ import ConfirmDeleteNodeModal from './components/ConfirmDeleteNodeModal.vue'
 import ConfirmDeleteWorkspaceModal from './components/ConfirmDeleteWorkspaceModal.vue'
 import SettingsPopover from './components/SettingsPopover.vue'
 import UserBadge from './components/UserBadge.vue'
+import JoinRoomInput from './components/JoinRoomInput.vue'
+import RoomPresenceBadge from './components/RoomPresenceBadge.vue'
+import RoomInviteModal from './components/RoomInviteModal.vue'
 import { workspaces, activeWorkspaceId, switchWorkspace, flushPersist } from './store/flowStore'
 
 function goToWorkspace(direction) {
@@ -83,5 +91,8 @@ onBeforeUnmount(() => {
   top: 14px;
   left: 14px;
   z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 </style>

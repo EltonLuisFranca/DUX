@@ -27,6 +27,14 @@
         <button v-else class="workspace-name" @click="handleSwitch(ws.id)">{{ ws.name }}</button>
 
         <div class="workspace-actions">
+          <button class="icon-btn" title="Transformar em Room" @click.stop="handleOpenRoomModal(ws)">
+            <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="5.5" cy="5.5" r="2.2" />
+              <circle cx="11" cy="7.5" r="1.7" />
+              <path d="M2 13c.4-2 1.8-3.2 3.5-3.2S8.6 11 9 13" />
+              <path d="M9.3 9.8c1.3 0 2.5.9 2.8 2.6" />
+            </svg>
+          </button>
           <button class="icon-btn" title="Renomear" @click.stop="startRename(ws.id)">
             <svg viewBox="0 0 16 16" width="12" height="12">
               <path
@@ -76,6 +84,7 @@ import {
   renameWorkspace,
   requestDeleteWorkspace
 } from '../store/flowStore'
+import { openRoomInviteModal } from '../store/roomStore'
 import AppTooltip from './AppTooltip.vue'
 
 const open = ref(false)
@@ -92,6 +101,11 @@ function focusRenameInput() {
 
 function handleSwitch(id) {
   switchWorkspace(id)
+  open.value = false
+}
+
+function handleOpenRoomModal(ws) {
+  openRoomInviteModal(ws)
   open.value = false
 }
 

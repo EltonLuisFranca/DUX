@@ -13,6 +13,7 @@
     @drop="handleDrop"
     @connect="handleConnect"
     @edges-change="handleEdgesChange"
+    @mousemove="handlePaneMouseMove"
   >
     <Background :gap="16" :color="dotColor" :variant="canvasVariant" />
     <Panel v-if="workspace.nodes.length === 0" position="top-left" class="empty-state-panel">
@@ -71,6 +72,26 @@
     <template #edge-straight="edgeProps">
       <CustomEdge v-bind="edgeProps" />
     </template>
+
+    <template v-if="isRoomConnected && isActiveWorkspace">
+      <RemoteCursor
+        v-for="cursor in visibleRemoteCursors"
+        :key="cursor.userId"
+        :x="cursor.x"
+        :y="cursor.y"
+        :name="cursor.name"
+        :color="cursor.color"
+      />
+      <div
+        v-for="ghost in visibleGhostNodes"
+        :key="ghost.id"
+        class="ghost-node"
+        :style="{ transform: `translate(${ghost.position.x}px, ${ghost.position.y}px)`, borderColor: ghost.color }"
+      >
+        <span class="ghost-node-owner" :style="{ background: ghost.color }">{{ ghost.ownerName }}</span>
+        <span class="ghost-node-label">{{ ghost.label }}</span>
+      </div>
+    </template>
   </VueFlow>
 </template>
 
@@ -81,6 +102,7 @@ import { Background } from '@vue-flow/background'
 import ZoomControls from './ZoomControls.vue'
 import VoiceInputBadge from './VoiceInputBadge.vue'
 import CustomEdge from './CustomEdge.vue'
+import RemoteCursor from './RemoteCursor.vue'
 import WslClaudeTerminalNode from './WslClaudeTerminalNode.vue'
 import NotesNode from './NotesNode.vue'
 import BrowserNode from './BrowserNode.vue'
@@ -93,6 +115,7 @@ import { theme, canvasVariant, edgeStyle } from '../store/themeStore'
 import { onNodeClicked, addNode, openAddNodeModal, activeWorkspaceId, setActiveTerminal } from '../store/flowStore'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
 import { linkAgents, unlinkAgents } from '../lib/bridgeClient'
+import { isRoomConnected, remoteCursors, remoteNodesByUser, sendCursorPosition, broadcastNodeSnapshot } from '../store/roomStore'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -115,6 +138,51 @@ const {
 } = useVueFlow()
 
 const dotColor = computed(() => (theme.value === 'light' ? '#c4c4cc' : '#55555e'))
+
+const isActiveWorkspace = computed(() => props.workspace.id === activeWorkspaceId.value)
+
+const visibleRemoteCursors = computed(() =>
+  Object.entries(remoteCursors.value).map(([userId, cursor]) => ({ userId, ...cursor }))
+)
+
+// Nodes de outros usuários da room, renderizados como camada somente-leitura
+// por cima do canvas — nunca gravados em workspace.nodes (ver roomStore.js).
+const visibleGhostNodes = computed(() => {
+  const ghosts = []
+  for (const remote of Object.values(remoteNodesByUser.value)) {
+    for (const node of remote.nodes) {
+      ghosts.push({
+        id: `${remote.name}-${node.id}`,
+        position: node.position,
+        label: node.label,
+        color: remote.color,
+        ownerName: remote.name
+      })
+    }
+  }
+  return ghosts
+})
+
+function handlePaneMouseMove(event) {
+  if (!isRoomConnected.value || !isActiveWorkspace.value || !vueFlowRef.value) return
+  const bounds = vueFlowRef.value.getBoundingClientRect()
+  const flowPos = project({ x: event.clientX - bounds.left, y: event.clientY - bounds.top })
+  sendCursorPosition(flowPos.x, flowPos.y)
+}
+
+// Sinaliza os próprios nodes pros demais membros da room enquanto este
+// workspace estiver ativo — debounced pra não disparar um whisper a cada
+// tecla digitada num node de texto.
+let nodeSnapshotTimer = null
+watch(
+  () => props.workspace.nodes,
+  (nodes) => {
+    if (!isRoomConnected.value || !isActiveWorkspace.value) return
+    clearTimeout(nodeSnapshotTimer)
+    nodeSnapshotTimer = setTimeout(() => broadcastNodeSnapshot(nodes), 1000)
+  },
+  { deep: true }
+)
 
 // default-edge-options só se aplica a edges novas (o vue-flow mantém o type
 // já existente numa edge persistida) — pra trocar o estilo já em uso, precisa
@@ -194,7 +262,10 @@ function onKeydown(event) {
 }
 
 onMounted(() => window.addEventListener('keydown', onKeydown, { capture: true }))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, { capture: true }))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown, { capture: true })
+  clearTimeout(nodeSnapshotTimer)
+})
 </script>
 
 <style scoped>
@@ -218,6 +289,36 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, { capture
   flex-direction: column;
   align-items: center;
   gap: 10px;
+}
+
+.ghost-node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1.5px dashed;
+  border-radius: 8px;
+  background: var(--color-bg-surface-alt);
+  opacity: 0.55;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.ghost-node-owner {
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.ghost-node-label {
+  font-size: 11px;
+  color: var(--color-text-secondary);
 }
 
 .empty-state {

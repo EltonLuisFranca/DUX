@@ -84,7 +84,9 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "electron-updater": "^6.8.9",
+    "laravel-echo": "^1.19.0",
     "nodejs-whisper": "^0.3.1",
+    "pusher-js": "^8.6.0",
     "vue": "^3.5.42"
   },
   "devDependencies": {

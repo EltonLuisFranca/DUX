@@ -163,6 +163,35 @@ ipcMain.handle('auth:api-fetch', async (_event, { path, method = 'GET', body }) 
   }
 })
 
+// Autoriza um canal presence/private do Reverb (POST /broadcasting/auth) a
+// partir do main process — mesmo motivo do auth:api-fetch acima: é um fetch
+// HTTP comum sujeito a CORS, e a allowlist do backend não cobre a origem do
+// Electron. O WebSocket em si roda no renderer via laravel-echo; só o
+// handshake de autorização de canal passa por aqui.
+ipcMain.handle('auth:broadcast-auth', async (_event, { socketId, channelName }) => {
+  const token = loadAuthToken()
+  if (!token) return { ok: false, status: 401, data: { message: 'not authenticated' } }
+
+  try {
+    const response = await fetch(`${UZUNO_API_BASE}/broadcasting/auth`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ socket_id: socketId, channel_name: channelName })
+    })
+
+    if (response.status === 401) clearAuthToken()
+
+    const data = await response.json().catch(() => null)
+    return { ok: response.ok, status: response.status, data }
+  } catch (err) {
+    return { ok: false, status: 0, data: { message: err.message } }
+  }
+})
+
 // Requisição do node HTTP roda aqui (main process) pelo mesmo motivo do
 // auth:api-fetch acima: fetch() no renderer é sujeito a CORS, e boa parte
 // das APIs que alguém quer testar não libera origem nenhuma — o app desktop
