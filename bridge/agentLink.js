@@ -150,12 +150,12 @@ function pumpQueue(sessionId) {
   }
 
   const prompt = decorateDuxMessage(
-    `[DUX] Mensagem recebida via "dux ask", enviada pelo terminal do agente "${job.fromName}" (outro terminal ` +
-      `no mesmo canvas do DUX, não o usuário deste terminal diretamente): ${job.message}\n` +
-      `Se você (ou o usuário deste terminal) decidir responder, o DUX está esperando a resposta chegar cercada ` +
-      `por um marcador específico pra saber repassá-la de volta pro "dux ask" que está bloqueado esperando: escreva ` +
-      `sozinho numa linha exatamente "${REPLY_MARKER} ${requestId}>>>", depois a resposta normalmente, e ao terminar ` +
-      `escreva sozinho numa linha exatamente "${END_MARKER}". Sem isso, o outro terminal fica esperando até dar timeout.`
+    `[DUX] Message received via "dux ask", sent by agent terminal "${job.fromName}" (another terminal in the ` +
+      `same DUX canvas, not this terminal's own user directly): ${job.message}\n` +
+      `If you (or this terminal's user) decide to reply, DUX is waiting for the reply to arrive wrapped in a ` +
+      `specific marker so it can relay it back to the "dux ask" call that's blocked waiting: write, alone on ` +
+      `one line, exactly "${REPLY_MARKER} ${requestId}>>>", then the reply normally, and when done write, alone ` +
+      `on one line, exactly "${END_MARKER}". Without this, the other terminal keeps waiting until it times out.`
   )
   writeAsMessage(session.ptyProcess, prompt)
 }
@@ -259,27 +259,27 @@ function buildInstructions(session) {
 
   if (peers.length === 0) {
     return (
-      `[DUX] Aviso automático do DUX (o app Electron rodando este terminal, não um agente externo): ` +
-      `a conexão deste terminal com outros agentes no canvas foi removida. O comando "dux ask" ` +
-      `(instalado no PATH deste shell pelo DUX) não tem destino configurado no momento.`
+      `[DUX] Automatic notice from DUX (the Electron app running this terminal, not an external agent): ` +
+      `this terminal's connection to other agents in the canvas was removed. The "dux ask" command ` +
+      `(installed on this shell's PATH by DUX) has no configured destination right now.`
     )
   }
 
   const peerList = peers.map((name) => `"${name}"`).join(', ')
 
   return (
-    `[DUX] Aviso automático do DUX (o app Electron rodando este terminal, não um agente externo, e não parte ` +
-    `da conversa do usuário): este terminal está conectado, no canvas do DUX, aos seguintes agentes: ${peerList}. ` +
-    `Isso habilita um comando de shell chamado "dux ask", que o DUX adiciona ao PATH deste terminal especificamente ` +
-    `— rodar "dux ask \"<nome do agente>\" \"<mensagem>\"" envia texto pro terminal do agente indicado e aguarda a ` +
-    `resposta dele, disponível como stdout do comando quando ele retorna. Use esse comando somente se o usuário ` +
-    `pedir pra você se comunicar com outro agente do canvas.\n` +
-    `Separadamente: se uma mensagem chegar aqui prefixada com [DUX] Mensagem do agente "<nome>":, é porque ` +
-    `outro terminal do mesmo canvas rodou "dux ask" apontando pra este terminal — o DUX intercepta a saída ` +
-    `deste terminal procurando por um marcador específico (${REPLY_MARKER} <id>>>>) pra saber quando sua resposta ` +
-    `terminou e repassá-la de volta. Se o usuário quiser responder a esse pedido, o texto da resposta precisa ` +
-    `vir cercado por esse marcador (com o mesmo id recebido) pra chegar ao outro terminal — sem isso, o DUX não ` +
-    `tem como saber quando a resposta terminou e o "dux ask" do outro lado fica bloqueado até dar timeout.`
+    `[DUX] Automatic notice from DUX (the Electron app running this terminal, not an external agent, and not ` +
+    `part of the user's own conversation): this terminal is connected, in the DUX canvas, to the following ` +
+    `agents: ${peerList}. This enables a shell command called "dux ask", which DUX adds to this terminal's PATH ` +
+    `specifically — running "dux ask \"<agent name>\" \"<message>\"" sends text to the indicated agent's ` +
+    `terminal and waits for its reply, available as the command's stdout once it returns. Use this command only ` +
+    `if the user asks you to communicate with another agent in the canvas.\n` +
+    `Separately: if a message arrives here prefixed with [DUX] Message from agent "<name>":, it's because ` +
+    `another terminal in the same canvas ran "dux ask" targeting this terminal — DUX intercepts this ` +
+    `terminal's output looking for a specific marker (${REPLY_MARKER} <id>>>>) to know when your reply is done ` +
+    `and relay it back. If the user wants to respond to that request, the reply text needs to be wrapped in ` +
+    `that marker (with the same id received) to reach the other terminal — without it, DUX has no way to know ` +
+    `when the reply is done and the other side's "dux ask" stays blocked until it times out.`
   )
 }
 
