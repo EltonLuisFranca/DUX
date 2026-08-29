@@ -87,6 +87,27 @@
               </div>
             </div>
           </section>
+
+          <section class="settings-section">
+            <h3 class="section-title">Conexões</h3>
+
+            <div class="edge-style-grid">
+              <button
+                v-for="style in EDGE_STYLES"
+                :key="style.value"
+                class="edge-style-btn"
+                :class="{ active: edgeStyle === style.value }"
+                @click="setEdgeStyle(style.value)"
+              >
+                <svg class="edge-style-preview" viewBox="0 0 64 32" width="64" height="32">
+                  <path :d="EDGE_PREVIEW_PATHS[style.value]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  <circle cx="6" cy="8" r="3" fill="currentColor" />
+                  <circle cx="58" cy="24" r="3" fill="currentColor" />
+                </svg>
+                <span class="edge-style-label">{{ style.label }}</span>
+              </button>
+            </div>
+          </section>
         </div>
 
         <div class="settings-footer">
@@ -99,11 +120,26 @@
 
 <script setup>
 import { ref } from 'vue'
-import { theme, setTheme, canvasVariant, setCanvasVariant } from '../store/themeStore'
+import {
+  theme,
+  setTheme,
+  canvasVariant,
+  setCanvasVariant,
+  edgeStyle,
+  setEdgeStyle,
+  EDGE_STYLES
+} from '../store/themeStore'
 import { isAuthenticated, user, login, logout } from '../store/authStore'
 
 const open = ref(false)
 const version = window.appInfo?.version ?? '0.0.0'
+
+const EDGE_PREVIEW_PATHS = {
+  default: 'M6 8 C 30 8, 34 24, 58 24',
+  smoothstep: 'M6 8 H32 Q36 8 36 12 V20 Q36 24 40 24 H58',
+  step: 'M6 8 H32 V24 H58',
+  straight: 'M6 8 L58 24'
+}
 </script>
 
 <style scoped>
@@ -142,7 +178,6 @@ const version = window.appInfo?.version ?? '0.0.0'
   right: 0;
   z-index: 41;
   width: 320px;
-  height: 80vh;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
@@ -188,16 +223,30 @@ const version = window.appInfo?.version ?? '0.0.0'
 }
 
 .settings-body {
-  flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding: 14px;
+  display: flex;
+  flex-direction: column;
 }
 
 .settings-section {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding: 14px 0;
+}
+
+.settings-section:first-child {
+  padding-top: 0;
+}
+
+.settings-section:last-child {
+  padding-bottom: 0;
+}
+
+.settings-section + .settings-section {
+  border-top: 1px solid var(--color-border);
 }
 
 .section-title {
@@ -308,15 +357,57 @@ const version = window.appInfo?.version ?? '0.0.0'
   text-overflow: ellipsis;
 }
 
+.edge-style-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.edge-style-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.edge-style-btn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-hover);
+}
+
+.edge-style-btn.active {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background: rgb(59 130 246 / 0.08);
+}
+
+.edge-style-preview {
+  color: inherit;
+}
+
+.edge-style-label {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.edge-style-btn.active .edge-style-label {
+  color: #3b82f6;
+}
+
 .settings-footer {
   flex-shrink: 0;
-  padding: 10px 14px;
-  border-top: 1px solid var(--color-border);
-  text-align: center;
+  padding: 8px 12px;
+  text-align: right;
 }
 
 .version-label {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--color-text-tertiary);
 }
 

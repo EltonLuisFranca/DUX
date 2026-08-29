@@ -132,6 +132,36 @@ ipcMain.on('auth:get-token-sync', (event) => {
   event.returnValue = loadAuthToken()
 })
 
+// A API do Uzuno é chamada daqui (main process, sem CORS) em vez do
+// renderer: fetch() no renderer é sujeito à mesma política de CORS de
+// qualquer página web comum, e a allowlist de origens do backend não cobre
+// (nem deveria precisar cobrir) um app desktop — o Electron não é um site
+// arbitrário rodando código de terceiros, é o próprio app autenticado por
+// Bearer token.
+ipcMain.handle('auth:api-fetch', async (_event, { path, method = 'GET', body }) => {
+  const token = loadAuthToken()
+  if (!token) return { ok: false, status: 401, data: { message: 'not authenticated' } }
+
+  try {
+    const response = await fetch(`${UZUNO_API_BASE}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+        ...(body ? { 'Content-Type': 'application/json' } : {})
+      },
+      ...(body ? { body: JSON.stringify(body) } : {})
+    })
+
+    if (response.status === 401) clearAuthToken()
+
+    const data = await response.json().catch(() => null)
+    return { ok: response.ok, status: response.status, data }
+  } catch (err) {
+    return { ok: false, status: 0, data: { message: err.message } }
+  }
+})
+
 ipcMain.handle('browser-node:save-screenshot', async (_event, { dataUrl, defaultName }) => {
   const { canceled, filePath } = await dialog.showSaveDialog({
     defaultPath: defaultName,

@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('authStore', {
   login: () => ipcRenderer.invoke('auth:login'),
   logout: () => ipcRenderer.invoke('auth:logout'),
   getTokenSync: () => ipcRenderer.sendSync('auth:get-token-sync'),
+  apiFetch: (path, options) => ipcRenderer.invoke('auth:api-fetch', { path, ...options }),
   onTokenReceived: (callback) => {
     const listener = () => callback()
     ipcRenderer.on('auth:token-received', listener)

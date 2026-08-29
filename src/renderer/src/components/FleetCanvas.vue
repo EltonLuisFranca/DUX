@@ -6,6 +6,7 @@
     :default-viewport="{ x: 0, y: 0, zoom: 1 }"
     :min-zoom="0.25"
     :max-zoom="2"
+    :default-edge-options="{ type: edgeStyle }"
     connection-mode="loose"
     @node-click="handleNodeClick"
     @dragover="handleDragOver"
@@ -48,7 +49,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { VueFlow, Panel, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import ZoomControls from './ZoomControls.vue'
@@ -56,7 +57,7 @@ import WslClaudeTerminalNode from './WslClaudeTerminalNode.vue'
 import NotesNode from './NotesNode.vue'
 import BrowserNode from './BrowserNode.vue'
 import OllamaNode from './OllamaNode.vue'
-import { theme, canvasVariant } from '../store/themeStore'
+import { theme, canvasVariant, edgeStyle } from '../store/themeStore'
 import { onNodeClicked, addNode, openAddNodeModal, activeWorkspaceId } from '../store/flowStore'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
 import { linkAgents, unlinkAgents } from '../lib/bridgeClient'
@@ -82,6 +83,15 @@ const {
 } = useVueFlow()
 
 const dotColor = computed(() => (theme.value === 'light' ? '#c4c4cc' : '#55555e'))
+
+// default-edge-options só se aplica a edges novas (o vue-flow mantém o type
+// já existente numa edge persistida) — pra trocar o estilo já em uso, precisa
+// reescrever o type de cada edge do workspace explicitamente.
+watch(edgeStyle, (style) => {
+  for (const edge of props.workspace.edges) {
+    edge.type = style
+  }
+})
 
 function handleNodeClick({ node }) {
   const hasSettings = Boolean(nodeTypeRegistry[node.type]?.settingsComponent)

@@ -8,6 +8,7 @@
           <FleetCanvas :workspace="ws" />
         </div>
         <SettingsPopover class="settings-corner" />
+        <UserBadge class="user-badge-corner" />
       </div>
     </div>
     <AddNodeModal />
@@ -25,6 +26,7 @@ import AddNodeModal from './components/AddNodeModal.vue'
 import ConfirmDeleteNodeModal from './components/ConfirmDeleteNodeModal.vue'
 import ConfirmDeleteWorkspaceModal from './components/ConfirmDeleteWorkspaceModal.vue'
 import SettingsPopover from './components/SettingsPopover.vue'
+import UserBadge from './components/UserBadge.vue'
 import { workspaces, activeWorkspaceId, switchWorkspace, flushPersist } from './store/flowStore'
 
 function goToWorkspace(direction) {
@@ -73,6 +75,13 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 14px;
   right: 14px;
+  z-index: 30;
+}
+
+.user-badge-corner {
+  position: absolute;
+  top: 14px;
+  left: 14px;
   z-index: 30;
 }
 </style>

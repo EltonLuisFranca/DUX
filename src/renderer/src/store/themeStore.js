@@ -2,6 +2,14 @@ import { ref, watchEffect } from 'vue'
 
 const STORAGE_KEY = 'dux-theme'
 const CANVAS_VARIANT_STORAGE_KEY = 'dux-canvas-variant'
+const EDGE_STYLE_STORAGE_KEY = 'dux-edge-style'
+
+export const EDGE_STYLES = [
+  { value: 'default', label: 'Curva' },
+  { value: 'smoothstep', label: 'Ortogonal' },
+  { value: 'step', label: 'Reta em ângulo' },
+  { value: 'straight', label: 'Reta' }
+]
 
 export const theme = ref(localStorage.getItem(STORAGE_KEY) === 'light' ? 'light' : 'dark')
 
@@ -28,6 +36,19 @@ watchEffect(() => {
 
 export function setCanvasVariant(variant) {
   canvasVariant.value = variant
+}
+
+const validEdgeStyleValues = EDGE_STYLES.map((s) => s.value)
+const storedEdgeStyle = localStorage.getItem(EDGE_STYLE_STORAGE_KEY)
+
+export const edgeStyle = ref(validEdgeStyleValues.includes(storedEdgeStyle) ? storedEdgeStyle : 'default')
+
+watchEffect(() => {
+  localStorage.setItem(EDGE_STYLE_STORAGE_KEY, edgeStyle.value)
+})
+
+export function setEdgeStyle(value) {
+  edgeStyle.value = value
 }
 
 export const XTERM_THEMES = {

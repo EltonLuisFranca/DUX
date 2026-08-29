@@ -1,7 +1,5 @@
 import { ref, watch } from 'vue'
 
-const UZUNO_API_BASE = 'https://api.uzuno.tech'
-
 export const authToken = ref(window.authStore?.getTokenSync?.() ?? null)
 export const isAuthenticated = ref(Boolean(authToken.value))
 export const user = ref(null)
@@ -22,29 +20,27 @@ window.authStore?.onTokenReceived?.(() => {
   isAuthenticated.value = Boolean(authToken.value)
 })
 
+// A requisição de fato roda no processo main (Node puro), não aqui — fetch()
+// no renderer é sujeito a CORS como qualquer página web, e a allowlist de
+// origens do backend não cobre nem deveria precisar cobrir um app desktop.
 export async function apiFetch(path, options = {}) {
   if (!authToken.value) throw new Error('not authenticated')
 
-  const response = await fetch(`${UZUNO_API_BASE}${path}`, {
-    ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${authToken.value}`,
-      Accept: 'application/json',
-      ...(options.body ? { 'Content-Type': 'application/json' } : {})
-    }
+  const { ok, status, data } = await window.authStore.apiFetch(path, {
+    method: options.method,
+    body: options.body ? JSON.parse(options.body) : undefined
   })
 
-  if (response.status === 401) {
+  if (status === 401) {
     logout()
     throw new Error('session expired')
   }
 
-  if (!response.ok) {
-    throw new Error(`request failed: ${response.status}`)
+  if (!ok) {
+    throw new Error(`request failed: ${status}`)
   }
 
-  return response.json()
+  return data
 }
 
 async function fetchProfile() {
