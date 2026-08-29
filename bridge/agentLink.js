@@ -2,17 +2,19 @@ const IDLE_MS = 900
 const ASK_TIMEOUT_MS = 120000
 const REPLY_MARKER = '<<<DUX_REPLY'
 const END_MARKER = '<<<DUX_END>>>'
-// Prefixa as instruções de setup de link (não as mensagens dux ask em si) —
-// o terminal xterm.js do renderer usa esse marcador pra trocar por um aviso
-// curto ("conexão atualizada") antes do texto completo, já que não dá pra
-// esconder de forma confiável o eco que a TUI do Claude Code redesenha.
-const SETUP_START_MARKER = '<<<DUX_SETUP>>>'
 
 // Envolve o texto injetado pelo DUX (mensagens [DUX]) com cor ANSI ciano —
 // só decoração visual no terminal, o Claude Code recebe o mesmo texto puro
 // de qualquer forma (as sequências de escape não alteram o conteúdo, o
 // terminal só as interpreta como estilo). Ajuda a diferenciar de relance o
 // que veio do DUX do que o usuário/agente escreveu.
+//
+// Importante: NENHUM marcador técnico tipo "<<<DUX_SETUP>>>" entra aqui —
+// um texto assim, escrito literalmente no PTY, é visto pelo Claude Code como
+// parte da mensagem, e ele reconhece (corretamente) que imita o formato de
+// uma tag de sistema real, o que piora a desconfiança em vez de ajudar. A
+// decoração fica restrita a códigos ANSI de estilo (SGR), que terminais
+// interpretam como formatação, nunca como conteúdo de texto.
 const DUX_ICON = '🤖'
 function decorateDuxMessage(text) {
   return `\x1b[36m${DUX_ICON} ${text}\x1b[0m`
@@ -303,8 +305,7 @@ function sendLinkInstructions(sessionId, waitedMs = 0) {
     return
   }
 
-  const wrapped = `${SETUP_START_MARKER}${decorateDuxMessage(buildInstructions(session))}`
-  writeAsMessage(session.ptyProcess, wrapped)
+  writeAsMessage(session.ptyProcess, decorateDuxMessage(buildInstructions(session)))
 }
 
 module.exports = {

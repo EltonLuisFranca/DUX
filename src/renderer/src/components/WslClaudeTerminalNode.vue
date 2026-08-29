@@ -85,36 +85,6 @@ let resizeStartY = 0
 let resizeStartW = 0
 let resizeStartH = 0
 
-// A TUI do Claude Code redesenha a linha de input via sequências ANSI
-// conforme processa o texto injetado — não dá pra confiavelmente "esconder"
-// um trecho específico do stream sem um parser ANSI completo (o texto pode
-// ser reescrito/fragmentado de formas imprevisíveis). Em vez disso, ecoa a
-// instrução de setup normalmente, mas o bridge a envolve num marcador que
-// dispara uma linha de aviso curta ANTES dela — não esconde, mas deixa claro
-// que aquele bloco é mensagem de sistema, não algo que o usuário digitou.
-const SETUP_START_MARKER = '<<<DUX_SETUP>>>'
-let pendingTail = ''
-
-function writeFiltered(chunk) {
-  const text = pendingTail + chunk
-  const markerIndex = text.indexOf(SETUP_START_MARKER)
-
-  if (markerIndex === -1) {
-    // guarda uma cauda pequena caso o marcador esteja cortado bem no limite
-    // entre este chunk e o próximo — sem isso, um corte infeliz faria o
-    // aviso nunca aparecer (o texto real ainda apareceria normalmente)
-    const tailKeep = Math.min(text.length, SETUP_START_MARKER.length - 1)
-    term.write(text.slice(0, text.length - tailKeep))
-    pendingTail = text.slice(text.length - tailKeep)
-    return
-  }
-
-  pendingTail = ''
-  if (markerIndex > 0) term.write(text.slice(0, markerIndex))
-  term.write('\r\n\x1b[36m🔗 conexão com agente atualizada\x1b[0m\r\n')
-  term.write(text.slice(markerIndex + SETUP_START_MARKER.length))
-}
-
 function startResize(event) {
   resizeStartX = event.clientX
   resizeStartY = event.clientY
@@ -169,7 +139,7 @@ function connect() {
   ws.onmessage = (event) => {
     const msg = JSON.parse(event.data)
     if (msg.type === 'data') {
-      writeFiltered(msg.data)
+      term.write(msg.data)
     } else if (msg.type === 'exit') {
       status.value = 'offline'
       term.write(`\r\n\r\n[sessão encerrada — código ${msg.exitCode}]\r\n`)
