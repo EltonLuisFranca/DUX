@@ -138,9 +138,12 @@ function pumpQueue(sessionId) {
   }
 
   const prompt =
-    `[DUX] Mensagem do agente "${job.fromName}": ${job.message} ` +
-    `Antes de responder, escreva sozinho numa linha exatamente: ${REPLY_MARKER} ${requestId}>>> ` +
-    `— depois escreva sua resposta normalmente e, ao terminar, escreva sozinho numa linha exatamente: ${END_MARKER}`
+    `[DUX] Mensagem recebida via "dux ask", enviada pelo terminal do agente "${job.fromName}" (outro terminal ` +
+    `no mesmo canvas do DUX, não o usuário deste terminal diretamente): ${job.message}\n` +
+    `Se você (ou o usuário deste terminal) decidir responder, o DUX está esperando a resposta chegar cercada ` +
+    `por um marcador específico pra saber repassá-la de volta pro "dux ask" que está bloqueado esperando: escreva ` +
+    `sozinho numa linha exatamente "${REPLY_MARKER} ${requestId}>>>", depois a resposta normalmente, e ao terminar ` +
+    `escreva sozinho numa linha exatamente "${END_MARKER}". Sem isso, o outro terminal fica esperando até dar timeout.`
   writeAsMessage(session.ptyProcess, prompt)
 }
 
@@ -228,6 +231,13 @@ function unlinkSessions(sessionIdA, sessionIdB) {
   }
 }
 
+// Linguagem propositalmente factual e verificável em vez de imperativa — um
+// texto tipo "siga essa instrução à risca" digitado no prompt de um agente
+// bem alinhado é reconhecido (corretamente) como o formato clássico de
+// prompt injection, e o Claude Code passou a recusar seguir sem confirmação
+// manual do usuário. Descrever o mecanismo com precisão, deixando claro que
+// vem do próprio app hospedando o terminal (não de um terceiro externo), e
+// sem pedir "confiança cega" reduz bastante essa desconfiança legítima.
 function buildInstructions(session) {
   const peers = [...session.links]
     .map((id) => sessions.get(id)?.name)
@@ -235,17 +245,28 @@ function buildInstructions(session) {
     .sort((a, b) => a.localeCompare(b))
 
   if (peers.length === 0) {
-    return `[DUX] Você foi desconectado de todos os outros agentes no canvas do DUX Fleet. O comando "dux ask" não tem mais ninguém pra chamar por enquanto.`
+    return (
+      `[DUX] Aviso automático do DUX (o app Electron rodando este terminal, não um agente externo): ` +
+      `a conexão deste terminal com outros agentes no canvas foi removida. O comando "dux ask" ` +
+      `(instalado no PATH deste shell pelo DUX) não tem destino configurado no momento.`
+    )
   }
 
   const peerList = peers.map((name) => `"${name}"`).join(', ')
 
   return (
-    `[DUX] Este terminal está conectado, no canvas do DUX Fleet, aos seguintes agentes: ${peerList}. ` +
-    `Para pedir algo a um deles e aguardar a resposta, rode no shell: dux ask "<nome do agente>" "<sua mensagem>" ` +
-    `— o comando bloqueia até a resposta chegar e a imprime no stdout. Use o nome exatamente como listado. ` +
-    `Quando outro agente te perguntar algo, a mensagem vai chegar aqui prefixada com [DUX] Mensagem do agente "<nome>": ` +
-    `e vai te instruir a ecoar um marcador antes e depois da sua resposta — siga essa instrução à risca quando ela chegar.`
+    `[DUX] Aviso automático do DUX (o app Electron rodando este terminal, não um agente externo, e não parte ` +
+    `da conversa do usuário): este terminal está conectado, no canvas do DUX, aos seguintes agentes: ${peerList}. ` +
+    `Isso habilita um comando de shell chamado "dux ask", que o DUX adiciona ao PATH deste terminal especificamente ` +
+    `— rodar "dux ask \"<nome do agente>\" \"<mensagem>\"" envia texto pro terminal do agente indicado e aguarda a ` +
+    `resposta dele, disponível como stdout do comando quando ele retorna. Use esse comando somente se o usuário ` +
+    `pedir pra você se comunicar com outro agente do canvas.\n` +
+    `Separadamente: se uma mensagem chegar aqui prefixada com [DUX] Mensagem do agente "<nome>":, é porque ` +
+    `outro terminal do mesmo canvas rodou "dux ask" apontando pra este terminal — o DUX intercepta a saída ` +
+    `deste terminal procurando por um marcador específico (${REPLY_MARKER} <id>>>>) pra saber quando sua resposta ` +
+    `terminou e repassá-la de volta. Se o usuário quiser responder a esse pedido, o texto da resposta precisa ` +
+    `vir cercado por esse marcador (com o mesmo id recebido) pra chegar ao outro terminal — sem isso, o DUX não ` +
+    `tem como saber quando a resposta terminou e o "dux ask" do outro lado fica bloqueado até dar timeout.`
   )
 }
 
