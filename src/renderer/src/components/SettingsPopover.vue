@@ -89,6 +89,43 @@
           </section>
 
           <section class="settings-section">
+            <h3 class="section-title">Voz</h3>
+
+            <div class="setting-row">
+              <span class="setting-label">Ler respostas do agente</span>
+              <div class="segmented">
+                <button class="segmented-btn" :class="{ active: ttsEnabled }" @click="ttsEnabled = true">
+                  Ativado
+                </button>
+                <button class="segmented-btn" :class="{ active: !ttsEnabled }" @click="ttsEnabled = false">
+                  Desativado
+                </button>
+              </div>
+            </div>
+
+            <div class="setting-row voice-select-row">
+              <span class="setting-label">Voz</span>
+              <select class="voice-select" :value="selectedVoiceId" :disabled="!ttsEnabled" @change="selectedVoiceId = $event.target.value">
+                <option v-for="voice in AVAILABLE_VOICES" :key="voice.id" :value="voice.id">{{ voice.label }}</option>
+              </select>
+            </div>
+
+            <div class="setting-row">
+              <span class="setting-label">{{ testStatusLabel }}</span>
+              <button class="segmented-btn account-action" :disabled="testDisabled" @click="testVoice">
+                Testar voz
+              </button>
+            </div>
+
+            <p v-if="lastError" class="setting-hint setting-error">Erro: {{ lastError }}</p>
+
+            <p class="setting-hint">
+              Só existem vozes masculinas em português no momento — o catálogo do Piper TTS não
+              inclui nenhuma voz feminina para pt-BR.
+            </p>
+          </section>
+
+          <section class="settings-section">
             <h3 class="section-title">Conexões</h3>
 
             <div class="edge-style-grid">
@@ -119,7 +156,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import {
   theme,
   setTheme,
@@ -130,6 +167,21 @@ import {
   EDGE_STYLES
 } from '../store/themeStore'
 import { isAuthenticated, user, login, logout } from '../store/authStore'
+import { ttsEnabled, selectedVoiceId, AVAILABLE_VOICES, isSpeaking, isDownloadingVoice, lastError, speak } from '../store/ttsStore'
+
+const TEST_PHRASE = 'Olá! Esta é a voz que vai ler as respostas do agente pra você.'
+
+const testStatusLabel = computed(() => {
+  if (isDownloadingVoice.value) return 'Baixando voz (só na primeira vez)...'
+  if (isSpeaking.value) return 'Falando...'
+  return 'Testar voz selecionada'
+})
+
+const testDisabled = computed(() => isSpeaking.value || isDownloadingVoice.value)
+
+function testVoice() {
+  speak(TEST_PHRASE, { forceSpeak: true })
+}
 
 const open = ref(false)
 const version = window.appInfo?.version ?? '0.0.0'
@@ -268,6 +320,33 @@ const EDGE_PREVIEW_PATHS = {
 .setting-label {
   font-size: 12.5px;
   color: var(--color-text-primary);
+}
+
+.voice-select {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.voice-select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.setting-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-text-tertiary);
+}
+
+.setting-error {
+  color: #ef4444;
 }
 
 .segmented {

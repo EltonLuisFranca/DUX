@@ -41,6 +41,13 @@ export default defineConfig({
         input: resolve(__dirname, 'src/renderer/index.html')
       }
     },
+    // ttsWorker.js (síntese de voz isolada da thread principal) faz import()
+    // dinâmico dentro do próprio worker — Vite empacota workers como IIFE por
+    // padrão, que não suporta code-splitting e quebra o build com esse import.
+    // 'es' permite o worker ser um módulo ES de verdade, com import dinâmico.
+    worker: {
+      format: 'es'
+    },
     plugins: [
       vue({
         template: {

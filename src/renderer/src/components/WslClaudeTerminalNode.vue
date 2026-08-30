@@ -61,10 +61,11 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import '@xterm/xterm/css/xterm.css'
-import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
+import { toggleNodeSettings, updateNodeData, activeTerminalId } from '../store/flowStore'
 import { theme, XTERM_THEMES } from '../store/themeStore'
 import { linkAgents } from '../lib/bridgeClient'
-import { pendingVoiceInput, consumePendingVoiceInput } from '../store/voiceStore'
+import { pendingVoiceInput, consumePendingVoiceInput, isRecording } from '../store/voiceStore'
+import { speak } from '../store/ttsStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
 
 const MIN_NODE_WIDTH = 320
@@ -96,6 +97,44 @@ let stopCwdWatch = null
 let stopNameWatch = null
 let stopVoiceInputWatch = null
 let renameDebounceTimer = null
+
+// Não existe hoje nenhum sinal explícito de "o agente terminou de responder"
+// pra conversas normais (só existe pro dux_ask, via marcador que o próprio
+// agente escreve a pedido) — a mesma heurística de silêncio usada lá serve
+// aqui: acumula tudo que o PTY emitiu desde a última tecla/input do usuário
+// e, quando o terminal fica um tempo sem novo output, considera a resposta
+// "pronta" e manda pro TTS. Falsos positivos (respostas com pausas longas
+// cortadas cedo) são aceitáveis; o texto ainda vai continuar na tela.
+const TTS_SILENCE_MS = 1200
+let ttsBuffer = ''
+let ttsSilenceTimer = null
+
+function resetTtsCapture() {
+  ttsBuffer = ''
+  clearTimeout(ttsSilenceTimer)
+  ttsSilenceTimer = null
+}
+
+// Escopo restrito de propósito: só o terminal selecionado (activeTerminalId,
+// o mesmo usado pelo ditado por voz) e só se o ditado estava ativo quando a
+// captura começou — sem isso, TODO terminal aberto acumulava e lia sua
+// própria saída, misturando resposta de um agente que nem estava em foco
+// (ex: outro terminal imprimindo "92% do limite usado" no meio da leitura da
+// resposta certa). A checagem de isRecording só vale pra ABRIR uma captura
+// nova (buffer vazio) — uma vez iniciada, continua até o silêncio real mesmo
+// que o usuário solte o botão de ditar no meio da resposta chegando, pra não
+// cortar a fala pela metade só porque ele terminou de falar primeiro.
+function onPtyDataForTts(chunk) {
+  const isNewCapture = ttsBuffer === ''
+  if (isNewCapture && (props.id !== activeTerminalId.value || !isRecording.value)) return
+  ttsBuffer += chunk
+  clearTimeout(ttsSilenceTimer)
+  ttsSilenceTimer = setTimeout(() => {
+    const chunkToSpeak = ttsBuffer
+    ttsBuffer = ''
+    if (chunkToSpeak.trim()) speak(chunkToSpeak)
+  }, TTS_SILENCE_MS)
+}
 let resizeStartX = 0
 let resizeStartY = 0
 let resizeStartW = 0
@@ -156,6 +195,7 @@ function connect() {
     const msg = JSON.parse(event.data)
     if (msg.type === 'data') {
       term.write(msg.data)
+      onPtyDataForTts(msg.data)
     } else if (msg.type === 'exit') {
       status.value = 'offline'
       term.write(`\r\n\r\n[sessão encerrada — código ${msg.exitCode}]\r\n`)
@@ -220,6 +260,10 @@ onMounted(async () => {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'input', data }))
     }
+    // Enter confirma uma pergunta nova — descarta o que tinha acumulado até
+    // aqui (a resposta anterior, se ainda não tiver disparado o TTS) pra não
+    // misturar duas respostas diferentes num único trecho falado.
+    if (data.includes('\r')) resetTtsCapture()
   })
 
   term.onResize(sendResize)
@@ -254,7 +298,11 @@ onMounted(async () => {
   stopVoiceInputWatch = watch(pendingVoiceInput, (pending) => {
     if (!pending || pending.terminalId !== props.id) return
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'input', data: pending.text }))
+      if (pending.text) ws.send(JSON.stringify({ type: 'input', data: pending.text }))
+      if (pending.sendEnter) {
+        ws.send(JSON.stringify({ type: 'input', data: '\r' }))
+        resetTtsCapture()
+      }
     }
     consumePendingVoiceInput()
   })
@@ -265,6 +313,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('mouseup', stopResize)
   resizeObserver?.disconnect()
   clearTimeout(renameDebounceTimer)
+  resetTtsCapture()
   stopThemeWatch?.()
   stopCwdWatch?.()
   stopNameWatch?.()

@@ -40,7 +40,8 @@ contextBridge.exposeInMainWorld('authStore', {
 })
 
 contextBridge.exposeInMainWorld('voiceAPI', {
-  transcribe: (buffer) => ipcRenderer.invoke('voice:transcribe', { buffer })
+  transcribe: (buffer) => ipcRenderer.invoke('voice:transcribe', { buffer }),
+  transcribeChunk: (buffer) => ipcRenderer.invoke('voice:transcribe-chunk', { buffer })
 })
 
 contextBridge.exposeInMainWorld('imageNodeAPI', {
