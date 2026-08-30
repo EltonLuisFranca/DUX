@@ -6,7 +6,21 @@
 let ttsSessionPromise = null
 let ttsSessionVoiceId = null
 
-const LOCAL_ONNX_WASM_BASE = `${self.location.origin}/onnxruntime-web/`
+// Em dev, o Vite serve tudo por http://localhost e onnxruntime-web/ (que vem
+// de public/) fica servido relativo à RAIZ do site, então self.location.origin
+// é o base certo mesmo o worker sendo servido de dentro de src/workers/.
+// Em produção o Electron carrega via file:// e o origin vira "file://" sem
+// host — usar origin fazia LOCAL_ONNX_WASM_BASE virar "file:///onnxruntime-web/",
+// um caminho absoluto a partir da raiz do sistema de arquivos (erro visto em
+// produção: "Failed to fetch dynamically imported module:
+// file:///onnxruntime-web/..."), quando o diretório real é
+// out/renderer/onnxruntime-web/, um nível acima do bundle do worker
+// (out/renderer/assets/ttsWorker-*.js). Por isso file: resolve relativo à
+// própria URL do worker, e http(s): continua usando origin.
+const LOCAL_ONNX_WASM_BASE =
+  self.location.protocol === 'file:'
+    ? new URL('../onnxruntime-web/', self.location.href).href
+    : `${self.location.origin}/onnxruntime-web/`
 
 async function configureOnnxRuntimeSingleThread() {
   const ort = await import('onnxruntime-web/wasm')
