@@ -70,6 +70,30 @@
       <li class="divider" />
 
       <li class="workspace-new" @click="handleCreate">+ Novo workspace</li>
+
+      <li class="workspace-new" @click.stop="joinOpen = !joinOpen">
+        {{ isRoomConnected ? 'Conectado a uma room' : 'Entrar em uma room' }}
+      </li>
+
+      <li v-if="joinOpen" class="join-room-panel" @click.stop>
+        <template v-if="!isRoomConnected">
+          <input
+            v-model="code"
+            class="code-input"
+            type="text"
+            maxlength="6"
+            placeholder="Código de 6 dígitos"
+            @keyup.enter="handleJoin"
+          />
+          <button class="btn-join" :disabled="joining || code.trim().length !== 6" @click="handleJoin">
+            {{ joining ? 'Entrando...' : 'Entrar' }}
+          </button>
+          <p v-if="joinError" class="join-error">{{ joinError }}</p>
+        </template>
+        <template v-else>
+          <button class="btn-leave" @click="handleLeave">Sair da room</button>
+        </template>
+      </li>
     </ul>
   </div>
 </template>
@@ -84,12 +108,44 @@ import {
   renameWorkspace,
   requestDeleteWorkspace
 } from '../store/flowStore'
-import { openRoomInviteModal } from '../store/roomStore'
+import {
+  openRoomInviteModal,
+  isRoomConnected,
+  joinRoomByCode,
+  joinRoomById,
+  leaveRoom
+} from '../store/roomStore'
 import AppTooltip from './AppTooltip.vue'
 
 const open = ref(false)
 const rootRef = ref(null)
 const renamingId = ref(null)
+const joinOpen = ref(false)
+const code = ref('')
+const joining = ref(false)
+const joinError = ref('')
+
+async function handleJoin() {
+  const trimmed = code.value.trim()
+  if (trimmed.length !== 6) return
+  joining.value = true
+  joinError.value = ''
+  try {
+    const { room_id: roomId } = await joinRoomByCode(trimmed)
+    joinRoomById(roomId)
+    code.value = ''
+    joinOpen.value = false
+  } catch (err) {
+    joinError.value = 'Código inválido ou expirado.'
+  } finally {
+    joining.value = false
+  }
+}
+
+function handleLeave() {
+  leaveRoom()
+  joinOpen.value = false
+}
 
 function focusRenameInput() {
   nextTick(() => {
@@ -129,6 +185,7 @@ function handleClickOutside(event) {
   if (rootRef.value && !rootRef.value.contains(event.target)) {
     open.value = false
     renamingId.value = null
+    joinOpen.value = false
   }
 }
 
@@ -272,5 +329,58 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
 .workspace-new:hover {
   background: var(--color-hover);
   color: var(--color-text-primary);
+}
+
+.join-room-panel {
+  padding: 8px;
+  cursor: default;
+}
+
+.code-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.code-input:focus {
+  outline: none;
+}
+
+.btn-join,
+.btn-leave {
+  width: 100%;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-join:hover:not(:disabled),
+.btn-leave:hover {
+  background: var(--color-hover);
+}
+
+.btn-join:disabled {
+  color: var(--color-text-quaternary);
+  cursor: default;
+}
+
+.join-error {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #ef4444;
 }
 </style>

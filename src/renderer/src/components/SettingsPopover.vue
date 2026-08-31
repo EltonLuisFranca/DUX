@@ -138,6 +138,52 @@
           </section>
 
           <section class="settings-section">
+            <h3 class="section-title">Notificação sonora</h3>
+
+            <div class="setting-row">
+              <span class="setting-label">Som ao terminar resposta</span>
+              <div class="segmented">
+                <button
+                  class="segmented-btn"
+                  :class="{ active: notificationSoundEnabled }"
+                  @click="notificationSoundEnabled = true"
+                >
+                  Ativado
+                </button>
+                <button
+                  class="segmented-btn"
+                  :class="{ active: !notificationSoundEnabled }"
+                  @click="notificationSoundEnabled = false"
+                >
+                  Desativado
+                </button>
+              </div>
+            </div>
+
+            <div class="setting-row voice-select-row">
+              <span class="setting-label">Som</span>
+              <select
+                class="voice-select"
+                :value="selectedSoundId"
+                :disabled="!notificationSoundEnabled"
+                @change="selectedSoundId = $event.target.value"
+              >
+                <option v-for="sound in AVAILABLE_SOUNDS" :key="sound.id" :value="sound.id">{{ sound.label }}</option>
+              </select>
+            </div>
+
+            <div class="setting-row">
+              <span class="setting-label">Testar som selecionado</span>
+              <button class="segmented-btn account-action" @click="testNotificationSound">Testar</button>
+            </div>
+
+            <p class="setting-hint">
+              Toca quando o agente termina de responder num terminal — só funciona com a leitura
+              em voz (acima) desativada.
+            </p>
+          </section>
+
+          <section class="settings-section">
             <h3 class="section-title">Conexões</h3>
 
             <div class="edge-style-grid">
@@ -182,6 +228,12 @@ import {
 } from '../store/themeStore'
 import { isAuthenticated, user, login, logout } from '../store/authStore'
 import { ttsEnabled, selectedVoiceId, AVAILABLE_VOICES, isSpeaking, isDownloadingVoice, lastError, speak } from '../store/ttsStore'
+import {
+  notificationSoundEnabled,
+  selectedSoundId,
+  AVAILABLE_SOUNDS,
+  playNotificationSound
+} from '../store/notificationSoundStore'
 
 const TEST_PHRASE = 'Olá! Esta é a voz que vai ler as respostas do agente pra você.'
 
@@ -195,6 +247,10 @@ const testDisabled = computed(() => isSpeaking.value || isDownloadingVoice.value
 
 function testVoice() {
   speak(TEST_PHRASE, { forceSpeak: true })
+}
+
+function testNotificationSound() {
+  playNotificationSound({ force: true })
 }
 
 const open = ref(false)

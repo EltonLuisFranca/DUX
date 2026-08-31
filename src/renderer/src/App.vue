@@ -10,7 +10,6 @@
         <SettingsPopover class="settings-corner" />
         <div class="user-badge-corner">
           <UserBadge />
-          <JoinRoomInput />
           <RoomPresenceBadge />
         </div>
       </div>
@@ -32,7 +31,6 @@ import ConfirmDeleteNodeModal from './components/ConfirmDeleteNodeModal.vue'
 import ConfirmDeleteWorkspaceModal from './components/ConfirmDeleteWorkspaceModal.vue'
 import SettingsPopover from './components/SettingsPopover.vue'
 import UserBadge from './components/UserBadge.vue'
-import JoinRoomInput from './components/JoinRoomInput.vue'
 import RoomPresenceBadge from './components/RoomPresenceBadge.vue'
 import RoomInviteModal from './components/RoomInviteModal.vue'
 import { workspaces, activeWorkspaceId, switchWorkspace, flushPersist } from './store/flowStore'

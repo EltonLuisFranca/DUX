@@ -65,7 +65,8 @@ import { toggleNodeSettings, updateNodeData, activeTerminalId } from '../store/f
 import { theme, XTERM_THEMES } from '../store/themeStore'
 import { linkAgents, linkNoteToAgent } from '../lib/bridgeClient'
 import { pendingVoiceInput, consumePendingVoiceInput, isRecording } from '../store/voiceStore'
-import { speak } from '../store/ttsStore'
+import { speak, ttsEnabled } from '../store/ttsStore'
+import { playNotificationSound } from '../store/notificationSoundStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
 
 const MIN_NODE_WIDTH = 320
@@ -135,6 +136,30 @@ function onPtyDataForTts(chunk) {
     if (chunkToSpeak.trim()) speak(chunkToSpeak)
   }, TTS_SILENCE_MS)
 }
+
+// Som de notificação: mesma heurística de silêncio, mas sem o escopo restrito
+// do TTS (não depende de ditado por voz nem de terminal em foco) — qualquer
+// terminal que ficar quieto por TTS_SILENCE_MS após ter emitido algo dispara
+// o aviso sonoro. Só toca quando o TTS está desligado (se a resposta já vai
+// ser lida em voz, o beep é redundante).
+let notifyHasOutput = false
+let notifySilenceTimer = null
+
+function onPtyDataForNotification(chunk) {
+  if (!chunk.trim()) return
+  notifyHasOutput = true
+  clearTimeout(notifySilenceTimer)
+  notifySilenceTimer = setTimeout(() => {
+    if (notifyHasOutput && !ttsEnabled.value) playNotificationSound()
+    notifyHasOutput = false
+  }, TTS_SILENCE_MS)
+}
+
+function resetNotificationCapture() {
+  notifyHasOutput = false
+  clearTimeout(notifySilenceTimer)
+  notifySilenceTimer = null
+}
 let resizeStartX = 0
 let resizeStartY = 0
 let resizeStartW = 0
@@ -196,6 +221,7 @@ function connect() {
     if (msg.type === 'data') {
       term.write(msg.data)
       onPtyDataForTts(msg.data)
+      onPtyDataForNotification(msg.data)
     } else if (msg.type === 'exit') {
       status.value = 'offline'
       term.write(`\r\n\r\n[sessão encerrada — código ${msg.exitCode}]\r\n`)
@@ -268,7 +294,10 @@ onMounted(async () => {
     // Enter confirma uma pergunta nova — descarta o que tinha acumulado até
     // aqui (a resposta anterior, se ainda não tiver disparado o TTS) pra não
     // misturar duas respostas diferentes num único trecho falado.
-    if (data.includes('\r')) resetTtsCapture()
+    if (data.includes('\r')) {
+      resetTtsCapture()
+      resetNotificationCapture()
+    }
   })
 
   term.onResize(sendResize)
@@ -307,6 +336,7 @@ onMounted(async () => {
       if (pending.sendEnter) {
         ws.send(JSON.stringify({ type: 'input', data: '\r' }))
         resetTtsCapture()
+        resetNotificationCapture()
       }
     }
     consumePendingVoiceInput()
@@ -319,6 +349,7 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   clearTimeout(renameDebounceTimer)
   resetTtsCapture()
+  resetNotificationCapture()
   stopThemeWatch?.()
   stopCwdWatch?.()
   stopNameWatch?.()
