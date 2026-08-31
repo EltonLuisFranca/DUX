@@ -341,3 +341,17 @@ export function openAddNodeModal() {
 export function closeAddNodeModal() {
   isAddNodeModalOpen.value = false
 }
+
+// Ctrl+P: busca por nodes do workspace ativo (DuxSearch.vue). Fica dentro do
+// <VueFlow> do workspace ativo (montado por FleetCanvas), não em App.vue como
+// os outros modais globais, porque precisa de useVueFlow() (setCenter) pra
+// navegar até o node — cada workspace tem seu próprio contexto de Vue Flow.
+export const isSearchOpen = ref(false)
+
+export function openSearch() {
+  isSearchOpen.value = true
+}
+
+export function closeSearch() {
+  isSearchOpen.value = false
+}

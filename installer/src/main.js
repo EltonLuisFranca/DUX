@@ -1,8 +1,14 @@
 const { app, BrowserWindow, ipcMain } = require('electron')
-const { join } = require('path')
+const { join, basename } = require('path')
 const { existsSync } = require('fs')
 const { spawn } = require('child_process')
 const { runInstall } = require('./install')
+const { runUninstall } = require('./uninstall')
+
+// O mesmo .exe atua como instalador ou desinstalador — install.js copia este
+// próprio binário para "Uninstall DUX.exe" dentro da pasta instalada, e é
+// esse nome de arquivo que o Windows lança a partir de Add/Remove Programs.
+const UNINSTALL_MODE = basename(process.execPath).toLowerCase() === 'uninstall dux.exe'
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -19,7 +25,7 @@ function createWindow() {
     }
   })
 
-  win.loadFile(join(__dirname, 'index.html'))
+  win.loadFile(join(__dirname, UNINSTALL_MODE ? 'uninstall.html' : 'index.html'))
   return win
 }
 
@@ -47,6 +53,12 @@ app.whenReady().then(() => {
   ipcMain.handle('install:launch-app', (_event, installDir) => {
     // detached + unref pra o DUX não morrer junto quando o instalador fechar
     spawn(join(installDir, 'DUX.exe'), [], { detached: true, stdio: 'ignore' }).unref()
+  })
+
+  ipcMain.handle('uninstall:start', async () => {
+    return runUninstall((progress) => {
+      if (!win.isDestroyed()) win.webContents.send('uninstall:progress', progress)
+    })
   })
 })
 

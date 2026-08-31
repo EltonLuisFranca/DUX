@@ -63,7 +63,7 @@ import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import '@xterm/xterm/css/xterm.css'
 import { toggleNodeSettings, updateNodeData, activeTerminalId } from '../store/flowStore'
 import { theme, XTERM_THEMES } from '../store/themeStore'
-import { linkAgents } from '../lib/bridgeClient'
+import { linkAgents, linkNoteToAgent } from '../lib/bridgeClient'
 import { pendingVoiceInput, consumePendingVoiceInput, isRecording } from '../store/voiceStore'
 import { speak } from '../store/ttsStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
@@ -77,7 +77,7 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
-const { viewport, getConnectedEdges } = useVueFlow()
+const { viewport, getConnectedEdges, findNode } = useVueFlow()
 const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
@@ -232,7 +232,12 @@ function disconnect() {
 function relinkExistingEdges() {
   for (const edge of getConnectedEdges(props.id)) {
     const otherId = edge.source === props.id ? edge.target : edge.source
-    linkAgents(props.id, otherId)
+    const otherNode = findNode(otherId)
+    if (otherNode?.type === 'notes') {
+      linkNoteToAgent(props.id, otherNode.data.path)
+    } else {
+      linkAgents(props.id, otherId)
+    }
   }
 }
 

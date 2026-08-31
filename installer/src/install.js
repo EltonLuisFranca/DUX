@@ -6,8 +6,9 @@ const { join, dirname } = require('path')
 // sendo instalados) quebra com ENOENT, já que o Electron tenta interpretar
 // esse caminho como entrada dentro do arquivo, não o arquivo em si.
 const fs = require('original-fs')
-const { exec } = require('child_process')
+const { execFile } = require('child_process')
 const createDesktopShortcut = require('create-desktop-shortcuts')
+const { extractFile } = require('@electron/asar')
 
 const APP_NAME = 'DUX'
 const APP_EXE_NAME = 'DUX.exe'
@@ -52,14 +53,14 @@ function copyWithProgress(sourceDir, destDir, onProgress) {
   }
 }
 
-// reg.exe é chamado direto, sem passar por powershell.exe no meio — a
-// chave do registro tem barras invertidas e o valor pode ter aspas, e
-// repassar isso como uma string dentro de -Command do PowerShell introduz
-// uma segunda camada de parsing/escape que corrompe o comando (foi assim
-// que "nome de chave inválido" apareceu, mesmo com a chave sendo válida).
+// execFile roda reg.exe direto, sem shell/cmd.exe no meio interpretando o
+// comando como uma string — cada argumento vai pro processo já separado,
+// então um valor que precise conter aspas internas (ex: um caminho com
+// espaço, que UninstallString exige entre aspas pra o Windows não cortar
+// no espaço) chega intacto ao reg.exe sem uma segunda camada de escaping.
 function runRegAdd(args) {
   return new Promise((resolve, reject) => {
-    exec(`reg.exe ${args}`, (err, stdout, stderr) => {
+    execFile('reg.exe', args, (err, stdout, stderr) => {
       if (err) reject(new Error(stderr || err.message))
       else resolve(stdout)
     })
@@ -67,18 +68,17 @@ function runRegAdd(args) {
 }
 
 async function writeUninstallRegistry(installDir, uninstallerPath, version) {
-  // Os valores NÃO devem trazer aspas embutidas — /d "${value}" abaixo já
-  // envolve cada valor com as aspas externas que o reg.exe espera; colocar
-  // aspas dentro do próprio valor (ex: UninstallString: `"${path}"`) gera
-  // aspas duplicadas na linha de comando final e o reg.exe rejeita como
-  // "sintaxe inválida".
+  // UninstallString/QuietUninstallString precisam do caminho entre aspas
+  // porque "Uninstall DUX.exe" tem espaço no nome — sem isso o Windows
+  // interpretaria "Uninstall" como o executável e "DUX.exe" como argumento.
+  const quotedExe = `"${uninstallerPath}"`
   const entries = {
     DisplayName: APP_NAME,
     DisplayVersion: version,
     InstallLocation: installDir,
     DisplayIcon: join(installDir, APP_EXE_NAME),
-    UninstallString: uninstallerPath,
-    QuietUninstallString: `${uninstallerPath} /S`,
+    UninstallString: quotedExe,
+    QuietUninstallString: `${quotedExe} /S`,
     Publisher: 'Elton Franca',
     NoModify: 1,
     NoRepair: 1
@@ -86,7 +86,7 @@ async function writeUninstallRegistry(installDir, uninstallerPath, version) {
 
   for (const [name, value] of Object.entries(entries)) {
     const type = typeof value === 'number' ? 'REG_DWORD' : 'REG_SZ'
-    await runRegAdd(`add "${UNINSTALL_REGISTRY_KEY}" /v ${name} /t ${type} /d "${value}" /f`)
+    await runRegAdd(['add', UNINSTALL_REGISTRY_KEY, '/v', name, '/t', type, '/d', String(value), '/f'])
   }
 }
 
@@ -113,11 +113,21 @@ function createShortcuts(installDir) {
   })
 }
 
+// Lê a versão do DUX que está sendo copiado, não a do próprio instalador
+// (app.getVersion() aqui retornaria a versão do dux-installer, sempre 1.0.0) —
+// o app.asar copiado carrega o package.json real do DUX buildado.
+function readAppVersion(sourceDir) {
+  const asarPath = join(sourceDir, 'resources', 'app.asar')
+  const pkgBuffer = extractFile(asarPath, 'package.json')
+  return JSON.parse(pkgBuffer.toString('utf-8')).version
+}
+
 async function runInstall(sourceDir, onProgress) {
   if (!fs.existsSync(sourceDir)) {
     throw new Error(`Arquivos de origem não encontrados em: ${sourceDir}`)
   }
 
+  const version = readAppVersion(sourceDir)
   const installDir = getInstallDir()
   onProgress({ phase: 'copying', percent: 0 })
 
@@ -130,8 +140,11 @@ async function runInstall(sourceDir, onProgress) {
   createShortcuts(installDir)
 
   onProgress({ phase: 'registry', percent: 92 })
-  const version = app.getVersion()
+  // O próprio instalador sabe rodar em modo desinstalação (ver main.js) —
+  // copiamos o executável dele mesmo para dentro da pasta instalada, sob o
+  // nome que o registro do Windows espera encontrar.
   const uninstallerPath = join(installDir, 'Uninstall DUX.exe')
+  fs.copyFileSync(process.execPath, uninstallerPath)
   await writeUninstallRegistry(installDir, uninstallerPath, version)
 
   onProgress({ phase: 'done', percent: 100 })

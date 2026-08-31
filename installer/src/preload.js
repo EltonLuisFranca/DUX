@@ -9,3 +9,12 @@ contextBridge.exposeInMainWorld('installerAPI', {
     return () => ipcRenderer.removeListener('install:progress', handler)
   }
 })
+
+contextBridge.exposeInMainWorld('uninstallerAPI', {
+  start: () => ipcRenderer.invoke('uninstall:start'),
+  onProgress: (callback) => {
+    const handler = (_event, progress) => callback(progress)
+    ipcRenderer.on('uninstall:progress', handler)
+    return () => ipcRenderer.removeListener('uninstall:progress', handler)
+  }
+})

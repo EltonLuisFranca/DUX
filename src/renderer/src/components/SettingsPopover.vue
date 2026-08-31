@@ -86,6 +86,18 @@
                 </button>
               </div>
             </div>
+
+            <div class="setting-row">
+              <span class="setting-label">Encaixe magnético</span>
+              <div class="segmented">
+                <button class="segmented-btn" :class="{ active: snapEnabled }" @click="setSnapEnabled(true)">
+                  Ativado
+                </button>
+                <button class="segmented-btn" :class="{ active: !snapEnabled }" @click="setSnapEnabled(false)">
+                  Desativado
+                </button>
+              </div>
+            </div>
           </section>
 
           <section class="settings-section">
@@ -164,7 +176,9 @@ import {
   setCanvasVariant,
   edgeStyle,
   setEdgeStyle,
-  EDGE_STYLES
+  EDGE_STYLES,
+  snapEnabled,
+  setSnapEnabled
 } from '../store/themeStore'
 import { isAuthenticated, user, login, logout } from '../store/authStore'
 import { ttsEnabled, selectedVoiceId, AVAILABLE_VOICES, isSpeaking, isDownloadingVoice, lastError, speak } from '../store/ttsStore'

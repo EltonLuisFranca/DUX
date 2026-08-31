@@ -4,13 +4,32 @@
   "description": "Instalador customizado do DUX",
   "main": "src/main.js",
   "scripts": {
-    "dev": "electron ."
+    "dev": "electron .",
+    "dist": "electron-builder"
   },
   "devDependencies": {
     "electron": "^44.0.0",
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
+    "@electron/asar": "^3.4.1",
     "create-desktop-shortcuts": "^1.11.0"
+  },
+  "build": {
+    "appId": "com.eltonfranca.dux-installer",
+    "productName": "Instalar DUX",
+    "icon": "../build/icon.ico",
+    "extraResources": [
+      {
+        "from": "../dist/win-unpacked",
+        "to": "app-files"
+      }
+    ],
+    "win": {
+      "target": "portable"
+    },
+    "directories": {
+      "output": "dist"
+    }
   }
 }

@@ -10,6 +10,21 @@
       '--selected-color': data.headerColor || '#3b82f6'
     }"
   >
+    <Handle
+      id="left"
+      type="target"
+      :position="Position.Left"
+      class="notes-handle"
+      :class="{ connected: isLeftConnected }"
+    />
+    <Handle
+      id="right"
+      type="source"
+      :position="Position.Right"
+      class="notes-handle"
+      :class="{ connected: isRightConnected }"
+    />
+
     <Transition name="toolbar-fade">
       <div v-if="selected" class="notes-toolbar nodrag nowheel">
         <AppTooltip label="Negrito">
@@ -95,6 +110,8 @@
       @input="handleInput"
       @mouseup="saveSelection"
       @keyup="saveSelection"
+      @focus="isEditorFocused = true"
+      @blur="isEditorFocused = false"
     ></div>
 
     <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
@@ -111,13 +128,17 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useVueFlow } from '@vue-flow/core'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { updateNodeData, requestDeleteNode } from '../store/flowStore'
+import { readNote, writeNote, watchNote } from '../lib/bridgeClient'
+import { htmlToMarkdown, markdownToHtml } from '../lib/noteMarkdown'
+import { useHandleConnection } from '../lib/useHandleConnection'
 import AppTooltip from './AppTooltip.vue'
 
 const MIN_NODE_WIDTH = 240
 const MIN_NODE_HEIGHT = 160
+const SAVE_DEBOUNCE_MS = 500
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -126,10 +147,14 @@ const props = defineProps({
 })
 
 const { viewport } = useVueFlow()
+const { isHandleConnected } = useHandleConnection(props.id)
+const isLeftConnected = isHandleConnected('left')
+const isRightConnected = isHandleConnected('right')
 
 const editorEl = ref(null)
 const nodeWidth = ref(props.data.width || 320)
 const nodeHeight = ref(props.data.height || 240)
+const isEditorFocused = ref(false)
 
 const NOTE_COLOR_OPACITY = 30
 
@@ -177,9 +202,52 @@ function exec(command, value = null) {
   handleInput()
 }
 
-function handleInput() {
-  updateNodeData(props.id, { content: editorEl.value?.innerHTML ?? '' })
+// o .md em disco é a fonte da verdade (não node.data — evita duplicar
+// conteúdo entre workspaces.json e o arquivo, que poderiam divergir).
+// lastWrittenMarkdown guarda a última escrita feita por este node, pra
+// distinguir o próprio eco (fs.watch detectando a escrita que acabamos de
+// fazer) de uma mudança de fato externa (ex: um agente editando o arquivo).
+let lastWrittenMarkdown = null
+let saveTimer = null
+let unwatch = null
+
+function saveNow() {
+  if (!editorEl.value || !props.data.path) return
+  const markdown = htmlToMarkdown(editorEl.value.innerHTML)
+  if (markdown === lastWrittenMarkdown) return
+  lastWrittenMarkdown = markdown
+  writeNote(props.data.path, markdown)
 }
+
+function handleInput() {
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(saveNow, SAVE_DEBOUNCE_MS)
+}
+
+async function loadAndWatch() {
+  unwatch?.()
+  unwatch = null
+  clearTimeout(saveTimer)
+
+  if (!props.data.path) return
+
+  const result = await readNote(props.data.path)
+  lastWrittenMarkdown = result.content ?? ''
+  if (editorEl.value) editorEl.value.innerHTML = markdownToHtml(lastWrittenMarkdown)
+
+  unwatch = watchNote(props.data.path, (msg) => {
+    if (msg.content === lastWrittenMarkdown) return
+    lastWrittenMarkdown = msg.content
+    // não sobrescreve o editor enquanto o usuário está digitando nele —
+    // evita arrancar cursor/seleção no meio de uma edição real; a próxima
+    // vez que o autosave local rodar, a versão local prevalece (last-write-
+    // wins simples, sem OT/CRDT)
+    if (isEditorFocused.value || !editorEl.value) return
+    editorEl.value.innerHTML = markdownToHtml(msg.content)
+  })
+}
+
+watch(() => props.data.path, loadAndWatch)
 
 function setColor(color) {
   updateNodeData(props.id, { headerColor: color, transparent: false })
@@ -219,11 +287,14 @@ function stopResize() {
   updateNodeData(props.id, { width: nodeWidth.value, height: nodeHeight.value })
 }
 
-onMounted(() => {
-  if (editorEl.value) editorEl.value.innerHTML = props.data.content || ''
-})
+onMounted(loadAndWatch)
 
 onBeforeUnmount(() => {
+  clearTimeout(saveTimer)
+  // última chance de persistir uma edição pendente que o debounce ainda não
+  // gravou (ex: node deletado/desmontado logo após digitar)
+  saveNow()
+  unwatch?.()
   window.removeEventListener('mousemove', onResizeMove)
   window.removeEventListener('mouseup', stopResize)
 })
@@ -248,6 +319,19 @@ onBeforeUnmount(() => {
 
 .notes-node.selected {
   border-color: var(--selected-color);
+}
+
+.notes-handle {
+  width: 8px;
+  height: 8px;
+  background: var(--color-border-strong);
+  border: 2px solid var(--color-bg-surface);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.notes-handle.connected {
+  background: #3b82f6;
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
 }
 
 .toolbar-fade-enter-active,

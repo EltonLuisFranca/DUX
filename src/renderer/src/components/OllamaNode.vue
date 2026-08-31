@@ -44,9 +44,19 @@
 
     <div ref="historyEl" class="ollama-history nodrag nowheel nopan">
       <div v-if="!data.messages?.length" class="empty-hint">Converse com {{ data.model }}...</div>
-      <div v-for="(msg, index) in data.messages" :key="index" class="msg" :class="msg.role">
-        <div class="msg-bubble">{{ msg.content }}</div>
-      </div>
+      <template v-for="(msg, index) in data.messages" :key="index">
+        <details v-if="msg.role === 'tool'" class="tool-call">
+          <summary class="tool-call-summary">
+            <span class="tool-icon">🔧</span>
+            <span class="tool-name">{{ msg.name }}</span>
+            <span class="tool-args">{{ formatToolArgs(msg.args) }}</span>
+          </summary>
+          <pre class="tool-result">{{ msg.content }}</pre>
+        </details>
+        <div v-else-if="msg.content" class="msg" :class="msg.role">
+          <div class="msg-bubble">{{ msg.content }}</div>
+        </div>
+      </template>
       <div v-if="streamingText" class="msg assistant">
         <div class="msg-bubble">{{ streamingText }}<span class="cursor">▍</span></div>
       </div>
@@ -84,10 +94,48 @@ import { nextTick, onBeforeUnmount, ref } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { streamChat } from '../lib/ollamaClient'
+import { FILE_TOOLS, executeTool } from '../lib/ollamaTools'
 import { useHandleConnection } from '../lib/useHandleConnection'
 
 const MIN_NODE_WIDTH = 360
 const MIN_NODE_HEIGHT = 320
+const MAX_TOOL_ITERATIONS = 4
+
+function formatToolArgs(args) {
+  if (!args || Object.keys(args).length === 0) return ''
+  // read_file/write_file/list_files têm todos um `path` — mostra só ele por
+  // padrão (o que importa pra reconhecer de relance o que a tool tocou);
+  // demais argumentos (ex: content de write_file) ficam só no resultado
+  // expandido, não fazem sentido na linha de resumo
+  return args.path ? `(${args.path})` : `(${JSON.stringify(args)})`
+}
+
+// mensagens exibidas (data.messages, guardadas no formato normalizado
+// { id, name, arguments } pros tool_calls — ver ollamaClient.js) -> formato
+// que cada backend espera de volta no request. Precisa reconverter dois
+// casos: a mensagem assistant que carrega tool_calls (formato normalizado
+// -> formato nativo de cada API) e as mensagens role:'tool' com o resultado.
+function toApiMessages(messages, api) {
+  return messages.map((msg) => {
+    if (msg.role === 'assistant' && msg.tool_calls?.length) {
+      const tool_calls =
+        api === 'openwebui'
+          ? msg.tool_calls.map((c) => ({
+              id: c.id,
+              type: 'function',
+              function: { name: c.name, arguments: JSON.stringify(c.arguments || {}) }
+            }))
+          : msg.tool_calls.map((c) => ({ function: { name: c.name, arguments: c.arguments || {} } }))
+      return { role: 'assistant', content: msg.content, tool_calls }
+    }
+
+    if (msg.role !== 'tool') return msg
+
+    return api === 'openwebui'
+      ? { role: 'tool', tool_call_id: msg.toolCallId, content: msg.content }
+      : { role: 'tool', tool_name: msg.name, content: msg.content }
+  })
+}
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -120,7 +168,7 @@ async function send() {
   const text = draft.value.trim()
   if (!text || status.value === 'sending') return
 
-  const messages = [...(props.data.messages || []), { role: 'user', content: text }]
+  let messages = [...(props.data.messages || []), { role: 'user', content: text }]
   updateNodeData(props.id, { messages })
   draft.value = ''
   status.value = 'sending'
@@ -131,24 +179,66 @@ async function send() {
   abortController = new AbortController()
   try {
     const host = (props.data.host || 'http://localhost:11434').replace(/\/+$/, '')
-    let fullText = ''
+    // uma vez que o backend responde 400 pra `tools` (modelo/servidor sem
+    // suporte), não tenta de novo nas próximas mensagens desta conversa —
+    // evita pagar o custo de uma tentativa extra falha a cada turno
+    let toolsUnsupported = Boolean(props.data.toolsUnsupported)
 
-    await streamChat({
-      host,
-      token: props.data.token,
-      model: props.data.model,
-      messages,
-      api: props.data.api,
-      signal: abortController.signal,
-      onToken: (chunk) => {
-        fullText += chunk
-        streamingText.value = fullText
-        scrollToBottom()
+    for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+      let fullText = ''
+      let toolCalls = null
+
+      const result = await streamChat({
+        host,
+        token: props.data.token,
+        model: props.data.model,
+        messages: toApiMessages(messages, props.data.api),
+        api: props.data.api,
+        tools: toolsUnsupported ? undefined : FILE_TOOLS,
+        signal: abortController.signal,
+        onToken: (chunk) => {
+          fullText += chunk
+          streamingText.value = fullText
+          scrollToBottom()
+        },
+        onToolCalls: (calls) => {
+          toolCalls = calls
+        }
+      })
+
+      if (result.toolsUnsupported) {
+        toolsUnsupported = true
+        updateNodeData(props.id, { toolsUnsupported: true })
       }
-    })
 
-    updateNodeData(props.id, { messages: [...messages, { role: 'assistant', content: fullText }] })
-    streamingText.value = ''
+      streamingText.value = ''
+
+      if (!toolCalls?.length) {
+        messages = [...messages, { role: 'assistant', content: fullText }]
+        updateNodeData(props.id, { messages })
+        break
+      }
+
+      // registra a decisão do modelo de chamar tools (sem bolha própria —
+      // o template só renderiza msg.content não-vazio pra role assistant)
+      messages = [...messages, { role: 'assistant', content: fullText, tool_calls: toolCalls }]
+
+      for (const call of toolCalls) {
+        const resultText = await executeTool(call.name, call.arguments || {})
+        messages = [
+          ...messages,
+          { role: 'tool', name: call.name, args: call.arguments, content: resultText, toolCallId: call.id }
+        ]
+      }
+
+      updateNodeData(props.id, { messages })
+      scrollToBottom()
+      // volta pro topo do loop pra obter a resposta do modelo com o
+      // resultado das tools já no histórico; se atingir MAX_TOOL_ITERATIONS
+      // sem uma resposta de texto final, simplesmente para por aqui — o
+      // histórico já reflete tudo que aconteceu, sem mensagem de erro
+    }
+
     status.value = 'idle'
   } catch (err) {
     if (err.name !== 'AbortError') {
@@ -303,6 +393,64 @@ function stopResize() {
   margin: auto;
   color: var(--color-text-tertiary);
   font-size: 12px;
+}
+
+.tool-call {
+  align-self: flex-start;
+  max-width: 85%;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: var(--color-bg-surface-alt);
+  border: 1px solid var(--color-border);
+}
+
+.tool-call-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  list-style: none;
+}
+
+.tool-call-summary::-webkit-details-marker {
+  display: none;
+}
+
+.tool-icon {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.tool-name {
+  font-weight: 600;
+  font-family: 'Menlo', Consolas, monospace;
+  color: var(--color-text-primary);
+}
+
+.tool-args {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'Menlo', Consolas, monospace;
+  color: var(--color-text-tertiary);
+}
+
+.tool-result {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--color-bg-app);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-family: 'Menlo', Consolas, monospace;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow-y: auto;
 }
 
 .msg {

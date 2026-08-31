@@ -7,6 +7,8 @@
     :min-zoom="0.25"
     :max-zoom="2"
     :default-edge-options="{ type: edgeStyle }"
+    :snap-to-grid="snapEnabled"
+    :snap-grid="[SNAP_GRID_SIZE, SNAP_GRID_SIZE]"
     connection-mode="loose"
     @node-click="handleNodeClick"
     @dragover="handleDragOver"
@@ -28,6 +30,8 @@
       <VoiceInputBadge />
       <ZoomControls />
     </Panel>
+
+    <DuxSearch v-if="isActiveWorkspace" :workspace="workspace" />
 
     <template #node-wsl-claude-terminal="nodeProps">
       <WslClaudeTerminalNode v-bind="nodeProps" />
@@ -111,16 +115,18 @@ import GitNode from './GitNode.vue'
 import ImageNode from './ImageNode.vue'
 import HttpNode from './HttpNode.vue'
 import PomodoroNode from './PomodoroNode.vue'
-import { theme, canvasVariant, edgeStyle } from '../store/themeStore'
-import { onNodeClicked, addNode, openAddNodeModal, activeWorkspaceId, setActiveTerminal } from '../store/flowStore'
+import { theme, canvasVariant, edgeStyle, snapEnabled, SNAP_GRID_SIZE } from '../store/themeStore'
+import { onNodeClicked, addNode, openAddNodeModal, activeWorkspaceId, setActiveTerminal, openSearch } from '../store/flowStore'
+import DuxSearch from './DuxSearch.vue'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
-import { linkAgents, unlinkAgents } from '../lib/bridgeClient'
+import { linkAgents, unlinkAgents, linkNoteToAgent, unlinkNoteFromAgent } from '../lib/bridgeClient'
 import { isRoomConnected, remoteCursors, remoteNodesByUser, sendCursorPosition, broadcastNodeSnapshot } from '../store/roomStore'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 
 const TERMINAL_TYPES = ['wsl-claude-terminal', 'claude-terminal', 'codex-terminal']
+const NOTE_TYPE = 'notes'
 
 const props = defineProps({
   workspace: { type: Object, required: true }
@@ -203,10 +209,28 @@ function isTerminalNode(id) {
   return TERMINAL_TYPES.includes(findNode(id)?.type)
 }
 
+// dado um par (source, target) de uma edge nota<->terminal, em qualquer
+// ordem, retorna { terminalId, notePath } — ou null se o par não for esse caso
+function noteAgentPair(sourceId, targetId) {
+  const sourceNode = findNode(sourceId)
+  const targetNode = findNode(targetId)
+  if (sourceNode?.type === NOTE_TYPE && isTerminalNode(targetId)) {
+    return { terminalId: targetId, notePath: sourceNode.data.path }
+  }
+  if (targetNode?.type === NOTE_TYPE && isTerminalNode(sourceId)) {
+    return { terminalId: sourceId, notePath: targetNode.data.path }
+  }
+  return null
+}
+
 function handleConnect(connection) {
   addEdges([connection])
-  if (!isTerminalNode(connection.source) || !isTerminalNode(connection.target)) return
-  linkAgents(connection.source, connection.target)
+  if (isTerminalNode(connection.source) && isTerminalNode(connection.target)) {
+    linkAgents(connection.source, connection.target)
+    return
+  }
+  const pair = noteAgentPair(connection.source, connection.target)
+  if (pair) linkNoteToAgent(pair.terminalId, pair.notePath)
 }
 
 // Vue Flow só reporta edges removidas (drag pra fora, tecla delete, etc.) por
@@ -215,9 +239,13 @@ function handleEdgesChange(changes) {
   for (const change of changes) {
     if (change.type !== 'remove') continue
     const edge = props.workspace.edges.find((e) => e.id === change.id)
-    if (edge && isTerminalNode(edge.source) && isTerminalNode(edge.target)) {
+    if (!edge) continue
+    if (isTerminalNode(edge.source) && isTerminalNode(edge.target)) {
       unlinkAgents(edge.source, edge.target)
+      continue
     }
+    const pair = noteAgentPair(edge.source, edge.target)
+    if (pair) unlinkNoteFromAgent(pair.terminalId, pair.notePath)
   }
 }
 
@@ -226,7 +254,7 @@ function handleDragOver(event) {
   event.dataTransfer.dropEffect = 'move'
 }
 
-function handleDrop(event) {
+async function handleDrop(event) {
   event.preventDefault()
   const type = event.dataTransfer.getData('application/dux-node-type')
   const entry = nodeTypeRegistry[type]
@@ -238,7 +266,13 @@ function handleDrop(event) {
     y: event.clientY - bounds.top
   })
 
-  addNode(type, entry.createData(), position, entry.defaultZIndex ?? 0)
+  // await funciona tanto pra createData síncrono (pomodoro) quanto
+  // assíncrono (notes: precisa perguntar ao bridge o path do arquivo criado
+  // em ~/.dux/notes/ antes do node existir) — null sinaliza falha (ex: bridge
+  // não conseguiu criar o arquivo), nesse caso não cria o node
+  const data = await entry.createData()
+  if (!data) return
+  addNode(type, data, position, entry.defaultZIndex ?? 0)
 }
 
 function selectNextNode() {
@@ -254,10 +288,18 @@ function selectNextNode() {
 // só o workspace ativo reage — como cada workspace tem seu próprio FleetCanvas
 // montado em paralelo, sem essa checagem o atalho dispararia em todos de uma vez
 function onKeydown(event) {
-  if (event.ctrlKey && event.key === 'Tab' && props.workspace.id === activeWorkspaceId.value) {
+  if (props.workspace.id !== activeWorkspaceId.value) return
+
+  if (event.ctrlKey && event.key === 'Tab') {
     event.preventDefault()
     event.stopPropagation()
     selectNextNode()
+  } else if (event.ctrlKey && event.key.toLowerCase() === 'p') {
+    // captura antes do xterm.js pra abrir mesmo com o terminal focado, mesmo
+    // padrão do Ctrl+N em AddNodeModal.vue
+    event.preventDefault()
+    event.stopPropagation()
+    openSearch()
   }
 }
 

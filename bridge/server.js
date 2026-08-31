@@ -6,6 +6,7 @@ const { execFile } = require('child_process')
 const pty = require('node-pty')
 const { WebSocketServer, WebSocket } = require('ws')
 const agentLink = require('./agentLink')
+const noteLink = require('./noteLink')
 
 const PORT = 4577
 const AGENT_PORT = 4578
@@ -66,6 +67,111 @@ function listSubdirectories(target) {
   } catch {
     return []
   }
+}
+
+function isFile(target) {
+  try {
+    return fs.statSync(target).isFile()
+  } catch {
+    return false
+  }
+}
+
+// diferente de listSubdirectories (só diretórios, usado pro autocomplete de
+// path de criação de node) — aqui lista arquivos E diretórios, pra tool
+// list_files do Ollama explorar uma pasta antes de decidir o que abrir
+function listDirEntries(target) {
+  try {
+    return fs
+      .readdirSync(target, { withFileTypes: true })
+      .filter((entry) => !entry.name.startsWith('.'))
+      .map((entry) => ({ name: entry.name, isDirectory: entry.isDirectory() }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  } catch {
+    return []
+  }
+}
+
+// Watchers de nota ativos por conexão WS — cada `ws` pode observar vários
+// paths; guardado aqui (não em noteLink.js) porque é estado de transporte
+// (quem quer receber noteChanged por qual socket), não de "quais sessões de
+// agente estão linkadas a qual nota".
+const noteFsWatchersByWs = new WeakMap()
+
+function stopWatchingNote(ws, notePath) {
+  const watchers = noteFsWatchersByWs.get(ws)
+  const watcher = watchers?.get(notePath)
+  if (!watcher) return
+  clearTimeout(watcher.debounceHandle)
+  watcher.fsWatcher.close()
+  watchers.delete(notePath)
+}
+
+function stopAllNoteWatches(ws) {
+  const watchers = noteFsWatchersByWs.get(ws)
+  if (!watchers) return
+  for (const notePath of [...watchers.keys()]) stopWatchingNote(ws, notePath)
+  noteFsWatchersByWs.delete(ws)
+}
+
+function readNoteFile(notePath) {
+  try {
+    return fs.readFileSync(notePath, 'utf8')
+  } catch {
+    return ''
+  }
+}
+
+function startWatchingNote(ws, notePath) {
+  if (!noteFsWatchersByWs.has(ws)) noteFsWatchersByWs.set(ws, new Map())
+  const watchers = noteFsWatchersByWs.get(ws)
+  if (watchers.has(notePath)) return
+
+  // fs.watch dispara em rajada em vários editores/salvamentos (ex: um agente
+  // fazendo várias escritas pequenas) — debounce evita mandar um noteChanged
+  // por evento bruto.
+  const send = () => {
+    if (ws.readyState !== WebSocket.OPEN) return
+    const stat = (() => {
+      try {
+        return fs.statSync(notePath)
+      } catch {
+        return null
+      }
+    })()
+    ws.send(
+      JSON.stringify({
+        type: 'noteChanged',
+        path: notePath,
+        content: readNoteFile(notePath),
+        mtime: stat ? stat.mtimeMs : null
+      })
+    )
+  }
+
+  // Observa o DIRETÓRIO pai, não o arquivo em si — muitos editores/ferramentas
+  // (incluído o Claude Code) escrevem de forma atômica: gravam num arquivo
+  // temporário e fazem rename() por cima do original, em vez de escrever
+  // direto nele. Um fs.watch(notePath) fica preso ao inode antigo, que deixa
+  // de existir após o rename — o watch para de disparar eventos
+  // silenciamente a partir daí, mesmo que o arquivo (novo inode, mesmo nome)
+  // continue sendo escrito depois (confirmado reproduzindo o cenário: o
+  // primeiro rename ainda dispara, a escrita seguinte já não). Watch no
+  // diretório sobrevive a qualquer rename porque nunca perde esse inode.
+  const targetName = path.basename(notePath)
+  const dir = path.dirname(notePath)
+  const entry = { fsWatcher: null, debounceHandle: null }
+  try {
+    entry.fsWatcher = fs.watch(dir, (_event, filename) => {
+      if (filename !== targetName) return
+      clearTimeout(entry.debounceHandle)
+      entry.debounceHandle = setTimeout(send, 150)
+    })
+  } catch {
+    return
+  }
+
+  watchers.set(notePath, entry)
 }
 
 const GIT_STATUS_CODE_MAP = {
@@ -190,10 +296,14 @@ wss.on('connection', (ws) => {
 
       if (sessionId) {
         agentLink.registerSession(sessionId, { name: msg.name || sessionId, cwd, ptyProcess })
+        noteLink.registerSession(sessionId, { ptyProcess })
       }
 
       ptyProcess.onData((data) => {
-        if (sessionId) agentLink.onSessionData(sessionId, data)
+        if (sessionId) {
+          agentLink.onSessionData(sessionId, data)
+          noteLink.onSessionData(sessionId)
+        }
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'data', data }))
         }
@@ -203,7 +313,10 @@ wss.on('connection', (ws) => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'exit', exitCode, signal }))
         }
-        if (sessionId) agentLink.unregisterSession(sessionId)
+        if (sessionId) {
+          agentLink.unregisterSession(sessionId)
+          noteLink.unregisterSession(sessionId)
+        }
         ptyProcess = null
       })
     } else if (msg.type === 'input') {
@@ -228,13 +341,129 @@ wss.on('connection', (ws) => {
       agentLink.unlinkSessions(msg.sessionA, msg.sessionB)
     } else if (msg.type === 'rename') {
       agentLink.renameSession(msg.sessionId, msg.name)
+    } else if (msg.type === 'noteCheckPath') {
+      // path pode terminar em nome de arquivo (ainda não existente) — resolve
+      // relativo ao diretório pai pra permitir digitar o nome do .md a criar,
+      // mesmo padrão de resolveCwd usado pelo terminal/git.
+      const resolved = resolveCwd(msg.path)
+      const parentDir = path.dirname(resolved)
+      const parentValid = isDirectory(parentDir)
+      const exists = isFile(resolved)
+      const entries = parentValid ? listSubdirectories(parentDir) : []
+      ws.send(
+        JSON.stringify({ type: 'noteCheck', path: msg.path, resolved, parentValid, exists, entries })
+      )
+    } else if (msg.type === 'noteRead') {
+      const resolved = resolveCwd(msg.path)
+      if (!isFile(resolved) && isDirectory(path.dirname(resolved))) {
+        try {
+          fs.writeFileSync(resolved, '')
+        } catch {
+          // segue e reporta como leitura vazia — noteWrite futuro reportará o erro real
+        }
+      }
+      const stat = (() => {
+        try {
+          return fs.statSync(resolved)
+        } catch {
+          return null
+        }
+      })()
+      ws.send(
+        JSON.stringify({ type: 'noteContent', path: resolved, content: readNoteFile(resolved), mtime: stat ? stat.mtimeMs : null })
+      )
+    } else if (msg.type === 'noteWrite') {
+      const resolved = resolveCwd(msg.path)
+      let ok = true
+      try {
+        fs.writeFileSync(resolved, msg.content ?? '')
+      } catch {
+        ok = false
+      }
+      ws.send(JSON.stringify({ type: 'noteWriteResult', path: resolved, ok }))
+    } else if (msg.type === 'noteCreateDefault') {
+      const dir = resolveCwd('~/.dux/notes')
+      try {
+        fs.mkdirSync(dir, { recursive: true })
+      } catch {
+        ws.send(JSON.stringify({ type: 'noteCreated', error: 'não foi possível criar ~/.dux/notes' }))
+        return
+      }
+
+      // Date.now() sozinho pode colidir se duas notas forem arrastadas no
+      // mesmo milissegundo — tenta sufixos incrementais até achar um nome livre.
+      let resolved = path.join(dir, `nota-${Date.now()}.md`)
+      let suffix = 1
+      while (isFile(resolved)) {
+        resolved = path.join(dir, `nota-${Date.now()}-${suffix}.md`)
+        suffix += 1
+      }
+
+      try {
+        fs.writeFileSync(resolved, '')
+      } catch {
+        ws.send(JSON.stringify({ type: 'noteCreated', error: 'não foi possível criar o arquivo da nota' }))
+        return
+      }
+
+      ws.send(JSON.stringify({ type: 'noteCreated', path: resolved, name: path.basename(resolved) }))
+    } else if (msg.type === 'noteWatch') {
+      startWatchingNote(ws, resolveCwd(msg.path))
+    } else if (msg.type === 'noteUnwatch') {
+      stopWatchingNote(ws, resolveCwd(msg.path))
+    } else if (msg.type === 'noteLink') {
+      noteLink.linkNote(msg.sessionId, resolveCwd(msg.path))
+    } else if (msg.type === 'noteUnlink') {
+      noteLink.unlinkNote(msg.sessionId, resolveCwd(msg.path))
+    } else if (msg.type === 'fileRead') {
+      // usado pela tool read_file do node Ollama — diferente de noteRead,
+      // NÃO cria o arquivo silenciosamente: o modelo pediu um path achando
+      // que existe, então "não encontrado" é uma resposta válida pra ele
+      // reagir (pedir o path certo, avisar o usuário etc.), não um bug.
+      const resolved = resolveCwd(msg.path)
+      if (!isFile(resolved)) {
+        ws.send(JSON.stringify({ type: 'fileReadResult', path: resolved, ok: false, error: 'arquivo não encontrado' }))
+        return
+      }
+      try {
+        const content = fs.readFileSync(resolved, 'utf8')
+        ws.send(JSON.stringify({ type: 'fileReadResult', path: resolved, ok: true, content }))
+      } catch (err) {
+        ws.send(JSON.stringify({ type: 'fileReadResult', path: resolved, ok: false, error: err.message }))
+      }
+    } else if (msg.type === 'fileWrite') {
+      // diferente de noteWrite: não cria diretório nenhum — se a pasta pai
+      // não existe, é mais provável que o modelo tenha inventado um path do
+      // que a intenção real de criar uma árvore de pastas nova
+      const resolved = resolveCwd(msg.path)
+      if (!isDirectory(path.dirname(resolved))) {
+        ws.send(JSON.stringify({ type: 'fileWriteResult', path: resolved, ok: false, error: 'diretório não encontrado' }))
+        return
+      }
+      try {
+        fs.writeFileSync(resolved, msg.content ?? '')
+        ws.send(JSON.stringify({ type: 'fileWriteResult', path: resolved, ok: true }))
+      } catch (err) {
+        ws.send(JSON.stringify({ type: 'fileWriteResult', path: resolved, ok: false, error: err.message }))
+      }
+    } else if (msg.type === 'fileList') {
+      const resolved = resolveCwd(msg.path)
+      if (!isDirectory(resolved)) {
+        ws.send(JSON.stringify({ type: 'fileListResult', path: resolved, ok: false, error: 'diretório não encontrado' }))
+        return
+      }
+      ws.send(JSON.stringify({ type: 'fileListResult', path: resolved, ok: true, entries: listDirEntries(resolved) }))
     }
   })
 
   ws.on('close', () => {
     ptyProcess?.kill()
     ptyProcess = null
-    if (sessionId) agentLink.unregisterSession(sessionId)
+    if (sessionId) {
+      agentLink.unregisterSession(sessionId)
+      noteLink.unregisterSession(sessionId)
+    }
+    stopAllNoteWatches(ws)
   })
 })
 

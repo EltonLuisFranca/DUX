@@ -9,6 +9,8 @@ import OllamaSettings from '../components/nodeSettings/OllamaSettings.vue'
 import GitCreateForm from '../components/nodeCreate/GitCreateForm.vue'
 import ImageCreateForm from '../components/nodeCreate/ImageCreateForm.vue'
 import HttpCreateForm from '../components/nodeCreate/HttpCreateForm.vue'
+import NotesCreateForm from '../components/nodeCreate/NotesCreateForm.vue'
+import { createDefaultNote } from '../lib/bridgeClient'
 
 const TERMINAL_ICON =
   '<rect x="2" y="3" width="16" height="14" rx="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M6 8l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M11 14h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
@@ -108,12 +110,22 @@ export const nodeTypeRegistry = {
   },
   notes: {
     label: 'Nota',
-    description: 'Bloco de notas simples, sem terminal — pra anotações e lembretes.',
+    description: 'Nota em arquivo .md real no disco — conecte agentes via edge para compartilhar contexto entre sessões.',
     category: 'media',
-    createData: () => ({ name: 'Nova nota', content: '' }),
-    // criada arrastando o ícone da barra de zoom pro canvas, não pelo modal
-    hideFromModal: true,
-    // fica sempre atrás dos outros tipos de node
+    // dois caminhos de criação: arrastar da barra de zoom usa createData
+    // (arquivo criado automaticamente em ~/.dux/notes/, sem perguntar nada —
+    // ver ZoomControls.vue/FleetCanvas.handleDrop); o modal "Adicionar node"
+    // usa createForm pra deixar escolher onde salvar (NotesCreateForm.vue)
+    createData: async () => {
+      const result = await createDefaultNote()
+      if (result.error) {
+        console.error('[notes] falha ao criar nota padrão:', result.error)
+        return null
+      }
+      return { name: result.name, path: result.path }
+    },
+    createForm: NotesCreateForm,
+    // fica sempre atrás dos outros tipos de node, mesmo padrão de antes
     defaultZIndex: -1,
     icon: '<path d="M3 2.5h7l3 3V13a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M10 2.5V5.5h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M5 8h6M5 10.5h6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'
   },

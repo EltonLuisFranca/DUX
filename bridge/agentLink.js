@@ -1,24 +1,17 @@
+const { writeAsMessage, decorateDuxMessage } = require('./ptyWrite')
+
 const IDLE_MS = 900
 const ASK_TIMEOUT_MS = 120000
 const REPLY_MARKER = '<<<DUX_REPLY'
 const END_MARKER = '<<<DUX_END>>>'
 
-// Envolve o texto injetado pelo DUX (mensagens [DUX]) com cor ANSI ciano —
-// só decoração visual no terminal, o Claude Code recebe o mesmo texto puro
-// de qualquer forma (as sequências de escape não alteram o conteúdo, o
-// terminal só as interpreta como estilo). Ajuda a diferenciar de relance o
-// que veio do DUX do que o usuário/agente escreveu.
-//
-// Importante: NENHUM marcador técnico tipo "<<<DUX_SETUP>>>" entra aqui —
-// um texto assim, escrito literalmente no PTY, é visto pelo Claude Code como
-// parte da mensagem, e ele reconhece (corretamente) que imita o formato de
-// uma tag de sistema real, o que piora a desconfiança em vez de ajudar. A
-// decoração fica restrita a códigos ANSI de estilo (SGR), que terminais
-// interpretam como formatação, nunca como conteúdo de texto.
-const DUX_ICON = '🤖'
-function decorateDuxMessage(text) {
-  return `\x1b[36m${DUX_ICON} ${text}\x1b[0m`
-}
+// decorateDuxMessage (importado de ./ptyWrite): NENHUM marcador técnico tipo
+// "<<<DUX_SETUP>>>" entra no texto — um texto assim, escrito literalmente no
+// PTY, é visto pelo Claude Code como parte da mensagem, e ele reconhece
+// (corretamente) que imita o formato de uma tag de sistema real, o que piora
+// a desconfiança em vez de ajudar. A decoração fica restrita a códigos ANSI
+// de estilo (SGR), que terminais interpretam como formatação, nunca como
+// conteúdo de texto.
 
 // sessionId -> { name, cwd, ptyProcess, links: Set<sessionId>, lastDataAt,
 //                rawBuffer, expectedReplyId, queue: [], pending: null }
@@ -177,36 +170,6 @@ function pumpQueue(sessionId) {
       }
     }
   })
-}
-
-// escreve o texto e o Enter como dois eventos separados, com um intervalo
-// entre eles — a maioria dos TUIs (Claude Code incluso) trata uma rajada única
-// e grande de bytes terminada em \n como "colar texto com quebra de linha
-// dentro do campo", não como "digitar e confirmar com Enter". Separar os dois
-// imita o que um humano realmente faz e evita o texto ficar só sentado no
-// campo de input, sem ser enviado.
-//
-// Enfileirada por ptyProcess: duas chamadas concorrentes pro mesmo terminal
-// (ex: um bug em outro lugar disparando sendLinkInstructions duas vezes)
-// senão intercalariam o segundo texto no meio do primeiro, antes do \r do
-// primeiro disparar — exatamente o tipo de texto grudado e nunca enviado que
-// já aconteceu aqui uma vez.
-const writeQueues = new WeakMap()
-
-function writeAsMessage(ptyProcess, text) {
-  const previous = writeQueues.get(ptyProcess) || Promise.resolve()
-  const next = previous.then(
-    () =>
-      new Promise((resolve) => {
-        ptyProcess.write(text)
-        setTimeout(() => {
-          ptyProcess.write('\r')
-          resolve()
-        }, 80)
-      })
-  )
-  writeQueues.set(ptyProcess, next)
-  return next
 }
 
 function ask(fromSessionId, toName, message) {

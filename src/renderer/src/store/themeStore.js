@@ -3,6 +3,9 @@ import { ref, watchEffect } from 'vue'
 const STORAGE_KEY = 'dux-theme'
 const CANVAS_VARIANT_STORAGE_KEY = 'dux-canvas-variant'
 const EDGE_STYLE_STORAGE_KEY = 'dux-edge-style'
+const SNAP_ENABLED_STORAGE_KEY = 'dux-snap-enabled'
+
+export const SNAP_GRID_SIZE = 16
 
 export const EDGE_STYLES = [
   { value: 'default', label: 'Curva' },
@@ -49,6 +52,16 @@ watchEffect(() => {
 
 export function setEdgeStyle(value) {
   edgeStyle.value = value
+}
+
+export const snapEnabled = ref(localStorage.getItem(SNAP_ENABLED_STORAGE_KEY) === 'true')
+
+watchEffect(() => {
+  localStorage.setItem(SNAP_ENABLED_STORAGE_KEY, String(snapEnabled.value))
+})
+
+export function setSnapEnabled(value) {
+  snapEnabled.value = value
 }
 
 export const XTERM_THEMES = {

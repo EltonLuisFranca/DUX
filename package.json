@@ -84,10 +84,13 @@
     "@vue-flow/core": "^1.48.2",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
+    "dompurify": "^3.4.14",
     "electron-updater": "^6.8.9",
     "laravel-echo": "^1.19.0",
+    "marked": "^18.0.11",
     "nodejs-whisper": "^0.3.1",
     "pusher-js": "^8.6.0",
+    "turndown": "^7.2.4",
     "vue": "^3.5.42"
   },
   "devDependencies": {
