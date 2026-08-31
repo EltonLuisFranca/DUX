@@ -1,6 +1,6 @@
 {
   "name": "dux",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "",
   "main": "./out/main/index.js",
   "scripts": {
@@ -48,9 +48,7 @@
     },
     "linux": {
       "target": [
-        "pacman",
-        "deb",
-        "rpm"
+        "pacman"
       ],
       "category": "Development",
       "maintainer": "Elton Franca"
