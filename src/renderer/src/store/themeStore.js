@@ -64,6 +64,23 @@ export function setSnapEnabled(value) {
   snapEnabled.value = value
 }
 
+// Sidebar de configurações do app: mesmo padrão do NodeSettingsSidebar
+// (flowStore.activeSettingsNodeId) — estado global simples em vez de local,
+// pra empurrar o layout do canvas em vez de sobrepor como overlay.
+export const settingsSidebarOpen = ref(false)
+
+export function openSettings() {
+  settingsSidebarOpen.value = true
+}
+
+export function closeSettings() {
+  settingsSidebarOpen.value = false
+}
+
+export function toggleSettings() {
+  settingsSidebarOpen.value = !settingsSidebarOpen.value
+}
+
 export const XTERM_THEMES = {
   dark: { background: '#18181b', foreground: '#e4e4e7' },
   light: { background: '#ffffff', foreground: '#18181b' }
