@@ -1,8 +1,5 @@
-import WslClaudeTerminalSettings from '../components/nodeSettings/WslClaudeTerminalSettings.vue'
-import WslClaudeTerminalCreateForm from '../components/nodeCreate/WslClaudeTerminalCreateForm.vue'
-import ClaudeTerminalSettings from '../components/nodeSettings/ClaudeTerminalSettings.vue'
-import ClaudeTerminalCreateForm from '../components/nodeCreate/ClaudeTerminalCreateForm.vue'
-import CodexTerminalCreateForm from '../components/nodeCreate/CodexTerminalCreateForm.vue'
+import TerminalSettings from '../components/nodeSettings/TerminalSettings.vue'
+import TerminalCreateForm from '../components/nodeCreate/TerminalCreateForm.vue'
 import BrowserCreateForm from '../components/nodeCreate/BrowserCreateForm.vue'
 import OllamaCreateForm from '../components/nodeCreate/OllamaCreateForm.vue'
 import OllamaSettings from '../components/nodeSettings/OllamaSettings.vue'
@@ -52,24 +49,28 @@ export const nodeTypeRegistry = {
     label: 'Terminal WSL · Claude Code',
     description: 'Sessão interativa do Claude Code rodando dentro do WSL.',
     category: 'agents',
-    settingsComponent: WslClaudeTerminalSettings,
-    createForm: WslClaudeTerminalCreateForm,
+    settingsComponent: TerminalSettings,
+    settingsProps: { wslMode: true },
+    createForm: TerminalCreateForm,
+    createFormProps: { wslMode: true },
     icon: TERMINAL_ICON
   },
   'claude-terminal': {
     label: 'Terminal · Claude Code',
     description: 'Sessão interativa do Claude Code rodando localmente no Linux.',
     category: 'agents',
-    settingsComponent: ClaudeTerminalSettings,
-    createForm: ClaudeTerminalCreateForm,
+    settingsComponent: TerminalSettings,
+    createForm: TerminalCreateForm,
+    createFormProps: { command: 'claude' },
     icon: TERMINAL_ICON
   },
   'codex-terminal': {
     label: 'Terminal · Codex',
     description: 'Sessão interativa do Codex CLI rodando localmente no Linux.',
     category: 'agents',
-    settingsComponent: ClaudeTerminalSettings,
-    createForm: CodexTerminalCreateForm,
+    settingsComponent: TerminalSettings,
+    createForm: TerminalCreateForm,
+    createFormProps: { command: 'codex' },
     icon: TERMINAL_ICON
   },
   ollama: {

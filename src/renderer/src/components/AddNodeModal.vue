@@ -60,6 +60,7 @@
       <component
         :is="nodeTypeRegistry[selectedType].createForm"
         v-else
+        v-bind="nodeTypeRegistry[selectedType].createFormProps"
         @submit="handleFormSubmit"
         @cancel="selectedType = null"
       />

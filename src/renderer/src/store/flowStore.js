@@ -1,5 +1,5 @@
 import { computed, ref, toRaw, watch } from 'vue'
-import { apiFetch, authToken } from './authStore'
+import { createWorkspaceSync } from '../lib/workspaceSync'
 
 // id precisa ser um UUID de verdade — a coluna workspace_id no backend é
 // `uuid`, e o Postgres rejeita qualquer outro formato com erro 500 no sync.
@@ -28,22 +28,20 @@ export const workspaces = ref(
     : [createDefaultWorkspace()]
 )
 
-// Timestamp da última vez que cada workspace foi sincronizado com sucesso
-// (local ou remoto) — usado pra decidir, no merge, qual lado é mais novo.
-// Guardado à parte (não dentro do workspace) pra não poluir o JSON que vai
-// pro servidor nem pro arquivo local antigo.
-const syncedAt = ref(persisted?.syncedAt && typeof persisted.syncedAt === 'object' ? { ...persisted.syncedAt } : {})
-
-// IDs de workspaces apagados localmente que ainda não confirmaram a exclusão
-// no servidor — sem isso, um workspace deletado localmente "ressuscitaria"
-// no próximo pull remoto, porque o servidor ainda o teria.
-const pendingDeletes = ref(new Set(Array.isArray(persisted?.pendingDeletes) ? persisted.pendingDeletes : []))
-
 export const activeWorkspaceId = ref(
   workspaces.value.some((w) => w.id === persisted?.activeWorkspaceId)
     ? persisted.activeWorkspaceId
     : workspaces.value[0].id
 )
+
+// Criado logo após os refs que ele precisa (workspaces/activeWorkspaceId),
+// bem antes de snapshot()/persistLocal()/flushPersist() abaixo — essas três
+// leem workspaceSync.syncedAt/pendingDeletes, e por ser um `const` ele tem
+// TDZ: chamá-las antes desta linha rodar lançaria "Cannot access
+// 'workspaceSync' before initialization". Mantendo a criação o mais cedo
+// possível no módulo (nada entre aqui e o topo do arquivo chama essas
+// funções), essa janela de risco fica praticamente inexistente.
+const workspaceSync = createWorkspaceSync({ workspaces, activeWorkspaceId, persistLocal, persisted })
 
 export const activeWorkspace = computed(
   () => workspaces.value.find((w) => w.id === activeWorkspaceId.value) ?? workspaces.value[0]
@@ -69,8 +67,8 @@ function snapshot() {
   return {
     workspaces: toRaw(workspaces.value),
     activeWorkspaceId: activeWorkspaceId.value,
-    syncedAt: toRaw(syncedAt.value),
-    pendingDeletes: [...pendingDeletes.value]
+    syncedAt: toRaw(workspaceSync.syncedAt.value),
+    pendingDeletes: [...workspaceSync.pendingDeletes.value]
   }
 }
 
@@ -89,39 +87,6 @@ export function flushPersist() {
   window.workspaceStore?.saveSync?.(snapshot())
 }
 
-const remoteSyncTimers = new Map()
-
-// Sincroniza um workspace por vez (não o array inteiro) — assim editar o
-// Workspace A numa máquina e o Workspace B em outra nunca conflita, cada um
-// tem seu próprio updated_at no servidor. Best-effort: falha de rede ou
-// logout não pode quebrar o fluxo local, que continua sendo a fonte de
-// verdade offline.
-function syncWorkspaceToRemote(id) {
-  if (!authToken.value) return
-  clearTimeout(remoteSyncTimers.get(id))
-  remoteSyncTimers.set(
-    id,
-    setTimeout(async () => {
-      const ws = workspaces.value.find((w) => w.id === id)
-      if (!ws) return
-      try {
-        const result = await apiFetch(`/api/v1/dux/workspaces/${id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ data: ws })
-        })
-        syncedAt.value = { ...syncedAt.value, [id]: result.updated_at }
-        persistLocal()
-      } catch (err) {
-        console.error('[workspaces] remote sync failed', id, err)
-      }
-    }, 1500)
-  )
-}
-
-function syncAllToRemote() {
-  for (const ws of workspaces.value) syncWorkspaceToRemote(ws.id)
-}
-
 // deep watch pega mudanças em qualquer node/edge/nome de qualquer workspace,
 // já que todos ficam montados e rodando em paralelo — é o único disparador
 // de persist/sync, então funções como renameWorkspace não precisam chamar
@@ -130,7 +95,7 @@ watch(
   workspaces,
   () => {
     persistLocal()
-    syncAllToRemote()
+    workspaceSync.syncAllToRemote()
   },
   { deep: true }
 )
@@ -141,60 +106,6 @@ watch(
 // id "default" tiver rodado, gera um UUID novo a cada vez, duplicando o
 // workspace no servidor a cada reinício.
 persistLocal()
-
-// Ao logar (ou reabrir o app já logado), busca todos os workspaces remotos e
-// faz merge com os locais por id + updated_at — nunca substitui tudo de uma
-// vez: cada workspace é comparado individualmente, então mudanças feitas
-// offline numa máquina não são apagadas por um pull de outra.
-async function pullFromRemote() {
-  try {
-    const { data: remoteWorkspaces } = await apiFetch('/api/v1/dux/workspaces')
-    if (!Array.isArray(remoteWorkspaces)) return
-
-    for (const remote of remoteWorkspaces) {
-      const id = remote.workspace_id
-      if (pendingDeletes.value.has(id)) continue
-
-      const localIndex = workspaces.value.findIndex((w) => w.id === id)
-      const localSyncedAt = syncedAt.value[id]
-      const remoteIsNewer = !localSyncedAt || new Date(remote.updated_at) > new Date(localSyncedAt)
-
-      if (localIndex === -1) {
-        // Não existe local ainda (workspace criado em outra máquina)
-        workspaces.value.push(remote.data)
-      } else if (remoteIsNewer) {
-        // Servidor tem uma versão mais nova que a última vez que este
-        // cliente sincronizou — a mudança local (se houver) ainda não foi
-        // vista pelo servidor, então o remoto vence.
-        workspaces.value[localIndex] = remote.data
-      }
-      // else: local tem mudanças não sincronizadas ainda mais recentes —
-      // mantém local, o watcher de push vai mandar pro servidor em breve.
-
-      syncedAt.value = { ...syncedAt.value, [id]: remote.updated_at }
-    }
-
-    // Workspaces que existem localmente mas não vieram do servidor e nunca
-    // foram sincronizados (criados offline) sobem no próximo push — não
-    // fazemos nada aqui além de deixá-los como estão.
-    if (!workspaces.value.some((w) => w.id === activeWorkspaceId.value)) {
-      activeWorkspaceId.value = workspaces.value[0].id
-    }
-
-    persistLocal()
-    syncAllToRemote()
-  } catch (err) {
-    console.error('[workspaces] remote pull failed', err)
-  }
-}
-
-watch(
-  authToken,
-  (token) => {
-    if (token) pullFromRemote()
-  },
-  { immediate: true }
-)
 
 export function switchWorkspace(id) {
   if (id === activeWorkspaceId.value) return
@@ -239,26 +150,9 @@ export function confirmDeleteWorkspace() {
     activeSettingsNodeId.value = null
   }
 
-  pendingDeletes.value.add(id)
-  clearTimeout(remoteSyncTimers.get(id))
-  delete syncedAt.value[id]
+  workspaceSync.forgetWorkspace(id)
   persistLocal()
-  deleteWorkspaceRemote(id)
-}
-
-// Best-effort, igual ao push/pull: se falhar (offline, deslogado), o id
-// fica em pendingDeletes e a exclusão é retentada no próximo pull — o pull
-// já ignora ids em pendingDeletes, então o workspace não ressuscita mesmo
-// que o DELETE ainda não tenha chegado ao servidor.
-async function deleteWorkspaceRemote(id) {
-  if (!authToken.value) return
-  try {
-    await apiFetch(`/api/v1/dux/workspaces/${id}`, { method: 'DELETE' })
-    pendingDeletes.value.delete(id)
-    persistLocal()
-  } catch (err) {
-    console.error('[workspaces] remote delete failed', id, err)
-  }
+  workspaceSync.deleteWorkspaceRemote(id)
 }
 
 export function openNodeSettings(id) {

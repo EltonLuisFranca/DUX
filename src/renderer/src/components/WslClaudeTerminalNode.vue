@@ -29,14 +29,7 @@
     <div ref="termEl" class="agent-term nodrag nowheel nopan"></div>
 
     <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
-      <svg viewBox="0 0 16 16" width="11" height="11">
-        <path
-          d="M13 3L3 13M13 8.5L8.5 13M13 13.5L13.5 13"
-          stroke="currentColor"
-          stroke-width="1.4"
-          stroke-linecap="round"
-        />
-      </svg>
+      <ResizeGripIcon />
     </div>
   </div>
 </template>
@@ -45,6 +38,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import GearIcon from './icons/GearIcon.vue'
+import ResizeGripIcon from './icons/ResizeGripIcon.vue'
 import { FitAddon } from '@xterm/addon-fit'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import '@xterm/xterm/css/xterm.css'
@@ -55,9 +49,7 @@ import { pendingVoiceInput, consumePendingVoiceInput, isRecording } from '../sto
 import { speak, ttsEnabled } from '../store/ttsStore'
 import { playNotificationSound } from '../store/notificationSoundStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
-
-const MIN_NODE_WIDTH = 320
-const MIN_NODE_HEIGHT = 220
+import { useNodeResize } from '../lib/useNodeResize'
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -65,15 +57,20 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
-const { viewport, getConnectedEdges, findNode } = useVueFlow()
+const { getConnectedEdges, findNode } = useVueFlow()
 const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
 
+const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
+  minWidth: 320,
+  minHeight: 220,
+  defaultWidth: 480,
+  defaultHeight: 344
+})
+
 const termEl = ref(null)
 const status = ref('connecting')
-const nodeWidth = ref(props.data.width || 480)
-const nodeHeight = ref(props.data.height || 344)
 
 let term = null
 let fitAddon = null
@@ -155,36 +152,6 @@ function resetNotificationCapture() {
   clearTimeout(notifySilenceTimer)
   notifySilenceTimer = null
 }
-let resizeStartX = 0
-let resizeStartY = 0
-let resizeStartW = 0
-let resizeStartH = 0
-
-function startResize(event) {
-  resizeStartX = event.clientX
-  resizeStartY = event.clientY
-  resizeStartW = nodeWidth.value
-  resizeStartH = nodeHeight.value
-  window.addEventListener('mousemove', onResizeMove)
-  window.addEventListener('mouseup', stopResize)
-  event.preventDefault()
-  event.stopPropagation()
-}
-
-function onResizeMove(event) {
-  const zoom = viewport.value.zoom || 1
-  const dx = (event.clientX - resizeStartX) / zoom
-  const dy = (event.clientY - resizeStartY) / zoom
-  nodeWidth.value = Math.max(MIN_NODE_WIDTH, Math.round(resizeStartW + dx))
-  nodeHeight.value = Math.max(MIN_NODE_HEIGHT, Math.round(resizeStartH + dy))
-}
-
-function stopResize() {
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
-  updateNodeData(props.id, { width: nodeWidth.value, height: nodeHeight.value })
-}
-
 function sendResize() {
   if (!term || !ws || ws.readyState !== WebSocket.OPEN) return
   ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
@@ -354,8 +321,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
   resizeObserver?.disconnect()
   clearTimeout(renameDebounceTimer)
   resetTtsCapture()

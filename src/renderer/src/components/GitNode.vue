@@ -60,28 +60,21 @@
     </div>
 
     <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
-      <svg viewBox="0 0 16 16" width="11" height="11">
-        <path
-          d="M13 3L3 13M13 8.5L8.5 13M13 13.5L13.5 13"
-          stroke="currentColor"
-          stroke-width="1.4"
-          stroke-linecap="round"
-        />
-      </svg>
+      <ResizeGripIcon />
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Handle, Position, useVueFlow } from '@vue-flow/core'
+import { Handle, Position } from '@vue-flow/core'
 import GearIcon from './icons/GearIcon.vue'
+import ResizeGripIcon from './icons/ResizeGripIcon.vue'
 import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { fetchGitStatus } from '../lib/bridgeClient'
 import { useHandleConnection } from '../lib/useHandleConnection'
+import { useNodeResize } from '../lib/useNodeResize'
 
-const MIN_NODE_WIDTH = 320
-const MIN_NODE_HEIGHT = 220
 const POLL_INTERVAL_MS = 15_000
 
 const props = defineProps({
@@ -90,13 +83,16 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
-const { viewport } = useVueFlow()
 const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
 
-const nodeWidth = ref(props.data.width || 420)
-const nodeHeight = ref(props.data.height || 320)
+const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
+  minWidth: 320,
+  minHeight: 220,
+  defaultWidth: 420,
+  defaultHeight: 320
+})
 const status = ref('connecting')
 const branch = ref('')
 const files = ref([])
@@ -163,36 +159,6 @@ watch(
   () => refresh()
 )
 
-let resizeStartX = 0
-let resizeStartY = 0
-let resizeStartW = 0
-let resizeStartH = 0
-
-function startResize(event) {
-  resizeStartX = event.clientX
-  resizeStartY = event.clientY
-  resizeStartW = nodeWidth.value
-  resizeStartH = nodeHeight.value
-  window.addEventListener('mousemove', onResizeMove)
-  window.addEventListener('mouseup', stopResize)
-  event.preventDefault()
-  event.stopPropagation()
-}
-
-function onResizeMove(event) {
-  const zoom = viewport.value.zoom || 1
-  const dx = (event.clientX - resizeStartX) / zoom
-  const dy = (event.clientY - resizeStartY) / zoom
-  nodeWidth.value = Math.max(MIN_NODE_WIDTH, Math.round(resizeStartW + dx))
-  nodeHeight.value = Math.max(MIN_NODE_HEIGHT, Math.round(resizeStartH + dy))
-}
-
-function stopResize() {
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
-  updateNodeData(props.id, { width: nodeWidth.value, height: nodeHeight.value })
-}
-
 onMounted(() => {
   refresh()
   pollTimer = setInterval(refresh, POLL_INTERVAL_MS)
@@ -200,8 +166,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   clearInterval(pollTimer)
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
 })
 </script>
 

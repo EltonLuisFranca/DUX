@@ -82,22 +82,19 @@
     <div v-if="captureFlash" class="capture-flash" />
 
     <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
-      <svg viewBox="0 0 16 16" width="11" height="11">
-        <path d="M13 3L3 13M13 8.5L8.5 13M13 13.5L13.5 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-      </svg>
+      <ResizeGripIcon />
     </div>
   </div>
 </template>
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Handle, Position, useVueFlow } from '@vue-flow/core'
+import { Handle, Position } from '@vue-flow/core'
 import GearIcon from './icons/GearIcon.vue'
+import ResizeGripIcon from './icons/ResizeGripIcon.vue'
 import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
-
-const MIN_NODE_WIDTH = 360
-const MIN_NODE_HEIGHT = 260
+import { useNodeResize } from '../lib/useNodeResize'
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -105,14 +102,18 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
-const { viewport } = useVueFlow()
 const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
 
+const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
+  minWidth: 360,
+  minHeight: 260,
+  defaultWidth: 640,
+  defaultHeight: 440
+})
+
 const webviewEl = ref(null)
-const nodeWidth = ref(props.data.width || 640)
-const nodeHeight = ref(props.data.height || 440)
 
 const currentUrl = ref(props.data.url)
 const canGoBack = ref(false)
@@ -206,8 +207,6 @@ onBeforeUnmount(() => {
   if (!wv) return
   wv.removeEventListener('did-navigate', onDidNavigate)
   wv.removeEventListener('did-navigate-in-page', onDidNavigate)
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
 })
 
 watch(
@@ -218,36 +217,6 @@ watch(
     }
   }
 )
-
-let resizeStartX = 0
-let resizeStartY = 0
-let resizeStartW = 0
-let resizeStartH = 0
-
-function startResize(event) {
-  resizeStartX = event.clientX
-  resizeStartY = event.clientY
-  resizeStartW = nodeWidth.value
-  resizeStartH = nodeHeight.value
-  window.addEventListener('mousemove', onResizeMove)
-  window.addEventListener('mouseup', stopResize)
-  event.preventDefault()
-  event.stopPropagation()
-}
-
-function onResizeMove(event) {
-  const zoom = viewport.value.zoom || 1
-  const dx = (event.clientX - resizeStartX) / zoom
-  const dy = (event.clientY - resizeStartY) / zoom
-  nodeWidth.value = Math.max(MIN_NODE_WIDTH, Math.round(resizeStartW + dx))
-  nodeHeight.value = Math.max(MIN_NODE_HEIGHT, Math.round(resizeStartH + dy))
-}
-
-function stopResize() {
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
-  updateNodeData(props.id, { width: nodeWidth.value, height: nodeHeight.value })
-}
 </script>
 
 <style scoped>

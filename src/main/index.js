@@ -1,9 +1,13 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { spawn } from 'child_process'
-import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, renameSync, createWriteStream } from 'fs'
-import { pipeline } from 'stream/promises'
 import { autoUpdater } from 'electron-updater'
+import { registerWorkspacesIpc } from './ipc/workspaces'
+import { registerAuthIpc, AUTH_PROTOCOL, handleAuthCallbackUrl } from './ipc/auth'
+import { registerHttpNodeIpc } from './ipc/httpNode'
+import { registerVoiceIpc } from './ipc/voice'
+import { registerBrowserNodeIpc } from './ipc/browserNode'
+import { registerImageNodeIpc } from './ipc/imageNode'
 
 const WSL_DISTRO = 'Debian'
 const BRIDGE_CMD = 'source ~/.zshrc; cd /mnt/c/Users/57224/dux-fleet/bridge && node server.js'
@@ -15,423 +19,18 @@ const BRIDGE_DIR = app.isPackaged
   ? join(__dirname, '../../bridge').replace('app.asar', 'app.asar.unpacked')
   : join(__dirname, '../../bridge')
 
-const WORKSPACES_FILE = join(app.getPath('userData'), 'workspaces.json')
-const AUTH_FILE = join(app.getPath('userData'), 'auth.dat')
-const AUTH_PROTOCOL = 'dux'
-const UZUNO_API_BASE = 'https://api.uzuno.tech'
-
-function loadWorkspacesFromDisk() {
-  try {
-    if (!existsSync(WORKSPACES_FILE)) return null
-    return JSON.parse(readFileSync(WORKSPACES_FILE, 'utf-8'))
-  } catch (err) {
-    console.error('[workspaces] failed to load', err)
-    return null
-  }
-}
-
-function saveWorkspacesToDisk(data) {
-  try {
-    writeFileSync(WORKSPACES_FILE, JSON.stringify(data, null, 2))
-  } catch (err) {
-    console.error('[workspaces] failed to save', err)
-  }
-}
-
-ipcMain.on('workspaces:load-sync', (event) => {
-  event.returnValue = loadWorkspacesFromDisk()
-})
-
 ipcMain.on('app:get-version-sync', (event) => {
   event.returnValue = app.getVersion()
 })
 
-ipcMain.handle('workspaces:save', (_event, data) => {
-  saveWorkspacesToDisk(data)
-})
-
-// A janela fecha assim que o handler window:close roda; sem uma escrita
-// síncrona aqui, o debounce de 400ms do renderer pode nunca chegar a rodar
-// e a última alteração (às vezes o workspace inteiro) se perde.
-ipcMain.on('workspaces:save-sync', (event, data) => {
-  saveWorkspacesToDisk(data)
-  event.returnValue = true
-})
-
-// safeStorage depende de um keyring do sistema (GNOME Keyring, KWallet,
-// libsecret...) que setups Linux minimalistas (sem DE completo) não têm —
-// nesse caso isEncryptionAvailable() é false e ele nunca criptografa nada.
-// Guardamos texto puro como fallback nesses casos, prefixado pra saber qual
-// formato reler: perder o token em texto puro é bem melhor que travar login
-// silenciosamente pra uma fatia real dos usuários Linux.
-const PLAINTEXT_PREFIX = Buffer.from('dux-plain:')
-
-function loadAuthToken() {
-  try {
-    if (!existsSync(AUTH_FILE)) return null
-    const raw = readFileSync(AUTH_FILE)
-    if (raw.subarray(0, PLAINTEXT_PREFIX.length).equals(PLAINTEXT_PREFIX)) {
-      return raw.subarray(PLAINTEXT_PREFIX.length).toString('utf-8')
-    }
-    if (!safeStorage.isEncryptionAvailable()) return null
-    return safeStorage.decryptString(raw)
-  } catch (err) {
-    console.error('[auth] failed to load token', err)
-    return null
-  }
-}
-
-function saveAuthToken(token) {
-  try {
-    if (safeStorage.isEncryptionAvailable()) {
-      writeFileSync(AUTH_FILE, safeStorage.encryptString(token))
-    } else {
-      console.error('[auth] safeStorage encryption unavailable, persisting token as plaintext')
-      writeFileSync(AUTH_FILE, Buffer.concat([PLAINTEXT_PREFIX, Buffer.from(token, 'utf-8')]))
-    }
-  } catch (err) {
-    console.error('[auth] failed to save token', err)
-  }
-}
-
-function clearAuthToken() {
-  try {
-    if (existsSync(AUTH_FILE)) unlinkSync(AUTH_FILE)
-  } catch (err) {
-    console.error('[auth] failed to clear token', err)
-  }
-}
+registerWorkspacesIpc()
+registerAuthIpc()
+registerHttpNodeIpc()
+registerVoiceIpc()
+registerBrowserNodeIpc()
+registerImageNodeIpc()
 
 let mainWindowRef = null
-
-function handleAuthCallbackUrl(url) {
-  let parsed
-  try {
-    parsed = new URL(url)
-  } catch {
-    return
-  }
-  if (parsed.protocol !== `${AUTH_PROTOCOL}:`) return
-
-  const token = parsed.searchParams.get('token')
-  if (!token) return
-
-  saveAuthToken(token)
-  mainWindowRef?.webContents.send('auth:token-received')
-  mainWindowRef?.focus()
-}
-
-ipcMain.handle('auth:login', () => {
-  shell.openExternal(`${UZUNO_API_BASE}/auth/google?client=dux`)
-})
-
-ipcMain.handle('auth:logout', () => {
-  clearAuthToken()
-})
-
-ipcMain.on('auth:get-token-sync', (event) => {
-  event.returnValue = loadAuthToken()
-})
-
-// A API do Uzuno é chamada daqui (main process, sem CORS) em vez do
-// renderer: fetch() no renderer é sujeito à mesma política de CORS de
-// qualquer página web comum, e a allowlist de origens do backend não cobre
-// (nem deveria precisar cobrir) um app desktop — o Electron não é um site
-// arbitrário rodando código de terceiros, é o próprio app autenticado por
-// Bearer token.
-ipcMain.handle('auth:api-fetch', async (_event, { path, method = 'GET', body }) => {
-  const token = loadAuthToken()
-  if (!token) return { ok: false, status: 401, data: { message: 'not authenticated' } }
-
-  try {
-    const response = await fetch(`${UZUNO_API_BASE}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-        ...(body ? { 'Content-Type': 'application/json' } : {})
-      },
-      ...(body ? { body: JSON.stringify(body) } : {})
-    })
-
-    if (response.status === 401) clearAuthToken()
-
-    const data = await response.json().catch(() => null)
-    return { ok: response.ok, status: response.status, data }
-  } catch (err) {
-    return { ok: false, status: 0, data: { message: err.message } }
-  }
-})
-
-// Autoriza um canal presence/private do Reverb (POST /broadcasting/auth) a
-// partir do main process — mesmo motivo do auth:api-fetch acima: é um fetch
-// HTTP comum sujeito a CORS, e a allowlist do backend não cobre a origem do
-// Electron. O WebSocket em si roda no renderer via laravel-echo; só o
-// handshake de autorização de canal passa por aqui.
-ipcMain.handle('auth:broadcast-auth', async (_event, { socketId, channelName }) => {
-  const token = loadAuthToken()
-  if (!token) return { ok: false, status: 401, data: { message: 'not authenticated' } }
-
-  try {
-    const response = await fetch(`${UZUNO_API_BASE}/broadcasting/auth`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ socket_id: socketId, channel_name: channelName })
-    })
-
-    if (response.status === 401) clearAuthToken()
-
-    const data = await response.json().catch(() => null)
-    return { ok: response.ok, status: response.status, data }
-  } catch (err) {
-    return { ok: false, status: 0, data: { message: err.message } }
-  }
-})
-
-// Requisição do node HTTP roda aqui (main process) pelo mesmo motivo do
-// auth:api-fetch acima: fetch() no renderer é sujeito a CORS, e boa parte
-// das APIs que alguém quer testar não libera origem nenhuma — o app desktop
-// não deveria ficar refém disso.
-ipcMain.handle('http-node:request', async (_event, { url, method = 'GET', headers = {}, body }) => {
-  const startedAt = Date.now()
-  try {
-    const response = await fetch(url, {
-      method,
-      headers,
-      ...(body ? { body } : {})
-    })
-
-    const responseHeaders = {}
-    response.headers.forEach((value, key) => {
-      responseHeaders[key] = value
-    })
-
-    const text = await response.text()
-    return {
-      ok: true,
-      status: response.status,
-      statusText: response.statusText,
-      headers: responseHeaders,
-      body: text,
-      durationMs: Date.now() - startedAt
-    }
-  } catch (err) {
-    return { ok: false, error: err.message, durationMs: Date.now() - startedAt }
-  }
-})
-
-// Modelo fica em userData, não empacotado no instalador nem em node_modules —
-// é baixado sob demanda na primeira transcrição (~148MB pro modelo "base").
-// O binário whisper-cli em si é que vai empacotado (via asarUnpack), porque
-// nodejs-whisper resolve seu caminho de forma fixa relativa ao próprio
-// node_modules, sem permitir apontar pra outro lugar.
-const WHISPER_MODEL_DIR = join(app.getPath('userData'), 'whisper-models')
-const WHISPER_MODEL_NAME = 'base'
-const WHISPER_MODEL_FILE = 'ggml-base.bin'
-const WHISPER_MODEL_URL = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${WHISPER_MODEL_FILE}`
-
-// Baixado manualmente via fetch em vez de usar autoDownloadModelName do
-// nodejs-whisper: essa opção dispara um shell script (download-ggml-model.sh)
-// resolvido relativo ao cwd do processo, que só funciona por acaso quando o
-// cwd é a pasta certa — dentro do Electron main process (cwd = raiz do app,
-// não node_modules/nodejs-whisper/cpp/whisper.cpp) ele falha silenciosamente
-// com "Cannot read properties of undefined (reading 'code')".
-async function ensureWhisperModel() {
-  const modelPath = join(WHISPER_MODEL_DIR, WHISPER_MODEL_FILE)
-  if (existsSync(modelPath)) return modelPath
-
-  mkdirSync(WHISPER_MODEL_DIR, { recursive: true })
-  const response = await fetch(WHISPER_MODEL_URL)
-  if (!response.ok) throw new Error(`falha ao baixar modelo: ${response.status}`)
-
-  const tmpPath = `${modelPath}.download`
-  const fileStream = createWriteStream(tmpPath)
-  await pipeline(response.body, fileStream)
-  renameSync(tmpPath, modelPath)
-  return modelPath
-}
-
-ipcMain.handle('voice:transcribe', async (_event, { buffer }) => {
-  const { nodewhisper } = await import('nodejs-whisper')
-  const tmpWavPath = join(app.getPath('temp'), `dux-voice-${Date.now()}.wav`)
-
-  try {
-    await ensureWhisperModel()
-    writeFileSync(tmpWavPath, Buffer.from(buffer))
-    const transcript = await nodewhisper(tmpWavPath, {
-      modelName: WHISPER_MODEL_NAME,
-      modelRootPath: WHISPER_MODEL_DIR,
-      removeWavFileAfterTranscription: true,
-      whisperOptions: {
-        outputInText: false,
-        language: 'pt'
-      }
-    })
-    // whisper.cpp devolve o texto com timestamps por linha
-    // ([00:00:00.000 --> 00:00:02.000]  texto) — mantemos só o texto.
-    const cleaned = transcript
-      .split('\n')
-      .map((line) => line.replace(/^\[[\d:.,\s>-]+\]\s*/, '').trim())
-      .filter(Boolean)
-      .join(' ')
-    return { ok: true, text: cleaned }
-  } catch (err) {
-    console.error('[voice] transcription failed', err)
-    return { ok: false, error: err.message }
-  } finally {
-    if (existsSync(tmpWavPath)) unlinkSync(tmpWavPath)
-  }
-})
-
-// --- Ditado ao vivo: transcreve pedaço a pedaço enquanto o usuário ainda
-// está falando, em vez de gravar tudo e transcrever de uma vez só no final.
-//
-// nodewhisper() (usado acima) spawna um processo whisper-cli NOVO a cada
-// chamada, recarregando o modelo do zero sempre — inviável pra chunks
-// curtos e frequentes (o carregamento sozinho já custa mais que os 2-3s de
-// áudio que se quer transcrever). whisper-server é a peça que faltava: um
-// processo HTTP de vida longa, com o modelo carregado uma única vez, que
-// aceita múltiplas requisições de transcrição em sequência rápida. Ele já
-// vem compilado junto do mesmo build do whisper-cli (nodejs-whisper builda
-// o CMakeLists de examples/ inteiro, que inclui server/ incondicionalmente)
-// — não precisa compilar nada novo, só descobrir o binário e subir como
-// processo filho, do mesmo jeito que o bridge já faz.
-// mesmo padrão do BRIDGE_DIR acima: empacotado, o binário mora dentro de
-// app.asar.unpacked (nodejs-whisper está listado em asarUnpack, precisa
-// rodar como processo real), não dentro do arquivo virtual .asar.
-const WHISPER_CPP_ROOT = app.isPackaged
-  ? join(app.getAppPath(), 'node_modules/nodejs-whisper/cpp/whisper.cpp').replace('app.asar', 'app.asar.unpacked')
-  : join(app.getAppPath(), 'node_modules/nodejs-whisper/cpp/whisper.cpp')
-const WHISPER_SERVER_BIN = join(WHISPER_CPP_ROOT, 'build/bin/whisper-server')
-const WHISPER_SERVER_HOST = '127.0.0.1'
-const WHISPER_SERVER_PORT = 4579
-const WHISPER_SERVER_IDLE_SHUTDOWN_MS = 60_000
-
-let whisperServerProcess = null
-let whisperServerReady = null
-let whisperServerIdleTimer = null
-
-function scheduleWhisperServerShutdown() {
-  clearTimeout(whisperServerIdleTimer)
-  whisperServerIdleTimer = setTimeout(() => {
-    whisperServerProcess?.kill()
-    whisperServerProcess = null
-    whisperServerReady = null
-  }, WHISPER_SERVER_IDLE_SHUTDOWN_MS)
-}
-
-async function ensureWhisperServer() {
-  clearTimeout(whisperServerIdleTimer)
-
-  if (whisperServerReady) {
-    scheduleWhisperServerShutdown()
-    return whisperServerReady
-  }
-
-  whisperServerReady = (async () => {
-    const modelPath = await ensureWhisperModel()
-
-    whisperServerProcess = spawn(WHISPER_SERVER_BIN, [
-      '--host',
-      WHISPER_SERVER_HOST,
-      '--port',
-      String(WHISPER_SERVER_PORT),
-      '--model',
-      modelPath,
-      '--language',
-      'pt',
-      '--no-timestamps'
-    ])
-    whisperServerProcess.stdout.on('data', (chunk) => console.log(`[whisper-server] ${chunk}`))
-    whisperServerProcess.stderr.on('data', (chunk) => console.error(`[whisper-server] ${chunk}`))
-    whisperServerProcess.on('exit', (code) => {
-      console.log(`[whisper-server] exited with code ${code}`)
-      whisperServerProcess = null
-      whisperServerReady = null
-    })
-
-    // sem endpoint de health check dedicado — poll no /inference com um
-    // corpo vazio até ele parar de recusar conexão (ECONNREFUSED), que é só
-    // enquanto o processo ainda está de boot/carregando o modelo.
-    const deadline = Date.now() + 20_000
-    while (Date.now() < deadline) {
-      try {
-        await fetch(`http://${WHISPER_SERVER_HOST}:${WHISPER_SERVER_PORT}/`)
-        return
-      } catch {
-        await new Promise((resolve) => setTimeout(resolve, 200))
-      }
-    }
-    throw new Error('whisper-server não respondeu a tempo')
-  })()
-
-  scheduleWhisperServerShutdown()
-  return whisperServerReady
-}
-
-ipcMain.handle('voice:transcribe-chunk', async (_event, { buffer }) => {
-  try {
-    await ensureWhisperServer()
-
-    const form = new FormData()
-    form.append('file', new Blob([buffer], { type: 'audio/wav' }), 'chunk.wav')
-    form.append('response_format', 'json')
-
-    const response = await fetch(`http://${WHISPER_SERVER_HOST}:${WHISPER_SERVER_PORT}/inference`, {
-      method: 'POST',
-      body: form
-    })
-    if (!response.ok) throw new Error(`whisper-server respondeu HTTP ${response.status}`)
-
-    const { text } = await response.json()
-    return { ok: true, text: (text || '').trim() }
-  } catch (err) {
-    console.error('[voice] chunk transcription failed', err)
-    return { ok: false, error: err.message }
-  }
-})
-
-ipcMain.handle('browser-node:save-screenshot', async (_event, { dataUrl, defaultName }) => {
-  const { canceled, filePath } = await dialog.showSaveDialog({
-    defaultPath: defaultName,
-    filters: [{ name: 'PNG Image', extensions: ['png'] }]
-  })
-  if (canceled || !filePath) return { saved: false }
-
-  const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
-  writeFileSync(filePath, Buffer.from(base64, 'base64'))
-  return { saved: true, filePath }
-})
-
-const IMAGE_MIME_BY_EXT = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.svg': 'image/svg+xml'
-}
-
-// A imagem vira data URL e vai direto pro data do node (persistido junto do
-// workspace) — mais simples que gerenciar um path externo que pode mudar ou
-// sumir entre máquinas depois de sincronizado.
-ipcMain.handle('image-node:open-file', async () => {
-  const { canceled, filePaths } = await dialog.showOpenDialog({
-    properties: ['openFile'],
-    filters: [{ name: 'Imagens', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] }]
-  })
-  if (canceled || !filePaths[0]) return { picked: false }
-
-  const filePath = filePaths[0]
-  const ext = filePath.slice(filePath.lastIndexOf('.')).toLowerCase()
-  const mime = IMAGE_MIME_BY_EXT[ext] || 'application/octet-stream'
-  const base64 = readFileSync(filePath).toString('base64')
-  return { picked: true, dataUrl: `data:${mime};base64,${base64}`, fileName: filePath.split('/').pop() }
-})
 
 // Checagem de atualização feita ANTES de abrir a janela principal: uma tela de
 // splash mostra progresso enquanto baixa. Timeout curto pra nunca travar o
@@ -594,7 +193,7 @@ if (!gotSingleInstanceLock) {
 } else {
   app.on('second-instance', (_event, argv) => {
     const authUrl = argv.find((arg) => arg.startsWith(`${AUTH_PROTOCOL}://`))
-    if (authUrl) handleAuthCallbackUrl(authUrl)
+    if (authUrl) handleAuthCallbackUrl(authUrl, mainWindowRef)
 
     if (mainWindowRef) {
       if (mainWindowRef.isMinimized()) mainWindowRef.restore()
@@ -605,7 +204,7 @@ if (!gotSingleInstanceLock) {
   // macOS entrega o link via este evento em vez de argv de segunda instância.
   app.on('open-url', (event, url) => {
     event.preventDefault()
-    handleAuthCallbackUrl(url)
+    handleAuthCallbackUrl(url, mainWindowRef)
   })
 
   app.whenReady().then(async () => {

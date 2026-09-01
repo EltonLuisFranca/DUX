@@ -31,6 +31,7 @@
           :is="settingsComponent"
           v-if="activeTab === 'settings' && settingsComponent"
           :node="activeNode"
+          v-bind="typeEntry?.settingsProps"
         />
         <NodeVisualSettings v-else-if="activeTab === 'visual'" :node="activeNode" />
       </div>

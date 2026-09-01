@@ -1,25 +1,28 @@
 <template>
-  <div class="create-form">
-    <button class="back-btn" @click="$emit('cancel')">
-      <svg viewBox="0 0 16 16" width="11" height="11">
-        <path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-      </svg>
-      Voltar
-    </button>
+  <div class="field">
+    <label class="field-label" for="node-name">Nome do node</label>
+    <input
+      id="node-name"
+      class="field-input"
+      type="text"
+      :value="node.data.name"
+      @input="updateNodeData(node.id, { name: $event.target.value })"
+    />
+  </div>
 
-    <label class="field-label" for="new-node-cwd">Diretório</label>
+  <div class="field">
+    <label class="field-label" for="node-cwd">{{ wslMode ? 'Diretório (WSL)' : 'Diretório' }}</label>
     <div class="path-field">
       <input
-        id="new-node-cwd"
+        id="node-cwd"
         ref="pathInput"
-        v-model="path"
+        v-model="cwdDraft"
         class="field-input"
         type="text"
-        placeholder="~/meu-projeto"
         autocomplete="off"
         @focus="handleFocus"
         @blur="showDropdown = false"
-        @keyup.enter="submit"
+        @keyup.enter="applyCwd"
       />
 
       <Teleport to="body">
@@ -40,30 +43,61 @@
       </Teleport>
     </div>
 
-    <p class="status" :class="status">
-      <span v-if="status === 'checking'">Verificando...</span>
-      <span v-else-if="status === 'invalid'">Diretório não encontrado.</span>
-      <span v-else-if="status === 'valid'">{{ resolvedPath }}</span>
+    <p class="status" :class="cwdStatus">
+      <span v-if="isDirty && cwdStatus === 'checking'">Verificando...</span>
+      <span v-else-if="isDirty && cwdStatus === 'invalid'">{{ wslMode ? 'Diretório não encontrado no WSL.' : 'Diretório não encontrado.' }}</span>
+      <span v-else-if="isDirty && cwdStatus === 'valid'">{{ resolvedPath }}</span>
     </p>
 
-    <button class="btn-primary" :disabled="status !== 'valid'" @click="submit">Criar</button>
+    <button v-if="isDirty" class="btn-primary" :disabled="cwdStatus !== 'valid'" @click="applyCwd">
+      Salvar e reiniciar agente
+    </button>
   </div>
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { updateNodeData } from '../../store/flowStore'
 import { checkWslPath } from '../../lib/bridgeClient'
 
-const emit = defineEmits(['submit', 'cancel'])
+const props = defineProps({
+  node: { type: Object, required: true },
+  wslMode: { type: Boolean, default: false }
+})
 
-const path = ref('~')
-const status = ref('idle')
+const cwdDraft = ref(props.node.data.cwd)
+const cwdStatus = ref('idle')
 const resolvedPath = ref('')
 const entries = ref([])
 const showDropdown = ref(false)
 const pathInput = ref(null)
 const dropdownStyle = ref({})
+const isDirty = computed(() => cwdDraft.value !== props.node.data.cwd)
 let debounceTimer = null
+
+async function validate() {
+  const current = cwdDraft.value
+  cwdStatus.value = 'checking'
+  const result = await checkWslPath(current)
+  if (current !== cwdDraft.value) return
+  cwdStatus.value = result.valid ? 'valid' : 'invalid'
+  resolvedPath.value = result.resolved || ''
+  entries.value = result.entries || []
+}
+
+watch(
+  () => props.node.id,
+  () => {
+    cwdDraft.value = props.node.data.cwd
+    cwdStatus.value = 'idle'
+    validate()
+  }
+)
+
+watch(cwdDraft, () => {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(validate, 400)
+})
 
 function handleFocus() {
   showDropdown.value = true
@@ -78,65 +112,28 @@ function handleFocus() {
   }
 }
 
-async function validate() {
-  const current = path.value
-  status.value = 'checking'
-  const result = await checkWslPath(current)
-  if (current !== path.value) return
-  status.value = result.valid ? 'valid' : 'invalid'
-  resolvedPath.value = result.resolved || ''
-  entries.value = result.entries || []
-}
-
-watch(path, () => {
-  clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(validate, 400)
-})
-
 function drillInto(entry) {
-  const trimmed = path.value.replace(/\/+$/, '')
-  path.value = trimmed ? `${trimmed}/${entry}` : entry
+  const trimmed = cwdDraft.value.replace(/\/+$/, '')
+  cwdDraft.value = trimmed ? `${trimmed}/${entry}` : entry
   pathInput.value?.focus()
 }
 
-function submit() {
-  if (status.value !== 'valid') return
-  emit('submit', { name: 'Novo terminal', cwd: path.value, command: 'claude' })
+function applyCwd() {
+  if (cwdStatus.value !== 'valid') return
+  updateNodeData(props.node.id, { cwd: cwdDraft.value })
 }
 
-onMounted(() => {
-  validate()
-  nextTick(() => pathInput.value?.focus())
-})
+validate()
 </script>
 
 <style scoped>
-.create-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 14px 14px;
-}
-
-.back-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  align-self: flex-start;
-  margin-bottom: 4px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.back-btn:hover {
-  color: var(--color-text-primary);
+.field {
+  margin-bottom: 16px;
 }
 
 .field-label {
+  display: block;
+  margin-bottom: 6px;
   font-size: 11px;
   color: var(--color-text-secondary);
 }
@@ -196,8 +193,9 @@ onMounted(() => {
 
 .status {
   min-height: 14px;
-  margin: 0;
+  margin: 6px 0 0;
   font-size: 10.5px;
+  line-height: 1.4;
   color: var(--color-text-tertiary);
   word-break: break-all;
 }
@@ -211,13 +209,14 @@ onMounted(() => {
 }
 
 .btn-primary {
-  height: 30px;
-  margin-top: 4px;
+  width: 100%;
+  height: 28px;
+  margin-top: 8px;
   border: none;
   border-radius: 6px;
   background: #3b82f6;
   color: #fff;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
 }

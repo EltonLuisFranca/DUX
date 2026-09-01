@@ -115,30 +115,23 @@
     ></div>
 
     <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
-      <svg viewBox="0 0 16 16" width="11" height="11">
-        <path
-          d="M13 3L3 13M13 8.5L8.5 13M13 13.5L13.5 13"
-          stroke="currentColor"
-          stroke-width="1.4"
-          stroke-linecap="round"
-        />
-      </svg>
+      <ResizeGripIcon />
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Handle, Position, useVueFlow } from '@vue-flow/core'
+import { Handle, Position } from '@vue-flow/core'
 import { updateNodeData, requestDeleteNode } from '../store/flowStore'
 import { readNote, writeNote, watchNote } from '../lib/bridgeClient'
 import { syncNoteContent } from '../lib/noteSync'
 import { htmlToMarkdown, markdownToHtml } from '../lib/noteMarkdown'
 import { useHandleConnection } from '../lib/useHandleConnection'
+import { useNodeResize } from '../lib/useNodeResize'
 import AppTooltip from './AppTooltip.vue'
+import ResizeGripIcon from './icons/ResizeGripIcon.vue'
 
-const MIN_NODE_WIDTH = 240
-const MIN_NODE_HEIGHT = 160
 const SAVE_DEBOUNCE_MS = 500
 
 const props = defineProps({
@@ -147,14 +140,17 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
-const { viewport } = useVueFlow()
 const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
 
 const editorEl = ref(null)
-const nodeWidth = ref(props.data.width || 320)
-const nodeHeight = ref(props.data.height || 240)
+const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
+  minWidth: 240,
+  minHeight: 160,
+  defaultWidth: 320,
+  defaultHeight: 240
+})
 const isEditorFocused = ref(false)
 
 const NOTE_COLOR_OPACITY = 30
@@ -261,36 +257,6 @@ function toggleTransparent() {
   updateNodeData(props.id, { transparent: !props.data.transparent })
 }
 
-let resizeStartX = 0
-let resizeStartY = 0
-let resizeStartW = 0
-let resizeStartH = 0
-
-function startResize(event) {
-  resizeStartX = event.clientX
-  resizeStartY = event.clientY
-  resizeStartW = nodeWidth.value
-  resizeStartH = nodeHeight.value
-  window.addEventListener('mousemove', onResizeMove)
-  window.addEventListener('mouseup', stopResize)
-  event.preventDefault()
-  event.stopPropagation()
-}
-
-function onResizeMove(event) {
-  const zoom = viewport.value.zoom || 1
-  const dx = (event.clientX - resizeStartX) / zoom
-  const dy = (event.clientY - resizeStartY) / zoom
-  nodeWidth.value = Math.max(MIN_NODE_WIDTH, Math.round(resizeStartW + dx))
-  nodeHeight.value = Math.max(MIN_NODE_HEIGHT, Math.round(resizeStartH + dy))
-}
-
-function stopResize() {
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
-  updateNodeData(props.id, { width: nodeWidth.value, height: nodeHeight.value })
-}
-
 onMounted(loadAndWatch)
 
 onBeforeUnmount(() => {
@@ -299,8 +265,6 @@ onBeforeUnmount(() => {
   // gravou (ex: node deletado/desmontado logo após digitar)
   saveNow()
   unwatch?.()
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
 })
 </script>
 
