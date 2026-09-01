@@ -63,10 +63,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { activeWorkspace, activeSettingsNodeId, closeNodeSettings, requestDeleteNode } from '../store/flowStore'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
+import { useSidebarResize } from '../lib/useSidebarResize'
 import NodeVisualSettings from './NodeVisualSettings.vue'
-
-const MIN_WIDTH = 220
-const MAX_WIDTH = 440
 
 const activeNode = computed(
   () => activeWorkspace.value.nodes.find((n) => n.id === activeSettingsNodeId.value) ?? null
@@ -80,45 +78,11 @@ watch(activeSettingsNodeId, () => {
   activeTab.value = 'settings'
 })
 
-const width = ref(260)
-const resizing = ref(false)
-const showTip = ref(false)
-let startX = 0
-let startWidth = 0
-let tipTimer = null
-
-function handleTipEnter() {
-  tipTimer = setTimeout(() => {
-    showTip.value = true
-  }, 250)
-}
-
-function handleTipLeave() {
-  clearTimeout(tipTimer)
-  showTip.value = false
-}
-
-function startResize(event) {
-  clearTimeout(tipTimer)
-  resizing.value = true
-  showTip.value = false
-  startX = event.clientX
-  startWidth = width.value
-  window.addEventListener('mousemove', onResizeMove)
-  window.addEventListener('mouseup', stopResize)
-  event.preventDefault()
-}
-
-function onResizeMove(event) {
-  const dx = event.clientX - startX
-  width.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + dx))
-}
-
-function stopResize() {
-  resizing.value = false
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
-}
+const { width, resizing, showTip, startResize, handleTipEnter, handleTipLeave } = useSidebarResize({
+  defaultWidth: 260,
+  minWidth: 220,
+  maxWidth: 440
+})
 
 // captura antes do xterm.js pra fechar mesmo com o terminal focado
 function onKeydown(event) {
@@ -133,8 +97,6 @@ function onKeydown(event) {
 onMounted(() => window.addEventListener('keydown', onKeydown, { capture: true }))
 
 onBeforeUnmount(() => {
-  clearTimeout(tipTimer)
-  stopResize()
   window.removeEventListener('keydown', onKeydown, { capture: true })
 })
 </script>

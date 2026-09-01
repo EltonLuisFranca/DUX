@@ -242,9 +242,7 @@ import {
   AVAILABLE_SOUNDS,
   playNotificationSound
 } from '../store/notificationSoundStore'
-
-const MIN_WIDTH = 240
-const MAX_WIDTH = 420
+import { useSidebarResize } from '../lib/useSidebarResize'
 
 // Ícones inline como render functions simples — evita mais um arquivo .vue
 // por ícone só pra 3 categorias.
@@ -312,46 +310,12 @@ const EDGE_PREVIEW_PATHS = {
   straight: 'M6 8 L58 24'
 }
 
-const width = ref(280)
-const resizing = ref(false)
-const showTip = ref(false)
-let startX = 0
-let startWidth = 0
-let tipTimer = null
-
-function handleTipEnter() {
-  tipTimer = setTimeout(() => {
-    showTip.value = true
-  }, 250)
-}
-
-function handleTipLeave() {
-  clearTimeout(tipTimer)
-  showTip.value = false
-}
-
-function startResize(event) {
-  clearTimeout(tipTimer)
-  resizing.value = true
-  showTip.value = false
-  startX = event.clientX
-  startWidth = width.value
-  window.addEventListener('mousemove', onResizeMove)
-  window.addEventListener('mouseup', stopResize)
-  event.preventDefault()
-}
-
-function onResizeMove(event) {
-  // Sidebar abre pela direita: arrastar pra esquerda (dx negativo) aumenta a largura.
-  const dx = startX - event.clientX
-  width.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + dx))
-}
-
-function stopResize() {
-  resizing.value = false
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
-}
+const { width, resizing, showTip, startResize, handleTipEnter, handleTipLeave } = useSidebarResize({
+  defaultWidth: 280,
+  minWidth: 240,
+  maxWidth: 420,
+  invert: true
+})
 
 function onKeydown(event) {
   if (event.ctrlKey && event.key === ',') {
@@ -366,8 +330,6 @@ function onKeydown(event) {
 onMounted(() => window.addEventListener('keydown', onKeydown, { capture: true }))
 
 onBeforeUnmount(() => {
-  clearTimeout(tipTimer)
-  stopResize()
   window.removeEventListener('keydown', onKeydown, { capture: true })
 })
 </script>
