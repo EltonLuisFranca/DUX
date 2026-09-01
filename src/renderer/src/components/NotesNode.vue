@@ -132,6 +132,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { updateNodeData, requestDeleteNode } from '../store/flowStore'
 import { readNote, writeNote, watchNote } from '../lib/bridgeClient'
+import { syncNoteContent } from '../lib/noteSync'
 import { htmlToMarkdown, markdownToHtml } from '../lib/noteMarkdown'
 import { useHandleConnection } from '../lib/useHandleConnection'
 import AppTooltip from './AppTooltip.vue'
@@ -217,6 +218,7 @@ function saveNow() {
   if (markdown === lastWrittenMarkdown) return
   lastWrittenMarkdown = markdown
   writeNote(props.data.path, markdown)
+  syncNoteContent({ nodeId: props.id, path: props.data.path, content: markdown })
 }
 
 function handleInput() {
@@ -234,10 +236,12 @@ async function loadAndWatch() {
   const result = await readNote(props.data.path)
   lastWrittenMarkdown = result.content ?? ''
   if (editorEl.value) editorEl.value.innerHTML = markdownToHtml(lastWrittenMarkdown)
+  syncNoteContent({ nodeId: props.id, path: props.data.path, content: lastWrittenMarkdown })
 
   unwatch = watchNote(props.data.path, (msg) => {
     if (msg.content === lastWrittenMarkdown) return
     lastWrittenMarkdown = msg.content
+    syncNoteContent({ nodeId: props.id, path: props.data.path, content: msg.content })
     // não sobrescreve o editor enquanto o usuário está digitando nele —
     // evita arrancar cursor/seleção no meio de uma edição real; a próxima
     // vez que o autosave local rodar, a versão local prevalece (last-write-
