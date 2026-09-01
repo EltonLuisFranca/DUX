@@ -19,12 +19,21 @@
         autocomplete="off"
         @focus="handleFocus"
         @blur="showDropdown = false"
-        @keyup.enter="submit"
+        @keydown.up.prevent="moveHighlight(-1)"
+        @keydown.down.prevent="moveHighlight(1)"
+        @keyup.enter="handleEnter"
       />
 
       <Teleport to="body">
-        <ul v-if="showDropdown && entries.length" class="dir-list" :style="dropdownStyle">
-          <li v-for="entry in entries" :key="entry" @mousedown.prevent="drillInto(entry)">
+        <ul v-if="showDropdown && listItems.length" class="dir-list" :style="dropdownStyle">
+          <li
+            v-for="(item, i) in listItems"
+            :key="item.type + item.label"
+            :ref="(el) => { if (el) itemRefs[i] = el }"
+            :class="{ active: highlightedIndex === i }"
+            @mousedown.prevent="selectItem(item)"
+            @mouseenter="highlightedIndex = i"
+          >
             <svg viewBox="0 0 16 16" width="12" height="12">
               <path
                 d="M2 4.5a1 1 0 0 1 1-1h3l1.2 1.5H13a1 1 0 0 1 1 1V11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4.5z"
@@ -34,7 +43,7 @@
                 fill="none"
               />
             </svg>
-            {{ entry }}
+            {{ item.label }}
           </li>
         </ul>
       </Teleport>
@@ -51,7 +60,7 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { checkWslPath } from '../../lib/bridgeClient'
 
 const props = defineProps({
@@ -68,10 +77,36 @@ const entries = ref([])
 const showDropdown = ref(false)
 const pathInput = ref(null)
 const dropdownStyle = ref({})
+const highlightedIndex = ref(-1)
+let itemRefs = []
 let debounceTimer = null
+
+// pai de um path absoluto, sem depender de node:path no renderer — cobre
+// tanto separador WSL ("/") quanto Windows ("C:\"), pra alimentar o item
+// ".." do dropdown
+function parentOf(target) {
+  const trimmed = target.replace(/[\\/]+$/, '')
+  if (!trimmed || /^[a-zA-Z]:$/.test(trimmed)) return target
+  const idx = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'))
+  if (idx < 0) return target
+  const parent = trimmed.slice(0, idx)
+  if (!parent) return trimmed[0]
+  return /^[a-zA-Z]:$/.test(parent) ? `${parent}\\` : parent
+}
+
+const listItems = computed(() => {
+  const items = []
+  if (status.value === 'valid' && resolvedPath.value) {
+    const parent = parentOf(resolvedPath.value)
+    if (parent !== resolvedPath.value) items.push({ type: 'up', label: '..' })
+  }
+  entries.value.forEach((name) => items.push({ type: 'dir', label: name }))
+  return items
+})
 
 function handleFocus() {
   showDropdown.value = true
+  highlightedIndex.value = -1
   const rect = pathInput.value?.getBoundingClientRect()
   if (!rect) return
   dropdownStyle.value = {
@@ -91,6 +126,7 @@ async function validate() {
   status.value = result.valid ? 'valid' : 'invalid'
   resolvedPath.value = result.resolved || ''
   entries.value = result.entries || []
+  highlightedIndex.value = -1
 }
 
 watch(path, () => {
@@ -98,10 +134,40 @@ watch(path, () => {
   debounceTimer = setTimeout(validate, 400)
 })
 
+function moveHighlight(delta) {
+  if (!showDropdown.value || !listItems.value.length) return
+  const max = listItems.value.length - 1
+  highlightedIndex.value =
+    highlightedIndex.value < 0
+      ? delta > 0
+        ? 0
+        : max
+      : Math.min(max, Math.max(0, highlightedIndex.value + delta))
+  nextTick(() => itemRefs[highlightedIndex.value]?.scrollIntoView({ block: 'nearest' }))
+}
+
 function drillInto(entry) {
   const trimmed = path.value.replace(/\/+$/, '')
   path.value = trimmed ? `${trimmed}/${entry}` : entry
   pathInput.value?.focus()
+}
+
+function goUp() {
+  path.value = parentOf(resolvedPath.value)
+  pathInput.value?.focus()
+}
+
+function selectItem(item) {
+  if (item.type === 'up') goUp()
+  else drillInto(item.label)
+}
+
+function handleEnter() {
+  if (showDropdown.value && highlightedIndex.value >= 0 && listItems.value[highlightedIndex.value]) {
+    selectItem(listItems.value[highlightedIndex.value])
+  } else {
+    submit()
+  }
 }
 
 function submit() {
@@ -197,7 +263,8 @@ onMounted(() => {
   color: var(--color-text-tertiary);
 }
 
-.dir-list li:hover {
+.dir-list li:hover,
+.dir-list li.active {
   background: var(--color-hover);
 }
 
