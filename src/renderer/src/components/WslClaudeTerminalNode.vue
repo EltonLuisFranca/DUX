@@ -137,26 +137,34 @@ function onPtyDataForTts(chunk) {
   }, TTS_SILENCE_MS)
 }
 
-// Som de notificação: mesma heurística de silêncio, mas sem o escopo restrito
-// do TTS (não depende de ditado por voz nem de terminal em foco) — qualquer
-// terminal que ficar quieto por TTS_SILENCE_MS após ter emitido algo dispara
-// o aviso sonoro. Só toca quando o TTS está desligado (se a resposta já vai
-// ser lida em voz, o beep é redundante).
+// Som de notificação: mesma heurística de silêncio do TTS, mas sem o escopo
+// de ditado/foco — qualquer terminal serve. Só passa a "escutar" depois que o
+// usuário manda um Enter (armNotificationCapture), pra não disparar em saída
+// que não é resposta a nada (ls, prompt redesenhado, etc). Uma vez armado,
+// dispara no primeiro silêncio de TTS_SILENCE_MS e desarma de novo.
 let notifyHasOutput = false
 let notifySilenceTimer = null
+let notifyAwaitingResponse = false
 
 function onPtyDataForNotification(chunk) {
+  if (!notifyAwaitingResponse) return
   if (!chunk.trim()) return
   notifyHasOutput = true
   clearTimeout(notifySilenceTimer)
   notifySilenceTimer = setTimeout(() => {
     if (notifyHasOutput && !ttsEnabled.value) playNotificationSound()
     notifyHasOutput = false
+    notifyAwaitingResponse = false
   }, TTS_SILENCE_MS)
+}
+
+function armNotificationCapture() {
+  notifyAwaitingResponse = true
 }
 
 function resetNotificationCapture() {
   notifyHasOutput = false
+  notifyAwaitingResponse = false
   clearTimeout(notifySilenceTimer)
   notifySilenceTimer = null
 }
@@ -281,6 +289,19 @@ onMounted(async () => {
   term.loadAddon(fitAddon)
   term.open(termEl.value)
 
+  // Ctrl+C sem seleção precisa continuar mandando SIGINT pro processo (xterm
+  // já faz isso sozinho). Com seleção, tanto Ctrl+C quanto Ctrl+Shift+C viram
+  // "copiar" — senão não tem nenhum jeito de copiar texto do terminal.
+  term.attachCustomKeyEventHandler((event) => {
+    if (event.type !== 'keydown') return true
+    const isCKey = event.key === 'c' || event.key === 'C'
+    if (isCKey && (event.ctrlKey || event.metaKey) && term.hasSelection()) {
+      navigator.clipboard.writeText(term.getSelection()).catch(() => {})
+      return false
+    }
+    return true
+  })
+
   // espera a fonte carregar e o layout assentar antes do primeiro fit,
   // senão a medição de altura da célula fica errada e corta a última linha
   await document.fonts.ready
@@ -297,6 +318,7 @@ onMounted(async () => {
     if (data.includes('\r')) {
       resetTtsCapture()
       resetNotificationCapture()
+      armNotificationCapture()
     }
   })
 
@@ -337,6 +359,7 @@ onMounted(async () => {
         ws.send(JSON.stringify({ type: 'input', data: '\r' }))
         resetTtsCapture()
         resetNotificationCapture()
+        armNotificationCapture()
       }
     }
     consumePendingVoiceInput()

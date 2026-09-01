@@ -498,6 +498,38 @@ onBeforeUnmount(() => {
   outline: none;
 }
 
+.notes-body {
+  scrollbar-width: none;
+}
+
+.notes-body:hover,
+.notes-body:focus {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-text-tertiary) transparent;
+}
+
+.notes-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.notes-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.notes-body::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 10px;
+}
+
+.notes-body:hover::-webkit-scrollbar-thumb,
+.notes-body:focus::-webkit-scrollbar-thumb {
+  background-color: var(--color-text-tertiary);
+}
+
+.notes-body::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-text-secondary);
+}
+
 .notes-body:empty::before {
   content: attr(data-placeholder);
   color: var(--color-text-tertiary);
