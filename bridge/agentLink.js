@@ -71,12 +71,28 @@ function renameSession(sessionId, name) {
 // a resposta real do agente) — isso valia enquanto o terminal ecoava o texto
 // bruto injetado. Mas a UI do Claude Code renderiza o prompt recebido como
 // mensagem de chat estilizada, não necessariamente como eco literal byte a
-// byte contendo a tag — na prática só UMA ocorrência real chega no buffer
-// (quando o agente decide responder), e exigir duas fazia o dux_ask nunca
-// resolver, ficando preso até o timeout mesmo com a resposta certa já visível
-// na tela. Aceita a primeira ocorrência da reply-tag seguida do end-tag.
+// byte contendo a tag.
 // eslint-disable-next-line no-control-regex
 const ANSI_ESCAPE_RE = /\x1b\[[0-9;]*[a-zA-Z]/g
+
+// Procura `marker` como o conteúdo INTEIRO de alguma linha do buffer (depois
+// de remover ANSI e aparar espaço), não como substring solta em qualquer
+// lugar. Necessário porque a própria instrução injetada em pumpQueue CITA os
+// dois marcadores entre aspas como exemplo de formato (`write... exactly
+// "<<<DUX_REPLY req-1>>>"...`) — em TUIs que redesenham o histórico inteiro a
+// cada frame (ex: a interface do Claude Code), essa citação aparece na tela
+// assim que o agente recebe a mensagem, e um simples indexOf() bate nela
+// como se fosse a resposta real, resolvendo o dux_ask com um pedaço da
+// própria instrução (reproduzido na prática). A citação nunca ocupa uma
+// linha inteira sozinha — vem sempre cercada de aspas/vírgula no meio da
+// frase — então exigir a linha inteira, exatamente como a instrução já pede
+// ("alone on one line, exactly"), descarta esse falso positivo.
+function findMarkerLine(lines, marker, fromIndex = 0) {
+  for (let i = fromIndex; i < lines.length; i++) {
+    if (lines[i].replace(ANSI_ESCAPE_RE, '').trim() === marker) return i
+  }
+  return -1
+}
 
 function onSessionData(sessionId, chunk) {
   const session = sessions.get(sessionId)
@@ -88,18 +104,24 @@ function onSessionData(sessionId, chunk) {
   session.rawBuffer += chunk
 
   const replyTag = `${REPLY_MARKER} ${session.expectedReplyId}>>>`
-  const tagIndex = session.rawBuffer.indexOf(replyTag)
-  if (tagIndex === -1) return
+  const lines = session.rawBuffer.split('\n')
 
-  const afterTag = session.rawBuffer.slice(tagIndex + replyTag.length)
-  const endIndex = afterTag.indexOf(END_MARKER)
-  if (endIndex === -1) return
+  const tagLineIndex = findMarkerLine(lines, replyTag)
+  if (tagLineIndex === -1) return
+
+  const endLineIndex = findMarkerLine(lines, END_MARKER, tagLineIndex + 1)
+  if (endLineIndex === -1) return
 
   // A UI do Claude Code formata a resposta na tela com códigos ANSI de estilo
   // (cor, negrito para markdown) — eles ficam misturados no texto bruto do
   // PTY entre os marcadores, e sem removê-los o "answer" chega ao outro lado
   // do dux ask com fragmentos tipo "[39m" ou "[38;5;231m" colados no meio.
-  const answer = afterTag.slice(0, endIndex).replace(ANSI_ESCAPE_RE, '').trim()
+  const answer = lines
+    .slice(tagLineIndex + 1, endLineIndex)
+    .map((line) => line.replace(ANSI_ESCAPE_RE, ''))
+    .join('\n')
+    .trim()
+
   const { resolve } = session.pending
   session.pending = null
   session.expectedReplyId = null
