@@ -232,7 +232,13 @@ async function loadAndWatch() {
   const result = await readNote(props.data.path)
   lastWrittenMarkdown = result.content ?? ''
   if (editorEl.value) editorEl.value.innerHTML = markdownToHtml(lastWrittenMarkdown)
-  syncNoteContent({ nodeId: props.id, path: props.data.path, content: lastWrittenMarkdown })
+  // mtime só vem null/ausente quando o bridge não achou o arquivo nem o
+  // diretório pai (ex: path sincronizado de outra máquina, que não existe
+  // aqui) — nesse caso não empurra pro servidor, senão sobrescreve a cópia
+  // remota da nota com conteúdo vazio.
+  if (result.mtime != null) {
+    syncNoteContent({ nodeId: props.id, path: props.data.path, content: lastWrittenMarkdown })
+  }
 
   unwatch = watchNote(props.data.path, (msg) => {
     if (msg.content === lastWrittenMarkdown) return
