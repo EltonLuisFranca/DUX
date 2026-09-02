@@ -37,7 +37,7 @@ export async function apiFetch(path, options = {}) {
   }
 
   if (!ok) {
-    throw new Error(`request failed: ${status}`)
+    throw new Error(`request failed: ${status}${data?.message ? ` (${data.message})` : ''}`)
   }
 
   return data

@@ -1,4 +1,4 @@
-import { ipcMain, shell, safeStorage, app } from 'electron'
+import { ipcMain, shell, safeStorage, app, net } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs'
 
@@ -90,12 +90,20 @@ export function registerAuthIpc() {
   // (nem deveria precisar cobrir) um app desktop — o Electron não é um site
   // arbitrário rodando código de terceiros, é o próprio app autenticado por
   // Bearer token.
+  //
+  // net.fetch (stack do Chromium) em vez do fetch() do Node: em rede
+  // corporativa com inspeção SSL (proxy tipo Fortinet reassinando o
+  // certificado com uma CA própria), o navegador do sistema confia nessa CA
+  // porque a TI a instala no Windows, mas a lista de CAs embutida do Node não
+  // — o fetch() do Node falha o handshake TLS (status 0) enquanto o
+  // navegador segue funcionando normalmente. net.fetch usa o mesmo trust
+  // store do SO que o navegador já usa.
   ipcMain.handle('auth:api-fetch', async (_event, { path, method = 'GET', body }) => {
     const token = loadAuthToken()
     if (!token) return { ok: false, status: 401, data: { message: 'not authenticated' } }
 
     try {
-      const response = await fetch(`${UZUNO_API_BASE}${path}`, {
+      const response = await net.fetch(`${UZUNO_API_BASE}${path}`, {
         method,
         headers: {
           Authorization: `Bearer ${token}`,
@@ -124,7 +132,7 @@ export function registerAuthIpc() {
     if (!token) return { ok: false, status: 401, data: { message: 'not authenticated' } }
 
     try {
-      const response = await fetch(`${UZUNO_API_BASE}/broadcasting/auth`, {
+      const response = await net.fetch(`${UZUNO_API_BASE}/broadcasting/auth`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
