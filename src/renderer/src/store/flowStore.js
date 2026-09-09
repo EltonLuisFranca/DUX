@@ -1,5 +1,21 @@
 import { computed, ref, toRaw, watch } from 'vue'
 import { createWorkspaceSync } from '../lib/workspaceSync'
+import { unlinkAgents, unlinkNoteFromAgent } from '../lib/bridgeClient'
+
+// tipos de node que rodam um terminal (mesmo componente WslClaudeTerminalNode
+// por trás — ver templates em FleetCanvas.vue e o comentário em
+// nodeTypes/registry.js). Exportado daqui (em vez de definido só dentro de
+// FleetCanvas.vue) porque removeNode() também precisa saber quais nodes são
+// terminais, pra limpar o link de agente/nota ao apagar um dos dois lados.
+export const TERMINAL_TYPES = [
+  'wsl-claude-terminal',
+  'claude-terminal',
+  'codex-terminal',
+  'wsl-terminal',
+  'powershell-terminal',
+  'cmd-terminal'
+]
+const NOTE_TYPE = 'notes'
 
 // id precisa ser um UUID de verdade — a coluna workspace_id no backend é
 // `uuid`, e o Postgres rejeita qualquer outro formato com erro 500 no sync.
@@ -184,9 +200,42 @@ export function updateNodeData(id, patch) {
   if (node) Object.assign(node.data, patch)
 }
 
+// Apagar edges de um node no vue-flow (drag pra fora, tecla delete) dispara
+// @edges-change no FleetCanvas, que cuida de desfazer o link de agente/nota
+// no bridge — mas apagar o NODE (aqui) nunca passou por ali: a edge órfã
+// ficava esquecida em workspace.edges pra sempre. Efeito visível: o handle do
+// lado que sobrou continuava azul (useHandleConnection só olha se existe uma
+// edge referenciando aquele handle, não se os dois nodes da edge ainda
+// existem) — e o link no bridge (agentLink/noteLink) também nunca era
+// desfeito quando quem sumia era o node de nota (o lado terminal, que é quem
+// dispara a limpeza ao desconectar o próprio WebSocket, continuava de pé).
 export function removeNode(id) {
-  const index = activeWorkspace.value.nodes.findIndex((n) => n.id === id)
-  if (index !== -1) activeWorkspace.value.nodes.splice(index, 1)
+  const ws = activeWorkspace.value
+  const index = ws.nodes.findIndex((n) => n.id === id)
+  if (index === -1) return
+  const deletedNode = ws.nodes[index]
+
+  const remainingEdges = []
+  for (const edge of ws.edges) {
+    if (edge.source !== id && edge.target !== id) {
+      remainingEdges.push(edge)
+      continue
+    }
+    const otherId = edge.source === id ? edge.target : edge.source
+    const otherNode = ws.nodes.find((n) => n.id === otherId)
+    const deletedIsTerminal = TERMINAL_TYPES.includes(deletedNode.type)
+    const otherIsTerminal = otherNode && TERMINAL_TYPES.includes(otherNode.type)
+    if (deletedIsTerminal && otherIsTerminal) {
+      unlinkAgents(edge.source, edge.target)
+    } else if (deletedNode.type === NOTE_TYPE && otherIsTerminal) {
+      unlinkNoteFromAgent(otherId, deletedNode.data.path)
+    } else if (otherNode?.type === NOTE_TYPE && deletedIsTerminal) {
+      unlinkNoteFromAgent(id, otherNode.data.path)
+    }
+  }
+  ws.edges = remainingEdges
+  ws.nodes.splice(index, 1)
+
   if (activeSettingsNodeId.value === id) activeSettingsNodeId.value = null
 }
 

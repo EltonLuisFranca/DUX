@@ -130,7 +130,8 @@ import {
   activeWorkspaceId,
   setActiveTerminal,
   openSearch,
-  lastAddedNodeId
+  lastAddedNodeId,
+  TERMINAL_TYPES
 } from '../store/flowStore'
 import DuxSearch from './DuxSearch.vue'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
@@ -139,15 +140,6 @@ import { isRoomConnected, remoteCursors, remoteNodesByUser, sendCursorPosition, 
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
-
-const TERMINAL_TYPES = [
-  'wsl-claude-terminal',
-  'claude-terminal',
-  'codex-terminal',
-  'wsl-terminal',
-  'powershell-terminal',
-  'cmd-terminal'
-]
 const NOTE_TYPE = 'notes'
 
 const props = defineProps({
