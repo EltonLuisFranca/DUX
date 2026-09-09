@@ -12,8 +12,7 @@
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
-    "@electron/asar": "^3.4.1",
-    "create-desktop-shortcuts": "^1.11.0"
+    "@electron/asar": "^3.4.1"
   },
   "build": {
     "appId": "com.eltonfranca.dux-installer",

@@ -6,8 +6,7 @@ const { join, dirname } = require('path')
 // sendo instalados) quebra com ENOENT, já que o Electron tenta interpretar
 // esse caminho como entrada dentro do arquivo, não o arquivo em si.
 const fs = require('original-fs')
-const { execFile } = require('child_process')
-const createDesktopShortcut = require('create-desktop-shortcuts')
+const { execFile, spawnSync } = require('child_process')
 const { extractFile } = require('@electron/asar')
 
 const APP_NAME = 'DUX'
@@ -90,6 +89,47 @@ async function writeUninstallRegistry(installDir, uninstallerPath, version) {
   }
 }
 
+// PowerShell escapa aspas simples dobrando ('' dentro de uma string '...') —
+// os paths aqui vêm todos de app.getPath/join, nunca de input livre do
+// usuário, mas escapa mesmo assim por hábito de não interpolar direto.
+function escapePowerShellSingleQuoted(value) {
+  return value.replace(/'/g, "''")
+}
+
+// Cria o .lnk via COM do PowerShell (WScript.Shell) em vez da lib
+// create-desktop-shortcuts, que por baixo escreve um arquivo .vbs solto em
+// disco e roda via cscript.exe — exatamente o padrão "processo não assinado
+// grava e executa um script" que antivírus com proteção em tempo real
+// costuma barrar sem avisar (ainda mais depois do SmartScreen já ter
+// sinalizado o instalador como "editor desconhecido"). A lib também não
+// verificava o exit code do cscript, então uma falha dessas passava batido
+// como sucesso. Aqui, se o PowerShell falhar, o erro sobe de verdade — sem
+// isso o "Instalação concluída" mentia quando o atalho não existia.
+function createShortcut(shortcutPath, targetExe, workingDir) {
+  const script = [
+    '$ErrorActionPreference = "Stop"',
+    '$WshShell = New-Object -ComObject WScript.Shell',
+    `$Shortcut = $WshShell.CreateShortcut('${escapePowerShellSingleQuoted(shortcutPath)}')`,
+    `$Shortcut.TargetPath = '${escapePowerShellSingleQuoted(targetExe)}'`,
+    `$Shortcut.WorkingDirectory = '${escapePowerShellSingleQuoted(workingDir)}'`,
+    `$Shortcut.IconLocation = '${escapePowerShellSingleQuoted(targetExe)},0'`,
+    '$Shortcut.Save()'
+  ].join('; ')
+
+  const result = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    { windowsHide: true, encoding: 'utf8' }
+  )
+
+  if (result.error) {
+    throw new Error(`Não foi possível criar o atalho em ${shortcutPath}: ${result.error.message}`)
+  }
+  if (result.status !== 0 || !fs.existsSync(shortcutPath)) {
+    throw new Error(`Não foi possível criar o atalho em ${shortcutPath}: ${result.stderr || 'motivo desconhecido'}`)
+  }
+}
+
 function createShortcuts(installDir) {
   const targetExe = join(installDir, APP_EXE_NAME)
   const startMenuPath = join(
@@ -102,15 +142,9 @@ function createShortcuts(installDir) {
   )
   const desktopPath = join(app.getPath('desktop'), `${APP_NAME}.lnk`)
 
-  // windows espera um único objeto, não um array — passar um array faz a
-  // lib ler `.filePath` do array inteiro (undefined) em vez do primeiro
-  // item, por isso precisa de duas chamadas, uma por atalho.
-  createDesktopShortcut({
-    windows: { filePath: targetExe, outputPath: dirname(startMenuPath), name: APP_NAME }
-  })
-  createDesktopShortcut({
-    windows: { filePath: targetExe, outputPath: dirname(desktopPath), name: APP_NAME }
-  })
+  fs.mkdirSync(dirname(startMenuPath), { recursive: true })
+  createShortcut(startMenuPath, targetExe, installDir)
+  createShortcut(desktopPath, targetExe, installDir)
 }
 
 // Lê a versão do DUX que está sendo copiado, não a do próprio instalador
