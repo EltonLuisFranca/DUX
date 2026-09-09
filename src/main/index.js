@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu } from 'electron'
 import { join } from 'path'
 import { spawn } from 'child_process'
 import { autoUpdater } from 'electron-updater'
@@ -149,6 +149,50 @@ function createWindow() {
   })
 
   win.once('ready-to-show', () => win.show())
+
+  // pt-BR primeiro (é o idioma do conteúdo dos nodes de nota deste app),
+  // en-US como fallback pra termos técnicos/código colados ali — sem isso o
+  // Electron detecta o idioma pelo locale do SO, o que nem sempre bate.
+  win.webContents.session.setSpellCheckerLanguages(['pt-BR', 'en-US'])
+
+  // Electron não tem menu de contexto nativo por padrão — sem este handler,
+  // botão direito em qualquer campo editável (ex: o node de Nota) não mostra
+  // nada, nem as sugestões de correção do sublinhado vermelho do spellcheck.
+  win.webContents.on('context-menu', (_event, params) => {
+    const template = []
+
+    if (params.misspelledWord) {
+      for (const suggestion of params.dictionarySuggestions) {
+        template.push({
+          label: suggestion,
+          click: () => win.webContents.replaceMisspelling(suggestion)
+        })
+      }
+      if (params.dictionarySuggestions.length === 0) {
+        template.push({ label: 'Sem sugestões', enabled: false })
+      }
+      template.push({ type: 'separator' })
+      template.push({
+        label: 'Adicionar ao dicionário',
+        click: () => win.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+      })
+      template.push({ type: 'separator' })
+    }
+
+    if (params.isEditable) {
+      template.push(
+        { label: 'Cortar', role: 'cut', enabled: params.editFlags.canCut },
+        { label: 'Copiar', role: 'copy', enabled: params.editFlags.canCopy },
+        { label: 'Colar', role: 'paste', enabled: params.editFlags.canPaste },
+        { type: 'separator' },
+        { label: 'Selecionar tudo', role: 'selectAll', enabled: params.editFlags.canSelectAll }
+      )
+    } else if (params.selectionText) {
+      template.push({ label: 'Copiar', role: 'copy' })
+    }
+
+    if (template.length) Menu.buildFromTemplate(template).popup()
+  })
 
   // Hardening for the browser-node <webview>: force nodeintegration off and
   // strip the preload regardless of what the guest tag's attributes request,
