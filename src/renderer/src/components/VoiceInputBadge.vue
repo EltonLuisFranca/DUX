@@ -176,20 +176,31 @@ function handleClick() {
 }
 
 /* Ao gravar, o badge cresce bem além do próprio espaço na pill — position
-   absolute + ancorado no centro do próprio botão evita empurrar os vizinhos
-   (workspace switcher, zoom, etc.) pros lados; .zoom-controls já é
-   position:relative, então essa expansão fica contida ali. */
+   absolute + ancorado a partir da borda de cima evita empurrar os vizinhos
+   (workspace switcher, zoom, etc.) pros lados e flutua acima da barra (mesmo
+   padrão do .zoom-menu em ZoomControls.vue) em vez de crescer a partir do
+   centro, o que fazia a onda nascer meio enterrada dentro da própria pill.
+   .zoom-controls já é position:relative, então essa expansão fica contida ali. */
 .voice-badge.recording {
-  width: 420px;
-  height: 120px;
-  border-radius: 24px;
+  width: 320px;
+  height: 90px;
+  border-radius: 20px;
   background: transparent;
   box-shadow: none;
   position: absolute;
   left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
   z-index: 1000;
+}
+
+/* Sem isso, o hover genérico (mais específico por causa dos dois :not())
+   ganha da regra .recording e pinta um retângulo cinza cobrindo a onda
+   inteira — cinza sólido sobre uma animação colorida lê como "bugado". O
+   próprio movimento da onda e o cursor de ponteiro já bastam como affordance
+   de clique aqui. */
+.voice-badge.recording:hover:not(.disabled):not(.transcribing) {
+  background: transparent;
 }
 
 .voice-badge.transcribing {
@@ -213,9 +224,11 @@ function handleClick() {
   overflow: visible;
   filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.45));
   /* fade nas pontas em vez de um corte reto — as curvas somem suavemente nas
-     bordas em vez de bater num retângulo visível */
-  mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
+     bordas em vez de bater num retângulo visível. Faixa de fade mais estreita
+     que antes (14%/86%) — numa caixa menor, aquela margem lia como uma
+     sobra vazia em volta da onda. */
+  mask-image: linear-gradient(90deg, transparent 0%, #000 6%, #000 94%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 6%, #000 94%, transparent 100%);
 }
 
 </style>
