@@ -155,15 +155,14 @@ function handleClick() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  background: var(--color-bg-surface-alt);
-  color: var(--color-text-secondary);
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--color-text-quaternary);
   cursor: pointer;
-  box-shadow: 0 4px 16px var(--color-shadow);
-  transition: width 0.15s ease, border-radius 0.15s ease;
+  transition: width 0.15s ease, height 0.15s ease, border-radius 0.15s ease;
 }
 
 .voice-badge:hover:not(.disabled):not(.transcribing) {
@@ -176,14 +175,20 @@ function handleClick() {
   cursor: default;
 }
 
+/* Ao gravar, o badge cresce bem além do próprio espaço na pill — position
+   absolute + ancorado no centro do próprio botão evita empurrar os vizinhos
+   (workspace switcher, zoom, etc.) pros lados; .zoom-controls já é
+   position:relative, então essa expansão fica contida ali. */
 .voice-badge.recording {
   width: 420px;
   height: 120px;
   border-radius: 24px;
-  border-color: transparent;
   background: transparent;
   box-shadow: none;
-  position: relative;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   z-index: 1000;
 }
 

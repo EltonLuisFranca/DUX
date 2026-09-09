@@ -31,9 +31,13 @@ const HTTP_ICON =
 // formulário de configurações (sidebar) e, opcionalmente, um formulário de
 // criação (quando precisa de input do usuário antes de existir, ex: um caminho)
 //
-// wsl-claude-terminal e claude-terminal renderizam o mesmo componente de node
-// (WslClaudeTerminalNode, ver templates no FleetCanvas) — só o form de criação/
-// settings e o texto mudam; qual dos dois aparece no modal depende do SO (ver AddNodeModal.vue)
+// todo tipo terminado em "-terminal" renderiza o mesmo componente de node
+// (WslClaudeTerminalNode, ver templates no FleetCanvas e TERMINAL_TYPES lá) —
+// só o form de criação/settings, o texto e o `command` enviado ao bridge
+// mudam; qual aparece no modal depende do SO (wsl-claude-terminal, ver
+// AddNodeModal.vue) ou de detecção em runtime pelo bridge (wsl-terminal,
+// powershell-terminal, cmd-terminal — via requiresAvailability, checado
+// contra terminalAvailabilityStore.js)
 // category organiza a listagem em abas no AddNodeModal — agents (terminais
 // de agente e chat com modelo), tools (utilitários de dev) e media (conteúdo
 // visual estático). Nova categoria = só adicionar a chave em CATEGORY_LABELS.
@@ -71,6 +75,39 @@ export const nodeTypeRegistry = {
     settingsComponent: TerminalSettings,
     createForm: TerminalCreateForm,
     createFormProps: { command: 'codex' },
+    icon: TERMINAL_ICON
+  },
+  'wsl-terminal': {
+    label: 'Terminal WSL',
+    description: 'Shell interativo (zsh) dentro do WSL, sem agente de IA.',
+    category: 'tools',
+    settingsComponent: TerminalSettings,
+    settingsProps: { wslMode: true },
+    createForm: TerminalCreateForm,
+    createFormProps: { wslMode: true, command: 'shell' },
+    // só aparece na lista quando o bridge detecta que está rodando dentro do
+    // WSL (ver terminalAvailabilityStore.js/AddNodeModal.vue)
+    requiresAvailability: 'wsl',
+    icon: TERMINAL_ICON
+  },
+  'powershell-terminal': {
+    label: 'PowerShell',
+    description: 'Sessão do PowerShell rodando no Windows.',
+    category: 'tools',
+    settingsComponent: TerminalSettings,
+    createForm: TerminalCreateForm,
+    createFormProps: { command: 'powershell' },
+    requiresAvailability: 'powershell',
+    icon: TERMINAL_ICON
+  },
+  'cmd-terminal': {
+    label: 'Prompt de Comando (CMD)',
+    description: 'Sessão do cmd.exe do Windows.',
+    category: 'tools',
+    settingsComponent: TerminalSettings,
+    createForm: TerminalCreateForm,
+    createFormProps: { command: 'cmd' },
+    requiresAvailability: 'cmd',
     icon: TERMINAL_ICON
   },
   ollama: {

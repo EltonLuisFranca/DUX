@@ -4,6 +4,10 @@
 
     <span class="toolbar-divider" />
 
+    <VoiceInputBadge />
+
+    <span class="toolbar-divider" />
+
     <AppTooltip label="Diminuir zoom">
       <button class="zoom-btn" @click="handleZoomOut">
         <svg viewBox="0 0 16 16" width="14" height="14">
@@ -69,6 +73,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useVueFlow } from '@vue-flow/core'
 import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
+import VoiceInputBadge from './VoiceInputBadge.vue'
 import AppTooltip from './AppTooltip.vue'
 import { openAddNodeModal } from '../store/flowStore'
 
@@ -112,10 +117,10 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 4px;
+  padding: 6px;
   background: var(--color-bg-surface-alt);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: 18px;
   box-shadow: 0 4px 16px var(--color-shadow);
 }
 
@@ -123,10 +128,10 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   border: none;
-  border-radius: 7px;
+  border-radius: 9px;
   background: transparent;
   color: var(--color-text-quaternary);
   cursor: pointer;
@@ -138,7 +143,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
 
 .toolbar-divider {
   width: 1px;
-  height: 18px;
+  height: 20px;
   background: var(--color-border-strong);
   margin: 0 2px;
 }
@@ -151,10 +156,10 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
   display: flex;
   align-items: center;
   gap: 4px;
-  height: 26px;
+  height: 30px;
   padding: 0 8px;
   border: none;
-  border-radius: 7px;
+  border-radius: 9px;
   background: transparent;
   color: var(--color-text-primary);
   font-size: 12px;

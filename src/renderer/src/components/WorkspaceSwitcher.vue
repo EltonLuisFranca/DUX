@@ -204,10 +204,10 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   border: none;
-  border-radius: 7px;
+  border-radius: 9px;
   background: transparent;
   color: var(--color-text-quaternary);
   cursor: pointer;

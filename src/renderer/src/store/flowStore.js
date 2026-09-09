@@ -208,6 +208,12 @@ export function confirmDeleteNode() {
 const NODE_WIDTH = 480
 const NODE_GAP = 60
 
+// id do último node criado via addNode — FleetCanvas.vue observa isto pra
+// centralizar o viewport nele assim que é montado (ver watch de
+// lastAddedNodeId lá). Fica fora do workspace pra sobreviver à troca de
+// workspace ativo sem precisar limpar nada manualmente.
+export const lastAddedNodeId = ref(null)
+
 export function addNode(type, data, position, zIndex = 0) {
   const targetNodes = activeWorkspace.value.nodes
   let resolvedPosition = position
@@ -223,6 +229,7 @@ export function addNode(type, data, position, zIndex = 0) {
     zIndex,
     data
   })
+  lastAddedNodeId.value = id
   return id
 }
 

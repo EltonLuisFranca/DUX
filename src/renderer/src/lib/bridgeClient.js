@@ -52,6 +52,32 @@ export function fetchGitStatus(path) {
   })
 }
 
+export function checkTerminalAvailability() {
+  return new Promise((resolve) => {
+    let settled = false
+    const ws = new WebSocket(BRIDGE_URL)
+
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      resolve(result)
+      ws.close()
+    }
+
+    const timeout = setTimeout(() => finish({ shell: false, wsl: false, powershell: false, cmd: false }), 4000)
+
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'checkTerminalAvailability' }))
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data)
+      if (msg.type === 'terminalAvailability') finish(msg)
+    }
+
+    ws.onerror = () => finish({ shell: false, wsl: false, powershell: false, cmd: false })
+  })
+}
+
 function sendControlMessage(message) {
   const ws = new WebSocket(BRIDGE_URL)
   ws.onopen = () => {

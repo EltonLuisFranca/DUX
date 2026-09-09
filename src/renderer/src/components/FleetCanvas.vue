@@ -27,7 +27,6 @@
       </button>
     </Panel>
     <Panel position="bottom-center" class="bottom-toolbar-stack">
-      <VoiceInputBadge />
       <ZoomControls />
     </Panel>
 
@@ -40,6 +39,15 @@
       <WslClaudeTerminalNode v-bind="nodeProps" />
     </template>
     <template #node-codex-terminal="nodeProps">
+      <WslClaudeTerminalNode v-bind="nodeProps" />
+    </template>
+    <template #node-wsl-terminal="nodeProps">
+      <WslClaudeTerminalNode v-bind="nodeProps" />
+    </template>
+    <template #node-powershell-terminal="nodeProps">
+      <WslClaudeTerminalNode v-bind="nodeProps" />
+    </template>
+    <template #node-cmd-terminal="nodeProps">
       <WslClaudeTerminalNode v-bind="nodeProps" />
     </template>
     <template #node-notes="nodeProps">
@@ -100,11 +108,10 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, watch } from 'vue'
 import { VueFlow, Panel, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import ZoomControls from './ZoomControls.vue'
-import VoiceInputBadge from './VoiceInputBadge.vue'
 import CustomEdge from './CustomEdge.vue'
 import RemoteCursor from './RemoteCursor.vue'
 import WslClaudeTerminalNode from './WslClaudeTerminalNode.vue'
@@ -116,7 +123,15 @@ import ImageNode from './ImageNode.vue'
 import HttpNode from './HttpNode.vue'
 import PomodoroNode from './PomodoroNode.vue'
 import { theme, canvasVariant, edgeStyle, snapEnabled, SNAP_GRID_SIZE } from '../store/themeStore'
-import { onNodeClicked, addNode, openAddNodeModal, activeWorkspaceId, setActiveTerminal, openSearch } from '../store/flowStore'
+import {
+  onNodeClicked,
+  addNode,
+  openAddNodeModal,
+  activeWorkspaceId,
+  setActiveTerminal,
+  openSearch,
+  lastAddedNodeId
+} from '../store/flowStore'
 import DuxSearch from './DuxSearch.vue'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
 import { linkAgents, unlinkAgents, linkNoteToAgent, unlinkNoteFromAgent } from '../lib/bridgeClient'
@@ -125,7 +140,14 @@ import { isRoomConnected, remoteCursors, remoteNodesByUser, sendCursorPosition, 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 
-const TERMINAL_TYPES = ['wsl-claude-terminal', 'claude-terminal', 'codex-terminal']
+const TERMINAL_TYPES = [
+  'wsl-claude-terminal',
+  'claude-terminal',
+  'codex-terminal',
+  'wsl-terminal',
+  'powershell-terminal',
+  'cmd-terminal'
+]
 const NOTE_TYPE = 'notes'
 
 const props = defineProps({
@@ -140,7 +162,9 @@ const {
   getSelectedNodes,
   addSelectedNodes,
   removeSelectedNodes,
-  addEdges
+  addEdges,
+  setCenter,
+  viewport
 } = useVueFlow()
 
 const dotColor = computed(() => (theme.value === 'light' ? '#c4c4cc' : '#55555e'))
@@ -274,6 +298,28 @@ async function handleDrop(event) {
   if (!data) return
   addNode(type, data, position, entry.defaultZIndex ?? 0)
 }
+
+// Sem isso, um node novo entra na posição calculada por addNode() (sempre à
+// direita de tudo que já existe) mas o viewport não acompanha — em canvases
+// grandes o node nasce fora da área visível, "em algum canto". Espera dois
+// frames antes de ler node.dimensions porque o tamanho real só é conhecido
+// depois que o ResizeObserver do Vue Flow mede o node já montado (mesmo
+// padrão de espera usado no primeiro fit() do xterm em WslClaudeTerminalNode).
+watch(lastAddedNodeId, async (nodeId) => {
+  if (!nodeId || !isActiveWorkspace.value) return
+  await nextTick()
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  const node = findNode(nodeId)
+  if (!node) return
+  removeSelectedNodes(getSelectedNodes.value)
+  addSelectedNodes([node])
+  const width = node.dimensions?.width || 480
+  const height = node.dimensions?.height || 320
+  setCenter(node.position.x + width / 2, node.position.y + height / 2, {
+    zoom: Math.max(viewport.value.zoom, 0.75),
+    duration: 400
+  })
+})
 
 function selectNextNode() {
   const nodes = getNodes.value

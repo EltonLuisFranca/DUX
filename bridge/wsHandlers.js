@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const { execFileSync } = require('child_process')
 const pty = require('node-pty')
 const { WebSocket } = require('ws')
 const agentLink = require('./agentLink')
@@ -7,6 +8,7 @@ const noteLink = require('./noteLink')
 const { resolveCwd, isDirectory, isFile, listSubdirectories, listDirEntries } = require('./fsHelpers')
 const { getGitInfo } = require('./gitStatus')
 const { startWatchingNote, stopWatchingNote, stopAllNoteWatches, readNoteFile } = require('./noteWatch')
+const { detectTerminalAvailability } = require('./terminalAvailability')
 
 const BIN_DIR = path.join(__dirname, 'bin')
 
@@ -15,6 +17,13 @@ const BIN_DIR = path.join(__dirname, 'bin')
 const ALLOWED_COMMANDS = {
   claude: 'claude',
   codex: 'codex'
+}
+
+// binários do Windows alcançados via interop do WSL — spawnados direto, sem
+// passar por zsh (ver ramo abaixo em 'start')
+const WINDOWS_SHELL_BINARIES = {
+  powershell: 'powershell.exe',
+  cmd: 'cmd.exe'
 }
 
 // Filtra do env herdado tudo que é específico de COMO este próprio bridge foi
@@ -67,43 +76,112 @@ function createConnectionHandler({ agentPort }) {
         }
 
         sessionId = msg.sessionId || null
-        const command = ALLOWED_COMMANDS[msg.command] || ALLOWED_COMMANDS.claude
 
-        // Só o Claude Code entende --mcp-config (Codex tem seu próprio
-        // mecanismo de MCP, tratado à parte se algum dia precisar). O JSON
-        // inline evita mexer em qualquer .mcp.json do projeto do usuário — o
-        // servidor MCP (mcp-server.mjs) é um processo próprio por sessão, que
-        // fala com este bridge via HTTP local pra resolver dux_ask.
-        const mcpConfigFlag =
-          command === 'claude' && sessionId
-            ? ` --mcp-config '${JSON.stringify({
-                mcpServers: {
-                  dux: {
-                    type: 'stdio',
-                    command: 'node',
-                    args: [path.join(__dirname, 'mcp-server.mjs')],
-                    env: { DUX_SESSION_ID: sessionId, DUX_AGENT_PORT: String(agentPort) }
+        try {
+          if (msg.command === 'shell') {
+            // terminal WSL puro: shell interativo, sem nenhum agente de IA —
+            // sem -c, pra não se comportar como os terminais de agente
+            // (que rodam um único comando e saem quando ele sai); aqui o
+            // pty É o próprio zsh, então só termina com exit/Ctrl+D
+            ptyProcess = pty.spawn('zsh', ['-li'], {
+              name: 'xterm-256color',
+              cols: msg.cols || 80,
+              rows: msg.rows || 24,
+              cwd,
+              env: buildAgentEnv({ PATH: `${BIN_DIR}${path.delimiter}${process.env.PATH}` })
+            })
+          } else if (WINDOWS_SHELL_BINARIES[msg.command]) {
+            // PowerShell/CMD rodam no Windows host, alcançados via interop do
+            // WSL — spawna o .exe direto (sem zsh no meio) pra não complicar
+            // quoting/PATH à toa
+            ptyProcess = pty.spawn(WINDOWS_SHELL_BINARIES[msg.command], [], {
+              name: 'xterm-256color',
+              cols: msg.cols || 80,
+              rows: msg.rows || 24,
+              cwd,
+              env: buildAgentEnv({})
+            })
+
+            // cmd.exe recusa iniciar direto num caminho UNC (o que o interop
+            // do WSL gera pra qualquer cwd fora de /mnt/c, ex: \\wsl.localhost\
+            // Debian\home\user) — ignora o cwd em silêncio e abre em
+            // C:\Windows. PowerShell lida com UNC nativamente (provider
+            // FileSystem::), só cmd precisa do empurrão: `pushd` (ao contrário
+            // de `cd`) mapeia uma drive temporária pra UNC, então funciona.
+            // Passar isso via argv (`cmd /K pushd ...`) falha silenciosamente
+            // — a citação da linha de comando se perde ao atravessar o
+            // interop do WSL. Precisa ser digitado como input mesmo, e só
+            // depois que o prompt inicial realmente aparece (escrever cedo
+            // demais atropela o handshake ANSI do início da sessão) — por
+            // isso espera o padrão "X:\...>" aparecer na saída em vez de usar
+            // um temporizador arbitrário.
+            if (msg.command === 'cmd') {
+              try {
+                const winPath = execFileSync('wslpath', ['-w', cwd], { encoding: 'utf8' }).trim()
+                let buffered = ''
+                let pushed = false
+                const promptWatcher = ptyProcess.onData((chunk) => {
+                  if (pushed) return
+                  buffered = (buffered + chunk).slice(-4000)
+                  const plain = buffered
+                    .replace(/\x1b\][^\x07]*(\x07|\x1b\\)/g, '')
+                    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+                  if (/[A-Za-z]:\\[^>\r\n]*>\s*$/.test(plain)) {
+                    pushed = true
+                    ptyProcess.write(`pushd "${winPath}"\r\n`)
+                    promptWatcher.dispose()
                   }
-                }
-              })}'`
-            : ''
+                })
+              } catch {
+                // sem wslpath: não deveria acontecer (cmd só fica disponível
+                // na lista quando detectTerminalAvailability confirma que
+                // está rodando dentro do WSL) — segue sem forçar o diretório
+              }
+            }
+          } else {
+            const command = ALLOWED_COMMANDS[msg.command] || ALLOWED_COMMANDS.claude
 
-        // -i (além de -l) é necessário: alguns setups de dotfiles (nvm.sh
-        // incluso, aqui) só rodam sua inicialização de PATH quando o shell é
-        // interativo — um simples "zsh -lc claude" spawnado por um processo pai
-        // não-interativo (como o Electron) acaba sem PATH nenhum de nvm/asdf/
-        // etc., e comandos instalados por eles somem com "command not found".
-        ptyProcess = pty.spawn('zsh', ['-lic', `${command}${mcpConfigFlag}`], {
-          name: 'xterm-256color',
-          cols: msg.cols || 80,
-          rows: msg.rows || 24,
-          cwd,
-          env: buildAgentEnv({
-            PATH: `${BIN_DIR}${path.delimiter}${process.env.PATH}`,
-            DUX_SESSION_ID: sessionId || '',
-            DUX_AGENT_PORT: String(agentPort)
-          })
-        })
+            // Só o Claude Code entende --mcp-config (Codex tem seu próprio
+            // mecanismo de MCP, tratado à parte se algum dia precisar). O JSON
+            // inline evita mexer em qualquer .mcp.json do projeto do usuário — o
+            // servidor MCP (mcp-server.mjs) é um processo próprio por sessão, que
+            // fala com este bridge via HTTP local pra resolver dux_ask.
+            const mcpConfigFlag =
+              command === 'claude' && sessionId
+                ? ` --mcp-config '${JSON.stringify({
+                    mcpServers: {
+                      dux: {
+                        type: 'stdio',
+                        command: 'node',
+                        args: [path.join(__dirname, 'mcp-server.mjs')],
+                        env: { DUX_SESSION_ID: sessionId, DUX_AGENT_PORT: String(agentPort) }
+                      }
+                    }
+                  })}'`
+                : ''
+
+            // -i (além de -l) é necessário: alguns setups de dotfiles (nvm.sh
+            // incluso, aqui) só rodam sua inicialização de PATH quando o shell é
+            // interativo — um simples "zsh -lc claude" spawnado por um processo pai
+            // não-interativo (como o Electron) acaba sem PATH nenhum de nvm/asdf/
+            // etc., e comandos instalados por eles somem com "command not found".
+            ptyProcess = pty.spawn('zsh', ['-lic', `${command}${mcpConfigFlag}`], {
+              name: 'xterm-256color',
+              cols: msg.cols || 80,
+              rows: msg.rows || 24,
+              cwd,
+              env: buildAgentEnv({
+                PATH: `${BIN_DIR}${path.delimiter}${process.env.PATH}`,
+                DUX_SESSION_ID: sessionId || '',
+                DUX_AGENT_PORT: String(agentPort)
+              })
+            })
+          }
+        } catch (err) {
+          ws.send(JSON.stringify({ type: 'error', message: `Não foi possível iniciar o terminal: ${err.message}` }))
+          ws.close()
+          return
+        }
 
         if (sessionId) {
           agentLink.registerSession(sessionId, { name: msg.name || sessionId, cwd, ptyProcess })
@@ -142,6 +220,8 @@ function createConnectionHandler({ agentPort }) {
         if (ptyProcess && msg.cols > 0 && msg.rows > 0) {
           ptyProcess.resize(msg.cols, msg.rows)
         }
+      } else if (msg.type === 'checkTerminalAvailability') {
+        ws.send(JSON.stringify({ type: 'terminalAvailability', ...detectTerminalAvailability() }))
       } else if (msg.type === 'checkPath') {
         const resolved = resolveCwd(msg.path)
         const valid = isDirectory(resolved)
