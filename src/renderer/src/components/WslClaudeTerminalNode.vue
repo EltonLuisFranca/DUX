@@ -4,6 +4,7 @@
     :class="{ selected }"
     :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
   >
+    <NodeToolbar :id="id" :data="data" :selected="selected" />
     <Handle
       id="left"
       type="target"
@@ -39,6 +40,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import GearIcon from './icons/GearIcon.vue'
 import ResizeGripIcon from './icons/ResizeGripIcon.vue'
+import NodeToolbar from './NodeToolbar.vue'
 import { FitAddon } from '@xterm/addon-fit'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import '@xterm/xterm/css/xterm.css'

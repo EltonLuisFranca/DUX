@@ -4,6 +4,7 @@
     :class="{ selected }"
     :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
   >
+    <NodeToolbar :id="id" :data="data" :selected="selected" />
     <Handle
       id="left"
       type="target"
@@ -78,6 +79,7 @@ import { nextTick, onBeforeUnmount, ref } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import GearIcon from './icons/GearIcon.vue'
 import ResizeGripIcon from './icons/ResizeGripIcon.vue'
+import NodeToolbar from './NodeToolbar.vue'
 import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { streamChat } from '../lib/ollamaClient'
 import { FILE_TOOLS, executeTool } from '../lib/ollamaTools'
