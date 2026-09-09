@@ -129,6 +129,12 @@ function createConnectionHandler({ agentPort }) {
             noteLink.unregisterSession(sessionId)
           }
           ptyProcess = null
+          // Fecha o socket pra acionar o retry automático que o cliente já usa
+          // pra queda de conexão (connect() em WslClaudeTerminalNode.vue). Sem
+          // isso o processo morre (ex: Ctrl+C encerrando o Claude Code) mas o
+          // socket segue aberto — o node fica travado em "offline" pra sempre,
+          // sem nenhum jeito de reconectar a não ser trocar o cwd.
+          ws.close()
         })
       } else if (msg.type === 'input') {
         ptyProcess?.write(msg.data)
