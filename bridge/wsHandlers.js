@@ -5,6 +5,7 @@ const pty = require('node-pty')
 const { WebSocket } = require('ws')
 const agentLink = require('./agentLink')
 const noteLink = require('./noteLink')
+const duxbanLink = require('./duxbanLink')
 const { resolveCwd, isDirectory, isFile, listSubdirectories, listDirEntries } = require('./fsHelpers')
 const { getGitInfo } = require('./gitStatus')
 const { startWatchingNote, stopWatchingNote, stopAllNoteWatches, readNoteFile } = require('./noteWatch')
@@ -186,12 +187,14 @@ function createConnectionHandler({ agentPort }) {
         if (sessionId) {
           agentLink.registerSession(sessionId, { name: msg.name || sessionId, cwd, ptyProcess })
           noteLink.registerSession(sessionId, { ptyProcess })
+          duxbanLink.registerSession(sessionId, { ptyProcess, ws })
         }
 
         ptyProcess.onData((data) => {
           if (sessionId) {
             agentLink.onSessionData(sessionId, data)
             noteLink.onSessionData(sessionId)
+            duxbanLink.onSessionData(sessionId)
           }
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'data', data }))
@@ -312,6 +315,21 @@ function createConnectionHandler({ agentPort }) {
         noteLink.linkNote(msg.sessionId, resolveCwd(msg.path))
       } else if (msg.type === 'noteUnlink') {
         noteLink.unlinkNote(msg.sessionId, resolveCwd(msg.path))
+      } else if (msg.type === 'duxbanTaskToAgent') {
+        // vem de uma conexão ws efêmera do board (ver sendDuxbanTaskToAgent em
+        // bridgeClient.js), não da conexão persistente do terminal-alvo —
+        // por isso o sessionId vem no corpo da mensagem, não da closure
+        duxbanLink.pushTask(msg.sessionId, {
+          boardName: msg.boardName,
+          columnTitle: msg.columnTitle,
+          cardId: msg.cardId,
+          cardText: msg.cardText
+        })
+      } else if (msg.type === 'duxbanResponse') {
+        // esta sim chega pela conexão persistente do próprio terminal que
+        // recebeu o duxbanRequest (ver duxbanLink.request) — sessionId é o
+        // da closure, não precisa vir no corpo
+        if (sessionId) duxbanLink.onResponse(sessionId, msg.requestId, msg.result, msg.error)
       } else if (msg.type === 'fileRead') {
         // usado pela tool read_file do node Ollama — diferente de noteRead,
         // NÃO cria o arquivo silenciosamente: o modelo pediu um path achando
@@ -359,6 +377,7 @@ function createConnectionHandler({ agentPort }) {
       if (sessionId) {
         agentLink.unregisterSession(sessionId)
         noteLink.unregisterSession(sessionId)
+        duxbanLink.unregisterSession(sessionId)
       }
       stopAllNoteWatches(ws)
     })

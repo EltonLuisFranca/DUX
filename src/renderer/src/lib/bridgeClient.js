@@ -304,3 +304,12 @@ export function linkNoteToAgent(sessionId, path) {
 export function unlinkNoteFromAgent(sessionId, path) {
   sendControlMessage({ type: 'noteUnlink', sessionId, path })
 }
+
+// Empurra uma tarefa despachada de um board DuxBan pro terminal do agente
+// (escreve como mensagem no PTY dele, ver bridge/duxbanLink.js) — fire-and-
+// forget como linkAgents/linkNoteToAgent, o board não espera confirmação
+// aqui: o próprio agente reporta progresso de volta via as tools
+// dux_kanban_* (bridge/mcp-server.mjs), tratadas em duxbanRequest/Response.
+export function sendDuxbanTaskToAgent(sessionId, { boardName, columnTitle, cardId, cardText }) {
+  sendControlMessage({ type: 'duxbanTaskToAgent', sessionId, boardName, columnTitle, cardId, cardText })
+}

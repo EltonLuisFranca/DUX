@@ -183,12 +183,12 @@ export const nodeTypeRegistry = {
     createData: () => ({ name: 'Pomodoro' }),
     icon: '<circle cx="10" cy="11" r="7" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M10 7v4l3 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M8 2.5h4M10 2.5V4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
   },
-  kanban: {
-    label: 'Kanban',
-    description: 'Quadro de tarefas com colunas e cartões — distribua e acompanhe o que cada agente está fazendo.',
+  duxban: {
+    label: 'DuxBan',
+    description: 'Central de tarefas: conecte agentes e o DuxBan distribui, enfileira e acompanha o que cada um está fazendo.',
     category: 'utility',
     createData: () => ({
-      name: 'Kanban',
+      name: 'DuxBan',
       columns: [
         { id: crypto.randomUUID(), title: 'A fazer', cards: [] },
         { id: crypto.randomUUID(), title: 'Fazendo', cards: [] },

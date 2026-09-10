@@ -47,6 +47,7 @@ import '@xterm/xterm/css/xterm.css'
 import { toggleNodeSettings, updateNodeData, activeTerminalId } from '../store/flowStore'
 import { theme, XTERM_THEMES } from '../store/themeStore'
 import { linkAgents, linkNoteToAgent } from '../lib/bridgeClient'
+import { serializeBoard, moveCard, finishTask } from '../lib/duxbanOps'
 import { pendingVoiceInput, consumePendingVoiceInput, isRecording } from '../store/voiceStore'
 import { speak, ttsEnabled } from '../store/ttsStore'
 import { playNotificationSound } from '../store/notificationSoundStore'
@@ -192,6 +193,8 @@ function connect() {
     } else if (msg.type === 'error') {
       status.value = 'offline'
       term.write(`\r\n\r\n[erro: ${msg.message}]\r\n`)
+    } else if (msg.type === 'duxbanRequest') {
+      handleDuxbanRequest(msg)
     }
   }
 
@@ -219,6 +222,63 @@ function disconnect() {
 // nova pelo canvas isso já é feito via evento @connect no FleetCanvas, mas
 // edges que já existiam antes de qualquer terminal conectar não disparam esse
 // evento, então cada lado da edge reafirma o link sozinho ao abrir sua sessão
+// Board DuxBan conectado a este terminal (se houver) — as tools dux_kanban_*
+// (bridge/mcp-server.mjs -> duxbanLink.request -> duxbanRequest aqui) só
+// enxergam o primeiro board ligado; múltiplos boards no mesmo terminal não
+// são endereçáveis por enquanto.
+function findConnectedDuxbanNode() {
+  for (const edge of getConnectedEdges(props.id)) {
+    const otherId = edge.source === props.id ? edge.target : edge.source
+    const otherNode = findNode(otherId)
+    if (otherNode?.type === 'duxban') return otherNode
+  }
+  return null
+}
+
+// nodeId -> nome de exibição, pra dux_kanban_list não expor uuid interno de
+// outros agentes conectados ao mesmo board
+function agentNamesForBoard(duxbanNode) {
+  const names = {}
+  for (const edge of getConnectedEdges(duxbanNode.id)) {
+    const otherId = edge.source === duxbanNode.id ? edge.target : edge.source
+    if (otherId === duxbanNode.id) continue
+    const otherNode = findNode(otherId)
+    if (otherNode) names[otherId] = otherNode.data.name || otherId
+  }
+  return names
+}
+
+// Chega pela mesma conexão ws persistente do terminal (duxbanLink.request,
+// no bridge, escreve nela diretamente) — o board mora aqui no renderer, o
+// bridge só faz a ida-e-volta. Resposta sempre volta como duxbanResponse,
+// mesmo em erro (card/ação inválida), pra não deixar a tool travada esperando.
+function handleDuxbanRequest(msg) {
+  const reply = (result, error) => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'duxbanResponse', requestId: msg.requestId, result, error }))
+    }
+  }
+
+  const board = findConnectedDuxbanNode()
+  if (!board) return reply(null, 'nenhum board DuxBan conectado a este terminal')
+
+  try {
+    if (msg.action === 'list') {
+      reply(serializeBoard(board.data, agentNamesForBoard(board), props.id))
+    } else if (msg.action === 'move_card') {
+      const card = moveCard(board.data, msg.payload?.cardId, msg.payload?.column)
+      reply({ ok: true, card_id: card.id })
+    } else if (msg.action === 'finish_task') {
+      const card = finishTask(board.data, msg.payload?.cardId, props.id)
+      reply({ ok: true, card_id: card.id })
+    } else {
+      reply(null, `ação desconhecida: ${msg.action}`)
+    }
+  } catch (err) {
+    reply(null, err.message)
+  }
+}
+
 function relinkExistingEdges() {
   for (const edge of getConnectedEdges(props.id)) {
     const otherId = edge.source === props.id ? edge.target : edge.source

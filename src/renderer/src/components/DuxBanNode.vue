@@ -1,6 +1,6 @@
 <template>
   <div
-    class="kanban-node"
+    class="duxban-node"
     :class="{ selected }"
     :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
   >
@@ -9,19 +9,22 @@
       id="left"
       type="target"
       :position="Position.Left"
-      class="kanban-handle"
+      class="duxban-handle"
       :class="{ connected: isLeftConnected }"
     />
     <Handle
       id="right"
       type="source"
       :position="Position.Right"
-      class="kanban-handle"
+      class="duxban-handle"
       :class="{ connected: isRightConnected }"
     />
 
-    <div class="kanban-header" :style="{ background: data.headerColor || undefined }">
-      <span class="kanban-title">{{ data.name }}</span>
+    <div class="duxban-header" :style="{ background: data.headerColor || undefined }">
+      <span class="duxban-title">{{ data.name }}</span>
+      <span v-if="connectedAgents.length" class="agent-count" :title="connectedAgents.map((a) => a.name).join(', ')">
+        {{ connectedAgents.length }} agente{{ connectedAgents.length === 1 ? '' : 's' }}
+      </span>
       <button class="header-btn nodrag" title="Configurações" @click="toggleNodeSettings(id)">
         <GearIcon />
       </button>
@@ -87,16 +90,33 @@
                 v-model="card.text"
                 class="card-textarea"
                 rows="2"
-                @input="persist"
                 @blur="stopEdit"
                 @keydown.enter.exact.prevent="stopEdit"
               />
               <p v-else class="card-text" @click="startEdit(card)">{{ card.text || 'Cartão vazio' }}</p>
-              <button class="card-remove" title="Excluir cartão" @click="removeCard(col, card.id)">
+              <button class="card-remove" title="Excluir cartão" @click="onRemoveCard(card.id)">
                 <svg viewBox="0 0 16 16" width="10" height="10">
                   <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
                 </svg>
               </button>
+
+              <div v-if="connectedAgents.length" class="card-assign">
+                <select
+                  class="assign-select"
+                  :value="card.assignedNodeId || ''"
+                  @change="onAssign(card, $event.target.value)"
+                  @mousedown.stop
+                >
+                  <option value="">Sem atribuição</option>
+                  <option v-for="agent in connectedAgents" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
+                </select>
+                <span
+                  v-if="card.assignedNodeId"
+                  class="task-status"
+                  :class="card.taskState"
+                  :title="STATUS_LABELS[card.taskState]"
+                />
+              </div>
             </div>
           </template>
           <div v-if="isDropTarget(col, col.cards.length)" class="drop-indicator" />
@@ -108,9 +128,9 @@
             class="add-card-input"
             type="text"
             placeholder="Novo cartão..."
-            @keyup.enter="addCard(col)"
+            @keyup.enter="onAddCard(col)"
           />
-          <button class="add-card-btn" title="Adicionar cartão" @click="addCard(col)">+</button>
+          <button class="add-card-btn" title="Adicionar cartão" @click="onAddCard(col)">+</button>
         </div>
       </div>
 
@@ -124,14 +144,21 @@
 </template>
 
 <script setup>
-import { nextTick, reactive, ref } from 'vue'
-import { Handle, Position } from '@vue-flow/core'
+import { computed, nextTick, reactive, ref } from 'vue'
+import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import GearIcon from './icons/GearIcon.vue'
 import ResizeGripIcon from './icons/ResizeGripIcon.vue'
 import NodeToolbar from './NodeToolbar.vue'
-import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
+import { toggleNodeSettings, AGENT_TERMINAL_TYPES } from '../store/flowStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
 import { useNodeResize } from '../lib/useNodeResize'
+import { normalizeColumns, addCard, removeCard, moveCard, assignCard } from '../lib/duxbanOps'
+
+const STATUS_LABELS = {
+  queued: 'Na fila — aguardando o agente ficar livre',
+  active: 'Em andamento',
+  done: 'Concluído'
+}
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -139,6 +166,7 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
+const { getConnectedEdges, findNode } = useVueFlow()
 const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
@@ -150,26 +178,38 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   defaultHeight: 420
 })
 
-// migra dados antigos/incompletos (ex: node criado antes de um campo existir)
-// pra sempre ter id/title/cards bem-formados antes de renderizar
-function normalizeColumns(raw) {
-  if (Array.isArray(raw) && raw.length) {
-    return raw.map((col) => ({
-      id: col.id || crypto.randomUUID(),
-      title: col.title || 'Coluna',
-      cards: Array.isArray(col.cards)
-        ? col.cards.map((card) => ({ id: card.id || crypto.randomUUID(), text: card.text || '' }))
-        : []
-    }))
+// Agentes conectados por edge — viram as opções do seletor de atribuição de
+// cada cartão. Deriva sozinho das edges (não é algo que se "adiciona" ao
+// board à parte): conectar um terminal aqui já é o bastante pra ele virar
+// atribuível.
+const connectedAgents = computed(() => {
+  const list = []
+  for (const edge of getConnectedEdges(props.id)) {
+    const otherId = edge.source === props.id ? edge.target : edge.source
+    const otherNode = findNode(otherId)
+    if (otherNode && AGENT_TERMINAL_TYPES.includes(otherNode.type)) {
+      list.push({ id: otherId, name: otherNode.data.name || otherId })
+    }
   }
-  return [
-    { id: crypto.randomUUID(), title: 'A fazer', cards: [] },
-    { id: crypto.randomUUID(), title: 'Fazendo', cards: [] },
-    { id: crypto.randomUUID(), title: 'Feito', cards: [] }
-  ]
-}
+  return list
+})
 
-const columns = ref(normalizeColumns(props.data.columns))
+// `props.data` é o objeto reativo real do node (o mesmo em workspace.nodes) —
+// diferente dos outros node types, aqui o template lê e edita ele
+// DIRETAMENTE (sem cópia local + updateNodeData) de propósito: uma tool do
+// agente (dux_kanban_move_card etc, via WslClaudeTerminalNode.vue) muda esse
+// mesmo objeto por fora, e precisa aparecer na tela sozinha, sem nenhum
+// mecanismo extra de sincronização.
+if (!Array.isArray(props.data.columns) || !props.data.columns.length) {
+  props.data.columns = normalizeColumns(props.data.columns)
+}
+if (!props.data.activeDispatch) props.data.activeDispatch = {}
+// computed, não uma referência fixa: duxbanOps troca `data.columns` por um
+// array NOVO a cada operação (ver comentário no topo de duxbanOps.js) — um
+// `const columns = props.data.columns` capturado uma vez ficaria preso na
+// referência antiga assim que a primeira operação rodasse
+const columns = computed(() => props.data.columns)
+
 const drafts = reactive({})
 const editingCardId = ref(null)
 const titleRefs = {}
@@ -181,26 +221,24 @@ const cardRefs = {}
 const dragState = reactive({ cardId: null })
 const hover = reactive({ colId: null, index: null })
 
-function persist() {
-  updateNodeData(props.id, { columns: columns.value })
-}
-
 function isDropTarget(col, index) {
   return dragState.cardId !== null && hover.colId === col.id && hover.index === index
 }
 
-function addCard(col) {
+function onAddCard(col) {
   const text = (drafts[col.id] || '').trim()
   if (!text) return
-  col.cards.push({ id: crypto.randomUUID(), text })
+  addCard(props.data, col.id, text)
   drafts[col.id] = ''
-  persist()
 }
 
-function removeCard(col, cardId) {
-  col.cards = col.cards.filter((c) => c.id !== cardId)
+function onRemoveCard(cardId) {
   if (editingCardId.value === cardId) editingCardId.value = null
-  persist()
+  removeCard(props.data, cardId)
+}
+
+function onAssign(card, nodeId) {
+  assignCard(props.data, card.id, nodeId || null)
 }
 
 function startEdit(card) {
@@ -214,13 +252,11 @@ function startEdit(card) {
 
 function stopEdit() {
   editingCardId.value = null
-  persist()
 }
 
 function addColumn() {
   const col = { id: crypto.randomUUID(), title: 'Nova coluna', cards: [] }
   columns.value.push(col)
-  persist()
   nextTick(() => {
     const el = titleRefs[col.id]
     el?.focus()
@@ -229,8 +265,15 @@ function addColumn() {
 }
 
 function removeColumn(colId) {
-  columns.value = columns.value.filter((c) => c.id !== colId)
-  persist()
+  const col = columns.value.find((c) => c.id === colId)
+  if (!col) return
+  // remove cartão por cartão (em vez de só cortar a coluna) pra liberar
+  // direito qualquer vaga de fila que algum deles estivesse ocupando — cada
+  // chamada troca `data.columns` por um array novo (ver duxbanOps.js), então
+  // reprocura o índice por id depois, não reusa o objeto `col` capturado acima
+  for (const card of [...col.cards]) removeCard(props.data, card.id)
+  const index = columns.value.findIndex((c) => c.id === colId)
+  if (index !== -1) columns.value.splice(index, 1)
 }
 
 function moveColumn(index, direction) {
@@ -238,20 +281,10 @@ function moveColumn(index, direction) {
   if (target < 0 || target >= columns.value.length) return
   const [col] = columns.value.splice(index, 1)
   columns.value.splice(target, 0, col)
-  persist()
 }
 
 function renameColumn(col, event) {
   col.title = event.target.value
-  persist()
-}
-
-function findCard(cardId) {
-  for (const col of columns.value) {
-    const idx = col.cards.findIndex((c) => c.id === cardId)
-    if (idx !== -1) return { col, idx }
-  }
-  return null
 }
 
 function onCardDragStart(col, card, event) {
@@ -292,22 +325,15 @@ function onColumnDrop(col) {
     dragState.cardId = null
     return
   }
-  const found = findCard(dragState.cardId)
-  if (!found) return
-  const { col: sourceCol, idx: sourceIndex } = found
-  let insertAt = hover.index
-  if (sourceCol.id === col.id && sourceIndex < insertAt) insertAt -= 1
-  const [card] = sourceCol.cards.splice(sourceIndex, 1)
-  col.cards.splice(insertAt, 0, card)
+  moveCard(props.data, dragState.cardId, col.id, hover.index)
   dragState.cardId = null
   hover.colId = null
   hover.index = null
-  persist()
 }
 </script>
 
 <style scoped>
-.kanban-node {
+.duxban-node {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -317,11 +343,11 @@ function onColumnDrop(col) {
   box-shadow: 0 8px 24px var(--color-shadow);
 }
 
-.kanban-node.selected {
+.duxban-node.selected {
   border-color: var(--selected-color);
 }
 
-.kanban-handle {
+.duxban-handle {
   width: 8px;
   height: 8px;
   background: var(--color-border-strong);
@@ -329,12 +355,12 @@ function onColumnDrop(col) {
   transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.kanban-handle.connected {
+.duxban-handle.connected {
   background: #3b82f6;
   box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
 }
 
-.kanban-header {
+.duxban-header {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -347,11 +373,11 @@ function onColumnDrop(col) {
   cursor: grab;
 }
 
-.kanban-header:active {
+.duxban-header:active {
   cursor: grabbing;
 }
 
-.kanban-title {
+.duxban-title {
   flex: 1;
   min-width: 0;
   font-size: 12.5px;
@@ -360,6 +386,17 @@ function onColumnDrop(col) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.agent-count {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .header-btn {
@@ -397,7 +434,7 @@ function onColumnDrop(col) {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  width: 200px;
+  width: 210px;
   height: 100%;
   background: var(--color-bg-app);
   border: 1px solid var(--color-border);
@@ -566,6 +603,63 @@ function onColumnDrop(col) {
   color: #ff6b6b;
 }
 
+.card-assign {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.assign-select {
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  padding: 0 3px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-surface-alt);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.assign-select:focus {
+  outline: none;
+  border-color: var(--color-text-secondary);
+}
+
+.task-status {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+}
+
+.task-status.queued {
+  background: transparent;
+  border: 1.5px solid #eab308;
+}
+
+.task-status.active {
+  background: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.task-status.done {
+  background: #22c55e;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
 .add-card-row {
   display: flex;
   gap: 4px;
@@ -645,7 +739,7 @@ function onColumnDrop(col) {
   transition: opacity 0.12s ease;
 }
 
-.kanban-node:hover .resize-handle {
+.duxban-node:hover .resize-handle {
   opacity: 1;
 }
 </style>

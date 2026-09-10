@@ -1,6 +1,7 @@
 import { computed, ref, toRaw, watch } from 'vue'
 import { createWorkspaceSync } from '../lib/workspaceSync'
 import { unlinkAgents, unlinkNoteFromAgent } from '../lib/bridgeClient'
+import { unassignAllForNode } from '../lib/duxbanOps'
 
 // tipos de node que rodam um terminal (mesmo componente WslClaudeTerminalNode
 // por trás — ver templates em FleetCanvas.vue e o comentário em
@@ -16,6 +17,15 @@ export const TERMINAL_TYPES = [
   'powershell-terminal',
   'cmd-terminal'
 ]
+
+// subconjunto de TERMINAL_TYPES que roda um agente de IA de verdade (Claude
+// Code ou Codex), não um shell puro — usado pelo DuxBanNode.vue pra decidir
+// quem pode ser atribuído a um cartão. Atribuir a um shell/PowerShell/CMD
+// faria o aviso de tarefa (texto auto-confirmado com Enter, ver
+// duxbanLink.pushTask) virar comando de shell de verdade, sem ninguém ali
+// pra interpretá-lo como instrução.
+export const AGENT_TERMINAL_TYPES = ['wsl-claude-terminal', 'claude-terminal', 'codex-terminal']
+
 const NOTE_TYPE = 'notes'
 
 // id precisa ser um UUID de verdade — a coluna workspace_id no backend é
@@ -69,6 +79,18 @@ export const activeSettingsNodeId = ref(null)
 // Terminal que recebe o texto ditado por voz — o último node de terminal
 // clicado, não persistido (só faz sentido durante a sessão atual da janela).
 export const activeTerminalId = ref(null)
+
+// Node atualmente em modo fullscreen no canvas (zoom + trava de pan/zoom até
+// sair) — também não persistido, é um estado só de UI da sessão atual.
+export const fullscreenNodeId = ref(null)
+
+export function toggleFullscreen(id) {
+  fullscreenNodeId.value = fullscreenNodeId.value === id ? null : id
+}
+
+export function exitFullscreen() {
+  fullscreenNodeId.value = null
+}
 
 export function setActiveTerminal(id) {
   activeTerminalId.value = id
@@ -232,12 +254,19 @@ export function removeNode(id) {
       unlinkNoteFromAgent(otherId, deletedNode.data.path)
     } else if (otherNode?.type === NOTE_TYPE && deletedIsTerminal) {
       unlinkNoteFromAgent(id, otherNode.data.path)
+    } else if (deletedNode.type === 'duxban' && otherIsTerminal) {
+      // o node apagado é o próprio board, nada mais a limpar do lado dele
+    } else if (otherNode?.type === 'duxban' && deletedIsTerminal) {
+      // apagou um terminal atribuído a cartões do board do outro lado —
+      // libera esses cartões (senão ficam presos esperando um agente que já era)
+      unassignAllForNode(otherNode.data, id)
     }
   }
   ws.edges = remainingEdges
   ws.nodes.splice(index, 1)
 
   if (activeSettingsNodeId.value === id) activeSettingsNodeId.value = null
+  if (fullscreenNodeId.value === id) fullscreenNodeId.value = null
 }
 
 export const nodePendingDeleteId = ref(null)

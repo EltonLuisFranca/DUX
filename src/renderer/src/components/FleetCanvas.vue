@@ -9,6 +9,11 @@
     :default-edge-options="{ type: edgeStyle }"
     :snap-to-grid="snapEnabled"
     :snap-grid="[SNAP_GRID_SIZE, SNAP_GRID_SIZE]"
+    :pan-on-drag="!isFullscreenActive"
+    :zoom-on-scroll="!isFullscreenActive"
+    :zoom-on-pinch="!isFullscreenActive"
+    :zoom-on-double-click="!isFullscreenActive"
+    :nodes-draggable="!isFullscreenActive"
     connection-mode="loose"
     @node-click="handleNodeClick"
     @dragover="handleDragOver"
@@ -74,8 +79,8 @@
     <template #node-pomodoro="nodeProps">
       <PomodoroNode v-bind="nodeProps" />
     </template>
-    <template #node-kanban="nodeProps">
-      <KanbanNode v-bind="nodeProps" />
+    <template #node-duxban="nodeProps">
+      <DuxBanNode v-bind="nodeProps" />
     </template>
 
     <template #edge-default="edgeProps">
@@ -128,7 +133,7 @@ import GitNode from './GitNode.vue'
 import ImageNode from './ImageNode.vue'
 import HttpNode from './HttpNode.vue'
 import PomodoroNode from './PomodoroNode.vue'
-import KanbanNode from './KanbanNode.vue'
+import DuxBanNode from './DuxBanNode.vue'
 import { theme, canvasVariant, edgeStyle, snapEnabled, SNAP_GRID_SIZE } from '../store/themeStore'
 import {
   onNodeClicked,
@@ -138,8 +143,11 @@ import {
   setActiveTerminal,
   openSearch,
   lastAddedNodeId,
-  TERMINAL_TYPES
+  TERMINAL_TYPES,
+  fullscreenNodeId,
+  exitFullscreen
 } from '../store/flowStore'
+import { unassignAllForNode } from '../lib/duxbanOps'
 import DuxSearch from './DuxSearch.vue'
 import { nodeTypeRegistry } from '../nodeTypes/registry'
 import { linkAgents, unlinkAgents, linkNoteToAgent, unlinkNoteFromAgent } from '../lib/bridgeClient'
@@ -163,8 +171,27 @@ const {
   removeSelectedNodes,
   addEdges,
   setCenter,
-  viewport
+  viewport,
+  fitView,
+  setViewport
 } = useVueFlow()
+
+// só != null na instância de FleetCanvas cujo workspace realmente contém o
+// node em fullscreen agora (ver watch(fullscreenNodeId) abaixo) — como cada
+// workspace tem seu próprio FleetCanvas montado em paralelo, todas recebem a
+// mudança do ref global, mas só uma tem o node e de fato entra/sai do modo
+let savedViewport = null
+const isFullscreenActive = computed(() => !!fullscreenNodeId.value && !!findNode(fullscreenNodeId.value))
+
+watch(fullscreenNodeId, (id, prevId) => {
+  if (id && findNode(id)) {
+    savedViewport = { ...viewport.value }
+    fitView({ nodes: [id], padding: 0.04, duration: 300 })
+  } else if (!id && prevId && savedViewport) {
+    setViewport(savedViewport, { duration: 300 })
+    savedViewport = null
+  }
+})
 
 const dotColor = computed(() => (theme.value === 'light' ? '#c4c4cc' : '#55555e'))
 
@@ -258,6 +285,20 @@ function handleConnect(connection) {
 
 // Vue Flow só reporta edges removidas (drag pra fora, tecla delete, etc.) por
 // aqui — não existe um evento "disconnect" dedicado
+// dado um par (source, target) de uma edge duxban<->terminal, em qualquer
+// ordem, retorna { boardNode, terminalId } — ou null se o par não for esse caso
+function duxbanAgentPair(sourceId, targetId) {
+  const sourceNode = findNode(sourceId)
+  const targetNode = findNode(targetId)
+  if (sourceNode?.type === 'duxban' && isTerminalNode(targetId)) {
+    return { boardNode: sourceNode, terminalId: targetId }
+  }
+  if (targetNode?.type === 'duxban' && isTerminalNode(sourceId)) {
+    return { boardNode: targetNode, terminalId: sourceId }
+  }
+  return null
+}
+
 function handleEdgesChange(changes) {
   for (const change of changes) {
     if (change.type !== 'remove') continue
@@ -269,6 +310,8 @@ function handleEdgesChange(changes) {
     }
     const pair = noteAgentPair(edge.source, edge.target)
     if (pair) unlinkNoteFromAgent(pair.terminalId, pair.notePath)
+    const duxbanPair = duxbanAgentPair(edge.source, edge.target)
+    if (duxbanPair) unassignAllForNode(duxbanPair.boardNode.data, duxbanPair.terminalId)
   }
 }
 
@@ -345,6 +388,12 @@ function onKeydown(event) {
     event.preventDefault()
     event.stopPropagation()
     openSearch()
+  } else if (event.key === 'Escape' && isFullscreenActive.value) {
+    // captura antes do xterm.js pelo mesmo motivo dos atalhos acima — senão
+    // Esc com um terminal fullscreen focado nunca chega até aqui
+    event.preventDefault()
+    event.stopPropagation()
+    exitFullscreen()
   }
 }
 
