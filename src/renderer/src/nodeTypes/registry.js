@@ -77,6 +77,15 @@ export const nodeTypeRegistry = {
     createFormProps: { command: 'codex' },
     icon: TERMINAL_ICON
   },
+  'shell-terminal': {
+    label: 'Terminal',
+    description: 'Shell interativo (zsh) local, sem agente de IA.',
+    category: 'tools',
+    settingsComponent: TerminalSettings,
+    createForm: TerminalCreateForm,
+    createFormProps: { command: 'shell' },
+    icon: TERMINAL_ICON
+  },
   'wsl-terminal': {
     label: 'Terminal WSL',
     description: 'Shell interativo (zsh) dentro do WSL, sem agente de IA.',
@@ -173,5 +182,19 @@ export const nodeTypeRegistry = {
     category: 'utility',
     createData: () => ({ name: 'Pomodoro' }),
     icon: '<circle cx="10" cy="11" r="7" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M10 7v4l3 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M8 2.5h4M10 2.5V4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
+  },
+  kanban: {
+    label: 'Kanban',
+    description: 'Quadro de tarefas com colunas e cartões — distribua e acompanhe o que cada agente está fazendo.',
+    category: 'utility',
+    createData: () => ({
+      name: 'Kanban',
+      columns: [
+        { id: crypto.randomUUID(), title: 'A fazer', cards: [] },
+        { id: crypto.randomUUID(), title: 'Fazendo', cards: [] },
+        { id: crypto.randomUUID(), title: 'Feito', cards: [] }
+      ]
+    }),
+    icon: '<rect x="2" y="3" width="4.5" height="14" rx="1.3" stroke="currentColor" stroke-width="1.3" fill="none"/><rect x="7.8" y="3" width="4.5" height="9" rx="1.3" stroke="currentColor" stroke-width="1.3" fill="none"/><rect x="13.6" y="3" width="4.5" height="11" rx="1.3" stroke="currentColor" stroke-width="1.3" fill="none"/>'
   }
 }

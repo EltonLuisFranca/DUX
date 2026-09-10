@@ -41,6 +41,9 @@
     <template #node-codex-terminal="nodeProps">
       <WslClaudeTerminalNode v-bind="nodeProps" />
     </template>
+    <template #node-shell-terminal="nodeProps">
+      <WslClaudeTerminalNode v-bind="nodeProps" />
+    </template>
     <template #node-wsl-terminal="nodeProps">
       <WslClaudeTerminalNode v-bind="nodeProps" />
     </template>
@@ -70,6 +73,9 @@
     </template>
     <template #node-pomodoro="nodeProps">
       <PomodoroNode v-bind="nodeProps" />
+    </template>
+    <template #node-kanban="nodeProps">
+      <KanbanNode v-bind="nodeProps" />
     </template>
 
     <template #edge-default="edgeProps">
@@ -122,6 +128,7 @@ import GitNode from './GitNode.vue'
 import ImageNode from './ImageNode.vue'
 import HttpNode from './HttpNode.vue'
 import PomodoroNode from './PomodoroNode.vue'
+import KanbanNode from './KanbanNode.vue'
 import { theme, canvasVariant, edgeStyle, snapEnabled, SNAP_GRID_SIZE } from '../store/themeStore'
 import {
   onNodeClicked,

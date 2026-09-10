@@ -11,6 +11,7 @@ export const TERMINAL_TYPES = [
   'wsl-claude-terminal',
   'claude-terminal',
   'codex-terminal',
+  'shell-terminal',
   'wsl-terminal',
   'powershell-terminal',
   'cmd-terminal'
