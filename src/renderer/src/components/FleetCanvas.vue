@@ -67,6 +67,9 @@
     <template #node-ollama="nodeProps">
       <OllamaNode v-bind="nodeProps" />
     </template>
+    <template #node-merlin="nodeProps">
+      <MerlinNode v-bind="nodeProps" />
+    </template>
     <template #node-git="nodeProps">
       <GitNode v-bind="nodeProps" />
     </template>
@@ -129,6 +132,7 @@ import WslClaudeTerminalNode from './WslClaudeTerminalNode.vue'
 import NotesNode from './NotesNode.vue'
 import BrowserNode from './BrowserNode.vue'
 import OllamaNode from './OllamaNode.vue'
+import MerlinNode from './MerlinNode.vue'
 import GitNode from './GitNode.vue'
 import ImageNode from './ImageNode.vue'
 import HttpNode from './HttpNode.vue'

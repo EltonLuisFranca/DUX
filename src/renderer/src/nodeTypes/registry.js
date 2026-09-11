@@ -3,6 +3,8 @@ import TerminalCreateForm from '../components/nodeCreate/TerminalCreateForm.vue'
 import BrowserCreateForm from '../components/nodeCreate/BrowserCreateForm.vue'
 import OllamaCreateForm from '../components/nodeCreate/OllamaCreateForm.vue'
 import OllamaSettings from '../components/nodeSettings/OllamaSettings.vue'
+import MerlinCreateForm from '../components/nodeCreate/MerlinCreateForm.vue'
+import MerlinSettings from '../components/nodeSettings/MerlinSettings.vue'
 import GitCreateForm from '../components/nodeCreate/GitCreateForm.vue'
 import ImageCreateForm from '../components/nodeCreate/ImageCreateForm.vue'
 import HttpCreateForm from '../components/nodeCreate/HttpCreateForm.vue'
@@ -17,6 +19,9 @@ const BROWSER_ICON =
 
 const OLLAMA_ICON =
   '<circle cx="10" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M4 17.5c0-3 2.7-5.5 6-5.5s6 2.5 6 5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><circle cx="7.8" cy="6.5" r="0.9" fill="currentColor"/><circle cx="12.2" cy="6.5" r="0.9" fill="currentColor"/>'
+
+const MERLIN_ICON =
+  '<path d="M10 2.3c.7 3.2 2.4 4.9 5.5 5.5-3.1.6-4.8 2.3-5.5 5.5-.7-3.2-2.4-4.9-5.5-5.5 3.1-.6 4.8-2.3 5.5-5.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none"/><circle cx="15.7" cy="15.3" r="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/>'
 
 const GIT_ICON =
   '<circle cx="10" cy="10" r="1.8" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="5" cy="4.5" r="1.8" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="5" cy="15.5" r="1.8" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M5 6.3V13.7M11.6 9.2C10 7.6 8 6.3 5 6.3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/>'
@@ -126,6 +131,14 @@ export const nodeTypeRegistry = {
     createForm: OllamaCreateForm,
     settingsComponent: OllamaSettings,
     icon: OLLAMA_ICON
+  },
+  merlin: {
+    label: 'Merlin',
+    description: 'Assistente de voz: diga "Merlin" para chamar, converse e ele responde falando — respostas curtas, estilo Jarvis.',
+    category: 'agents',
+    createForm: MerlinCreateForm,
+    settingsComponent: MerlinSettings,
+    icon: MERLIN_ICON
   },
   browser: {
     label: 'Navegador',

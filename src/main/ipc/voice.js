@@ -97,6 +97,7 @@ async function ensureWhisperServer() {
     ])
     whisperServerProcess.stdout.on('data', (chunk) => console.log(`[whisper-server] ${chunk}`))
     whisperServerProcess.stderr.on('data', (chunk) => console.error(`[whisper-server] ${chunk}`))
+    whisperServerProcess.on('error', (err) => console.error('[whisper-server][spawn-error]', err))
     whisperServerProcess.on('exit', (code) => {
       console.log(`[whisper-server] exited with code ${code}`)
       whisperServerProcess = null
