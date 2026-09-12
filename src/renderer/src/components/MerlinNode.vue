@@ -382,6 +382,71 @@ let lastTs = 0
 let clock = 0
 let rotationAngle = 0
 
+// --- rosto do Merlin: vídeo de verdade (drawImage de um <video> em loop) em
+// vez de recortar/colar fotos estáticas diferentes — tentativa anterior
+// compunha três gerações de IA independentes (base/boca/piscar) como se
+// fossem frames alinhados do mesmo clipe, mas pose/cabelo/luz variavam entre
+// elas e o recorte colado ficava com fantasma. Um clipe gerado por IA
+// image-to-vídeo a partir da própria merlin-face.png já pisca, fala e balança
+// o cabelo com coerência de verdade (mesma origem, sem costura), então basta
+// desenhar o frame atual do vídeo — sem precisar mais calibrar região de
+// olho/boca nenhuma.
+const FACE_POSTER_URL = '/merlin-face.png' // usado só enquanto o vídeo do estado ainda não deu o primeiro frame
+
+// um clipe por "grupo" de estado — hoje só existe "idle" (cobre todos os
+// estados). Pra dar um clipe dedicado a falar, grave um vídeo novo, salve em
+// public/ e adicione a chave aqui (ex: speaking: '/merlin-face-speaking.png');
+// clipKeyForState já cai automaticamente pra 'idle' pra qualquer estado sem
+// clipe próprio.
+const VIDEO_CLIPS = {
+  idle: '/merlin-face-idle.mp4'
+}
+
+function clipKeyForState(s) {
+  return VIDEO_CLIPS[s] ? s : 'idle'
+}
+
+let facePoster = null
+const faceVideos = {}
+
+function loadFacePoster() {
+  const img = new Image()
+  img.src = FACE_POSTER_URL
+  facePoster = img // drawImage de uma <img> incompleta simplesmente não desenha nada, é seguro
+}
+
+function loadFaceVideos() {
+  for (const [key, src] of Object.entries(VIDEO_CLIPS)) {
+    const video = document.createElement('video')
+    video.src = src
+    video.muted = true
+    video.loop = true
+    video.playsInline = true
+    video.preload = 'auto'
+    // fora da tela em vez de display:none — alguns navegadores pausam o
+    // decode de vídeo com display:none, mesmo chamando .play()
+    video.style.position = 'fixed'
+    video.style.left = '-9999px'
+    video.style.top = '-9999px'
+    video.style.width = '2px'
+    video.style.height = '2px'
+    document.body.appendChild(video)
+    video.play().catch(() => {})
+    faceVideos[key] = video
+  }
+}
+
+function currentFaceMedia() {
+  const video = faceVideos[clipKeyForState(state.value)]
+  if (video && video.readyState >= 2) {
+    return { el: video, w: video.videoWidth, h: video.videoHeight }
+  }
+  if (facePoster?.complete && facePoster.naturalWidth) {
+    return { el: facePoster, w: facePoster.naturalWidth, h: facePoster.naturalHeight }
+  }
+  return null
+}
+
 function avgWaveLevel() {
   const levels = waveLevels.value
   if (!levels.length) return 0
@@ -544,68 +609,116 @@ function draw() {
   ctx.globalCompositeOperation = 'source-over'
 }
 
-function inEllipse(px, py, ex, ey, rx, ry) {
-  const dx = (px - ex) / rx
-  const dy = (py - ey) / ry
-  return dx * dx + dy * dy < 1
+// canvas auxiliar (fora da tela) reutilizado a cada frame — é nele que
+// montamos a foto + piscar/falar + scanlines + varredura ANTES de aplicar o
+// degradê que dissolve a borda; só redimensiona quando o tamanho realmente
+// muda, não recria a cada frame.
+let faceOffCanvas = null
+let faceOffCtx = null
+function getFaceOffscreen(w, h) {
+  if (!faceOffCanvas) {
+    faceOffCanvas = document.createElement('canvas')
+    faceOffCtx = faceOffCanvas.getContext('2d')
+  }
+  const iw = Math.max(1, Math.round(w))
+  const ih = Math.max(1, Math.round(h))
+  if (faceOffCanvas.width !== iw || faceOffCanvas.height !== ih) {
+    faceOffCanvas.width = iw
+    faceOffCanvas.height = ih
+  } else {
+    faceOffCtx.clearRect(0, 0, iw, ih)
+  }
+  return faceOffCtx
 }
 
-// hash bem simples — sem precisar guardar estado por célula, dá um caractere
-// "aleatório" estável por (linha, coluna) que só troca quando `tick` muda,
-// criando o efeito de dígitos piscando aos poucos (tipo Matrix) sem virar
-// ruído ilegível a 60fps.
-function faceChar(row, col, tick) {
-  const h = (row * 928371 + col * 123457 + tick * 39916801) >>> 0
-  return h % 2 === 0 ? '1' : '0'
-}
+// janela normalizada (fração 0..1 do frame inteiro do vídeo/foto) que o
+// canvas auxiliar cobre de ponta a ponta — um pouco maior que 0..1 pra sobrar
+// cabelo/ombro nas bordas antes do degradê dissolver.
+const FACE_WINDOW = { nxMin: -0.18, nyMin: -0.2, nxMax: 1.15, nyMax: 1.28 }
 
-// rosto feito de 0s e 1s, no vazio no centro do anel — contorno oval, dois
-// "furos" ovais pros olhos, e uma faixa embaixo pra boca que só se abre de
-// verdade (cresce pra baixo) enquanto o Merlin está no estado "falando";
-// fora disso fica como uma linha fina fechada. Deriva bem devagar (drift)
-// pra não ficar estático, mas sem se afastar muito do centro.
+// rosto = o frame atual do vídeo desenhado DIRETO (drawImage de um <video> em
+// loop), não mais um recorte colado de fotos estáticas diferentes — piscar e
+// falar já vêm de verdade do próprio clipe, coerentes entre si (mesma
+// origem), então não tem mais calibração de região de olho/boca nenhuma pra
+// manter. A borda ainda DISSOLVE suavemente com um degradê radial (resolve o
+// descompasso do cabelo com o crop retangular e dá o clima de holograma).
+// Scanlines + uma varredura de luz subindo/descendo bem devagar somam textura
+// e movimento por cima do vídeo. Tudo desenhado num canvas auxiliar e só
+// então colado (com uma leve cintilação de opacidade) no anel principal.
 function drawFace(cx, cy, gradient, flatColor, brightAmount) {
-  const isSpeakingNow = state.value === 'speaking'
-  const mouthOpen = isSpeakingNow ? Math.abs(Math.sin(clock * 9)) : 0
+  const media = currentFaceMedia()
+  if (!media) return
 
   const driftX = Math.sin(clock * 0.17) * size * 0.012
   const driftY = Math.cos(clock * 0.13) * size * 0.009
   const faceCx = cx + driftX
   const faceCy = cy + driftY
 
-  const faceW = size * 0.36
-  const faceH = size * 0.44
-  const cols = 18
-  const rows = 22
-  const cellH = faceH / rows
-  const tick = Math.floor(clock * 2.5)
+  const breathe = 1 + 0.014 * Math.sin(clock * 0.85)
+  const boxW = size * 0.33 * breathe
+  const boxH = size * 0.45 * breathe
+  const ox = faceCx - boxW * 0.5
+  const oy = faceCy - boxH * 0.46
 
-  ctx.shadowBlur = 0
-  ctx.font = `${Math.max(6, cellH * 0.95).toFixed(1)}px "Menlo", "Consolas", monospace`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
+  const { nxMin, nyMin, nxMax, nyMax } = FACE_WINDOW
+  const offW = boxW * dpr * 1.15
+  const offH = boxH * dpr * 1.15
+  const off = getFaceOffscreen(offW, offH)
 
-  const mouthTop = 0.32
-  const mouthBottom = mouthTop + 0.08 + mouthOpen * 0.35
+  const sx0 = nxMin * media.w
+  const sy0 = nyMin * media.h
+  const srcW = (nxMax - nxMin) * media.w
+  const srcH = (nyMax - nyMin) * media.h
 
-  for (let row = 0; row < rows; row++) {
-    const ny = (row / (rows - 1)) * 2 - 1
-    for (let col = 0; col < cols; col++) {
-      const nx = (col / (cols - 1)) * 2 - 1
+  off.drawImage(media.el, sx0, sy0, srcW, srcH, 0, 0, offW, offH)
 
-      if (nx * nx + (ny / 1.12) ** 2 > 1) continue // fora do contorno oval do rosto
-      if (inEllipse(nx, ny, 0.35, -0.15, 0.16, 0.12) || inEllipse(nx, ny, -0.35, -0.15, 0.16, 0.12)) continue // olhos
-      if (ny > mouthTop && ny < mouthBottom && Math.abs(nx) < 0.34) continue // boca
+  // scanlines estáticas — textura fina tipo tela/holograma
+  off.save()
+  off.fillStyle = 'rgba(0, 0, 0, 0.14)'
+  const lineStep = Math.max(2, offH * 0.012)
+  for (let y = 0; y < offH; y += lineStep * 2) off.fillRect(0, y, offW, lineStep)
+  off.restore()
 
-      const px = faceCx + nx * (faceW / 2)
-      const py = faceCy + ny * (faceH / 2)
-      const t = Math.min(1, Math.max(0, (ny + 1) / 2))
-      const [r, g, b] = brighten(gradient ? lerpColor(gradient[0], gradient[1], t) : flatColor, Math.min(0.85, brightAmount + 0.1))
-      const alpha = 0.3 + (1 - Math.min(1, Math.abs(nx * ny) * 2)) * 0.3
-      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`
-      ctx.fillText(faceChar(row, col, tick), px, py)
-    }
-  }
+  // varredura de luz subindo e descendo bem devagar — garante que sempre
+  // tem ALGUM movimento contínuo acontecendo, não só respiração
+  const sweepT = Math.sin(clock * 0.35) * 0.5 + 0.5
+  const sweepY = sweepT * offH
+  const sweepBand = offH * 0.16
+  const sweepGrad = off.createLinearGradient(0, sweepY - sweepBand, 0, sweepY + sweepBand)
+  sweepGrad.addColorStop(0, 'rgba(190, 230, 255, 0)')
+  sweepGrad.addColorStop(0.5, 'rgba(200, 240, 255, 0.2)')
+  sweepGrad.addColorStop(1, 'rgba(190, 230, 255, 0)')
+  off.save()
+  off.globalCompositeOperation = 'lighter'
+  off.fillStyle = sweepGrad
+  off.fillRect(0, sweepY - sweepBand, offW, sweepBand * 2)
+  off.restore()
+
+  // degradê radial dissolvendo a borda — em vez de recortar numa silhueta
+  // desenhada à mão (que nunca batia com o cabelo de verdade), a imagem
+  // inteira (foto + scanlines + varredura) vai sumindo suavemente pra
+  // transparente perto da borda; escala não-uniforme faz o "círculo" virar
+  // uma elipse acompanhando a proporção da caixa (mais alta que larga)
+  off.save()
+  off.globalCompositeOperation = 'destination-in'
+  off.translate(offW / 2, offH * 0.48)
+  off.scale(1, offH / offW)
+  const featherR = offW * 0.56
+  const feather = off.createRadialGradient(0, 0, featherR * 0.52, 0, 0, featherR)
+  feather.addColorStop(0, 'rgba(255, 255, 255, 1)')
+  feather.addColorStop(0.75, 'rgba(255, 255, 255, 1)')
+  feather.addColorStop(1, 'rgba(255, 255, 255, 0)')
+  off.fillStyle = feather
+  off.fillRect(-offW, -offH, offW * 2, offH * 2)
+  off.restore()
+
+  // cola o resultado no anel principal, com uma leve cintilação de opacidade
+  // (instabilidade sutil, tipo projeção de luz — não 100% sólida e parada)
+  const flicker = 0.93 + Math.sin(clock * 37) * 0.02 + Math.sin(clock * 71) * 0.012
+  ctx.save()
+  ctx.globalAlpha = Math.max(0.8, Math.min(1, flicker))
+  ctx.drawImage(faceOffCanvas, ox + nxMin * boxW, oy + nyMin * boxH, (nxMax - nxMin) * boxW, (nyMax - nyMin) * boxH)
+  ctx.restore()
 }
 
 function frame(ts) {
@@ -633,6 +746,8 @@ function resizeCanvas() {
 }
 
 onMounted(() => {
+  loadFacePoster()
+  loadFaceVideos()
   nextTick(() => {
     resizeCanvas()
     resizeObserver = new ResizeObserver(resizeCanvas)
@@ -648,6 +763,10 @@ onBeforeUnmount(() => {
   abortController?.abort()
   stopSpeaking()
   cancelRecording()
+  for (const video of Object.values(faceVideos)) {
+    video.pause()
+    video.remove()
+  }
   window.removeEventListener('mousedown', closeMenuOnOutsideEvent, { capture: true })
   window.removeEventListener('keydown', closeMenuOnOutsideEvent)
 })

@@ -24,6 +24,14 @@
       <span class="status-dot" :class="status" />
       <span class="ollama-title">{{ data.name || data.model }}</span>
       <span class="ollama-model">{{ data.model }}</span>
+      <button
+        class="settings-btn nodrag"
+        title="Nova conversa"
+        :disabled="!data.messages?.length"
+        @click="newConversation"
+      >
+        <NewChatIcon />
+      </button>
       <button class="settings-btn nodrag" title="Configurações" @click="toggleNodeSettings(id)">
         <GearIcon />
       </button>
@@ -40,8 +48,23 @@
           </summary>
           <pre class="tool-result">{{ msg.content }}</pre>
         </details>
-        <div v-else-if="msg.content" class="msg" :class="msg.role">
-          <div class="msg-bubble">{{ msg.content }}</div>
+        <div v-else-if="msg.content || msg.images?.length" class="msg" :class="msg.role">
+          <div class="msg-bubble">
+            <div v-if="msg.images?.length" class="msg-images">
+              <img
+                v-for="(img, imgIndex) in msg.images"
+                :key="imgIndex"
+                class="msg-image"
+                :src="`data:${img.mimeType};base64,${img.base64}`"
+                alt=""
+              />
+            </div>
+            <template v-if="msg.content">{{ msg.content }}</template>
+          </div>
+          <button class="copy-btn nodrag" title="Copiar" @click="copyMessage(msg.content, index)">
+            <CheckIcon v-if="copiedIndex === index" />
+            <CopyIcon v-else />
+          </button>
         </div>
       </template>
       <div v-if="streamingText" class="msg assistant">
@@ -52,7 +75,43 @@
       </div>
     </div>
 
+    <div v-if="pendingImages.length" class="pending-images nodrag nowheel nopan">
+      <div v-for="img in pendingImages" :key="img.id" class="pending-image">
+        <img :src="`data:${img.mimeType};base64,${img.base64}`" alt="" />
+        <button class="pending-image-remove" title="Remover" @click="removePendingImage(img.id)">
+          <svg viewBox="0 0 16 16" width="9" height="9">
+            <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
     <div class="ollama-composer nodrag nowheel nopan">
+      <input
+        ref="fileInputEl"
+        type="file"
+        accept="image/*"
+        multiple
+        class="file-input-hidden"
+        @change="onFilesSelected"
+      />
+      <button
+        class="attach-btn"
+        title="Anexar imagem"
+        :disabled="status === 'sending'"
+        @click="fileInputEl?.click()"
+      >
+        <svg viewBox="0 0 16 16" width="14" height="14">
+          <path
+            d="M10.5 4.5l-5 5a2.12 2.12 0 0 0 3 3l5.5-5.5a3.54 3.54 0 0 0-5-5L3.5 7.5a5 5 0 0 0 7 7L15 10"
+            stroke="currentColor"
+            stroke-width="1.4"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            fill="none"
+          />
+        </svg>
+      </button>
       <textarea
         v-model="draft"
         class="composer-input"
@@ -61,7 +120,11 @@
         :disabled="status === 'sending'"
         @keydown.enter.exact.prevent="send"
       ></textarea>
-      <button class="send-btn" :disabled="status === 'sending' || !draft.trim()" @click="send">
+      <button
+        class="send-btn"
+        :disabled="status === 'sending' || (!draft.trim() && !pendingImages.length)"
+        @click="send"
+      >
         <svg viewBox="0 0 16 16" width="14" height="14">
           <path d="M2 8h11M8 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
         </svg>
@@ -79,6 +142,9 @@ import { nextTick, onBeforeUnmount, ref } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import GearIcon from './icons/GearIcon.vue'
 import ResizeGripIcon from './icons/ResizeGripIcon.vue'
+import CopyIcon from './icons/CopyIcon.vue'
+import CheckIcon from './icons/CheckIcon.vue'
+import NewChatIcon from './icons/NewChatIcon.vue'
 import NodeToolbar from './NodeToolbar.vue'
 import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { streamChat } from '../lib/ollamaClient'
@@ -98,10 +164,12 @@ function formatToolArgs(args) {
 }
 
 // mensagens exibidas (data.messages, guardadas no formato normalizado
-// { id, name, arguments } pros tool_calls — ver ollamaClient.js) -> formato
-// que cada backend espera de volta no request. Precisa reconverter dois
-// casos: a mensagem assistant que carrega tool_calls (formato normalizado
-// -> formato nativo de cada API) e as mensagens role:'tool' com o resultado.
+// { id, name, arguments } pros tool_calls, { base64, mimeType } pras imagens
+// — ver ollamaClient.js) -> formato que cada backend espera de volta no
+// request. Precisa reconverter três casos: a mensagem assistant que carrega
+// tool_calls (formato normalizado -> formato nativo de cada API), as
+// mensagens role:'tool' com o resultado, e mensagens de usuário com imagens
+// anexadas (modelo precisa suportar visão, ex: qwen3-vl).
 function toApiMessages(messages, api) {
   return messages.map((msg) => {
     if (msg.role === 'assistant' && msg.tool_calls?.length) {
@@ -116,11 +184,28 @@ function toApiMessages(messages, api) {
       return { role: 'assistant', content: msg.content, tool_calls }
     }
 
-    if (msg.role !== 'tool') return msg
+    if (msg.role === 'tool') {
+      return api === 'openwebui'
+        ? { role: 'tool', tool_call_id: msg.toolCallId, content: msg.content }
+        : { role: 'tool', tool_name: msg.name, content: msg.content }
+    }
 
-    return api === 'openwebui'
-      ? { role: 'tool', tool_call_id: msg.toolCallId, content: msg.content }
-      : { role: 'tool', tool_name: msg.name, content: msg.content }
+    if (msg.role === 'user' && msg.images?.length) {
+      // Ollama nativo: array de base64 cru no campo `images` da mensagem.
+      // OpenAI-compatible (Open WebUI): content vira array de partes
+      // text/image_url, cada imagem como data URL.
+      if (api === 'openwebui') {
+        const parts = []
+        if (msg.content) parts.push({ type: 'text', text: msg.content })
+        for (const img of msg.images) {
+          parts.push({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.base64}` } })
+        }
+        return { role: 'user', content: parts }
+      }
+      return { role: 'user', content: msg.content, images: msg.images.map((img) => img.base64) }
+    }
+
+    return msg
   })
 }
 
@@ -142,11 +227,45 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
 })
 
 const historyEl = ref(null)
+const fileInputEl = ref(null)
 const draft = ref('')
 const status = ref('idle')
 const streamingText = ref('')
 const errorText = ref('')
+const copiedIndex = ref(null)
+const pendingImages = ref([])
 let abortController = null
+let copiedTimeout = null
+let nextImageId = 0
+
+function fileToImageEntry(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const [, mimeType, base64] = /^data:(.+?);base64,(.*)$/s.exec(reader.result) || []
+      if (!base64) return reject(new Error('invalid image data'))
+      resolve({ id: nextImageId++, mimeType, base64 })
+    }
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
+async function onFilesSelected(event) {
+  const files = [...(event.target.files || [])].filter((f) => f.type.startsWith('image/'))
+  event.target.value = ''
+  for (const file of files) {
+    try {
+      pendingImages.value = [...pendingImages.value, await fileToImageEntry(file)]
+    } catch (err) {
+      console.error('[ollama-node] failed to read image', err)
+    }
+  }
+}
+
+function removePendingImage(id) {
+  pendingImages.value = pendingImages.value.filter((img) => img.id !== id)
+}
 
 function scrollToBottom() {
   nextTick(() => {
@@ -154,13 +273,38 @@ function scrollToBottom() {
   })
 }
 
+async function copyMessage(content, index) {
+  try {
+    await navigator.clipboard.writeText(content)
+    copiedIndex.value = index
+    clearTimeout(copiedTimeout)
+    copiedTimeout = setTimeout(() => {
+      copiedIndex.value = null
+    }, 1500)
+  } catch (err) {
+    console.error('[ollama-node] copy failed', err)
+  }
+}
+
+function newConversation() {
+  abortController?.abort()
+  streamingText.value = ''
+  errorText.value = ''
+  status.value = 'idle'
+  updateNodeData(props.id, { messages: [], toolsUnsupported: false })
+}
+
 async function send() {
   const text = draft.value.trim()
-  if (!text || status.value === 'sending') return
+  const images = pendingImages.value
+  if ((!text && !images.length) || status.value === 'sending') return
 
-  let messages = [...(props.data.messages || []), { role: 'user', content: text }]
+  const userMessage = { role: 'user', content: text }
+  if (images.length) userMessage.images = images.map(({ mimeType, base64 }) => ({ mimeType, base64 }))
+  let messages = [...(props.data.messages || []), userMessage]
   updateNodeData(props.id, { messages })
   draft.value = ''
+  pendingImages.value = []
   status.value = 'sending'
   errorText.value = ''
   streamingText.value = ''
@@ -245,6 +389,7 @@ async function send() {
 
 onBeforeUnmount(() => {
   abortController?.abort()
+  clearTimeout(copiedTimeout)
 })
 </script>
 
@@ -337,6 +482,16 @@ onBeforeUnmount(() => {
   color: var(--color-text-primary);
 }
 
+.settings-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.settings-btn:disabled:hover {
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
 .ollama-history {
   flex: 1;
   min-height: 0;
@@ -412,12 +567,16 @@ onBeforeUnmount(() => {
 }
 
 .msg {
+  position: relative;
   display: flex;
+  align-items: flex-end;
+  gap: 4px;
   max-width: 85%;
 }
 
 .msg.user {
   align-self: flex-end;
+  flex-direction: row-reverse;
 }
 
 .msg.assistant,
@@ -432,6 +591,48 @@ onBeforeUnmount(() => {
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
+  user-select: text;
+  cursor: text;
+}
+
+.msg-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.msg-image {
+  width: 110px;
+  height: 110px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.msg:hover .copy-btn {
+  opacity: 1;
+}
+
+.copy-btn:hover {
+  background: var(--color-hover);
+  color: var(--color-text-primary);
 }
 
 .msg.user .msg-bubble {
@@ -459,6 +660,51 @@ onBeforeUnmount(() => {
   }
 }
 
+.pending-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 8px 8px 0;
+  background: var(--color-bg-surface-alt);
+}
+
+.pending-image {
+  position: relative;
+  width: 44px;
+  height: 44px;
+}
+
+.pending-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-strong);
+}
+
+.pending-image-remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-secondary);
+  box-shadow: 0 1px 4px var(--color-shadow);
+  cursor: pointer;
+}
+
+.pending-image-remove:hover {
+  color: var(--color-text-primary);
+}
+
 .ollama-composer {
   display: flex;
   align-items: flex-end;
@@ -468,6 +714,34 @@ onBeforeUnmount(() => {
   border-top: 1px solid var(--color-border-strong);
   background: var(--color-bg-surface-alt);
   border-radius: 0 0 9px 9px;
+}
+
+.file-input-hidden {
+  display: none;
+}
+
+.attach-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.attach-btn:hover {
+  background: var(--color-hover);
+  color: var(--color-text-primary);
+}
+
+.attach-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .composer-input {
