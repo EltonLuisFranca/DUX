@@ -54,7 +54,7 @@ import '@xterm/xterm/css/xterm.css'
 import { toggleNodeSettings, updateNodeData, activeTerminalId } from '../store/flowStore'
 import { theme, XTERM_THEMES } from '../store/themeStore'
 import { linkAgents, linkNoteToAgent } from '../lib/bridgeClient'
-import { serializeBoard, moveCard, finishTask } from '../lib/duxbanOps'
+import { serializeBoard, addCard, moveCard, finishTask } from '../lib/duxbanOps'
 import { pendingVoiceInput, consumePendingVoiceInput, isRecording } from '../store/voiceStore'
 import { speak, ttsEnabled } from '../store/ttsStore'
 import { playNotificationSound } from '../store/notificationSoundStore'
@@ -273,6 +273,9 @@ function handleDuxbanRequest(msg) {
   try {
     if (msg.action === 'list') {
       reply(serializeBoard(board.data, agentNamesForBoard(board), props.id))
+    } else if (msg.action === 'create_card') {
+      const card = addCard(board.data, msg.payload?.column, msg.payload?.text)
+      reply({ ok: true, card_id: card.id })
     } else if (msg.action === 'move_card') {
       const card = moveCard(board.data, msg.payload?.cardId, msg.payload?.column)
       reply({ ok: true, card_id: card.id })

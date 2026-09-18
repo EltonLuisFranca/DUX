@@ -146,6 +146,28 @@ server.registerTool(
 )
 
 server.registerTool(
+  'dux_kanban_create_card',
+  {
+    title: 'Create a card on the connected DuxBan board',
+    description:
+      'Create a new card on the connected DuxBan board, in a given column, with the given text. Use ' +
+      'dux_kanban_list first to see the exact column titles available.',
+    inputSchema: {
+      column: z.string().describe('exact title of the column to add the card to, as shown by dux_kanban_list'),
+      text: z.string().describe('text/title of the new card')
+    }
+  },
+  async ({ column, text }) => {
+    try {
+      const result = await duxbanViaBridge('create_card', { column, text })
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
+server.registerTool(
   'dux_kanban_move_card',
   {
     title: 'Move a DuxBan card to another column',

@@ -6,6 +6,13 @@
   >
     <NodeToolbar :id="id" :data="data" :selected="selected" />
     <Handle
+      id="top"
+      type="target"
+      :position="Position.Top"
+      class="duxban-handle"
+      :class="{ connected: isTopConnected }"
+    />
+    <Handle
       id="left"
       type="target"
       :position="Position.Left"
@@ -272,6 +279,7 @@ const props = defineProps({
 
 const { getConnectedEdges, findNode } = useVueFlow()
 const { isHandleConnected } = useHandleConnection(props.id)
+const isTopConnected = isHandleConnected('top')
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
 const isBottomConnected = isHandleConnected('bottom')

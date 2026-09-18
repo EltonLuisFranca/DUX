@@ -50,7 +50,7 @@ function buildTaskNotice({ boardName, columnTitle, cardId, cardText }) {
     `[DUX] Automatic notice from DUX (the Electron app running this terminal, not an external agent, and not ` +
     `part of the user's own conversation): a task was assigned to this terminal on the DuxBan board "${boardName}", ` +
     `in column "${columnTitle}", card id "${cardId}": "${cardText}". This terminal has tools available because of ` +
-    `that connection ("dux_kanban_list", "dux_kanban_move_card", "dux_kanban_finish_task"): use ` +
+    `that connection ("dux_kanban_list", "dux_kanban_create_card", "dux_kanban_move_card", "dux_kanban_finish_task"): use ` +
     `"dux_kanban_move_card" to move this card to a column that reflects progress (e.g. one meaning "in progress" or ` +
     `"waiting for review") as work happens, and call "dux_kanban_finish_task" with this card's id when it's done — ` +
     `that also makes DUX send the next queued task on this board to this terminal, if one is waiting. Use ` +

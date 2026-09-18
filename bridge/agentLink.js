@@ -1,7 +1,18 @@
 const { writeAsMessage, decorateDuxMessage } = require('./ptyWrite')
 
 const IDLE_MS = 900
-const ASK_TIMEOUT_MS = 120000
+// Timeout do dux_ask não é mais "tempo total desde o envio" — uma tarefa
+// longa (ex: pedir pro outro agente implementar uma feature) pode ficar
+// minutos produzindo output (digitando, rodando comandos) sem nunca ficar
+// realmente parada, e um teto fixo curto derrubava isso no meio mesmo com o
+// agente ativo. ASK_IDLE_TIMEOUT_MS reseta a cada chunk de dado que sai do
+// PTY de destino enquanto uma pergunta está pendente — só dispara se o
+// terminal ficar de fato quieto por esse tempo (sinal de que ninguém vai
+// responder). ASK_MAX_TOTAL_MS é o teto absoluto por trás disso, indepen-
+// dente de atividade, pra não esperar pra sempre caso o terminal fique
+// produzindo ruído (ex: um processo em loop) sem nunca de fato responder.
+const ASK_IDLE_TIMEOUT_MS = 120000
+const ASK_MAX_TOTAL_MS = 30 * 60 * 1000
 const REPLY_MARKER = '<<<DUX_REPLY'
 const END_MARKER = '<<<DUX_END>>>'
 
@@ -73,7 +84,7 @@ function renameSession(sessionId, name) {
 // mensagem de chat estilizada, não necessariamente como eco literal byte a
 // byte contendo a tag.
 // eslint-disable-next-line no-control-regex
-const ANSI_ESCAPE_RE = /\x1b\[[0-9;]*[a-zA-Z]/g
+const ANSI_ESCAPE_RE = /\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b\[[0-9;?]*[a-zA-Z]/g
 
 // Procura `marker` como o conteúdo INTEIRO de alguma linha do buffer (depois
 // de remover ANSI e aparar espaço), não como substring solta em qualquer
@@ -87,6 +98,15 @@ const ANSI_ESCAPE_RE = /\x1b\[[0-9;]*[a-zA-Z]/g
 // linha inteira sozinha — vem sempre cercada de aspas/vírgula no meio da
 // frase — então exigir a linha inteira, exatamente como a instrução já pede
 // ("alone on one line, exactly"), descarta esse falso positivo.
+//
+// ANSI_ESCAPE_RE precisa cobrir, além do CSI simples ("\x1b[<n>m" de cor
+// etc.), os modos privados DEC ("\x1b[?25l"/"\x1b[?25h" de esconder/mostrar
+// cursor, "\x1b[?2004h/l" de bracketed paste) e OSC (título da janela) — TUIs
+// tipo a do Claude Code emitem esses códigos a cada frame de redraw, e sem
+// removê-los a linha do marcador fica com lixo colado (ex: "[?25h") que nunca
+// bate no === exato, travando o dux_ask até o timeout mesmo com a resposta
+// certa do outro lado (reproduzido na prática). wsHandlers.js já precisou do
+// mesmo fix (linha 128-129) pra detectar prompt do cmd.exe em meio a ANSI.
 function findMarkerLine(lines, marker, fromIndex = 0) {
   for (let i = fromIndex; i < lines.length; i++) {
     if (lines[i].replace(ANSI_ESCAPE_RE, '').trim() === marker) return i
@@ -100,6 +120,11 @@ function onSessionData(sessionId, chunk) {
   session.lastDataAt = Date.now()
 
   if (!session.pending) return
+
+  // Qualquer atividade nova no PTY de destino (mesmo que ainda não seja a
+  // resposta final) é sinal de que o agente está trabalhando na pergunta —
+  // adia o timeout de inatividade em vez de deixá-lo contar tempo total.
+  session.pending.bumpIdleTimeout()
 
   session.rawBuffer += chunk
 
@@ -174,23 +199,49 @@ function pumpQueue(sessionId) {
     session.rawBuffer = ''
     session.expectedReplyId = requestId
 
-    const timeoutHandle = setTimeout(() => {
+    let idleTimeoutHandle = null
+
+    const clearPendingTimers = () => {
+      clearTimeout(idleTimeoutHandle)
+      clearTimeout(maxTimeoutHandle)
+    }
+
+    const failPending = (message) => {
+      if (session.pending !== pendingEntry) return // já resolvido/substituído
       session.pending = null
       session.expectedReplyId = null
-      job.reject(new Error('timeout esperando resposta do agente'))
+      clearPendingTimers()
+      job.reject(new Error(message))
       pumpQueue(sessionId)
-    }, ASK_TIMEOUT_MS)
+    }
 
-    session.pending = {
+    // teto absoluto: independe de atividade, existe só pra não esperar pra
+    // sempre se o terminal ficar produzindo ruído sem nunca responder
+    const maxTimeoutHandle = setTimeout(
+      () => failPending(`timeout esperando resposta do agente (mais de ${Math.round(ASK_MAX_TOTAL_MS / 60000)} min no total)`),
+      ASK_MAX_TOTAL_MS
+    )
+
+    const pendingEntry = {
       resolve: (answer) => {
-        clearTimeout(timeoutHandle)
+        clearPendingTimers()
         job.resolve(answer)
       },
       reject: (err) => {
-        clearTimeout(timeoutHandle)
+        clearPendingTimers()
         job.reject(err)
+      },
+      bumpIdleTimeout: () => {
+        clearTimeout(idleTimeoutHandle)
+        idleTimeoutHandle = setTimeout(
+          () => failPending(`timeout esperando resposta do agente (sem atividade por ${Math.round(ASK_IDLE_TIMEOUT_MS / 1000)}s)`),
+          ASK_IDLE_TIMEOUT_MS
+        )
       }
     }
+
+    session.pending = pendingEntry
+    pendingEntry.bumpIdleTimeout()
   })
 }
 
