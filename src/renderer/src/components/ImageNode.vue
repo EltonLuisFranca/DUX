@@ -18,6 +18,13 @@
       class="image-handle"
       :class="{ connected: isRightConnected }"
     />
+    <Handle
+      id="bottom"
+      type="source"
+      :position="Position.Bottom"
+      class="image-handle"
+      :class="{ connected: isBottomConnected }"
+    />
 
     <Transition name="toolbar-fade">
       <div v-if="selected" class="image-toolbar nodrag nowheel">
@@ -104,6 +111,7 @@ const isFullscreen = computed(() => fullscreenNodeId.value === props.id)
 const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
+const isBottomConnected = isHandleConnected('bottom')
 
 const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   minWidth: 160,

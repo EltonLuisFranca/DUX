@@ -5,6 +5,7 @@ import OllamaCreateForm from '../components/nodeCreate/OllamaCreateForm.vue'
 import OllamaSettings from '../components/nodeSettings/OllamaSettings.vue'
 import MerlinCreateForm from '../components/nodeCreate/MerlinCreateForm.vue'
 import MerlinSettings from '../components/nodeSettings/MerlinSettings.vue'
+import DuxBanSettings from '../components/nodeSettings/DuxBanSettings.vue'
 import GitCreateForm from '../components/nodeCreate/GitCreateForm.vue'
 import ImageCreateForm from '../components/nodeCreate/ImageCreateForm.vue'
 import HttpCreateForm from '../components/nodeCreate/HttpCreateForm.vue'
@@ -206,8 +207,10 @@ export const nodeTypeRegistry = {
         { id: crypto.randomUUID(), title: 'A fazer', cards: [] },
         { id: crypto.randomUUID(), title: 'Fazendo', cards: [] },
         { id: crypto.randomUUID(), title: 'Feito', cards: [] }
-      ]
+      ],
+      categories: []
     }),
-    icon: '<rect x="2" y="3" width="4.5" height="14" rx="1.3" stroke="currentColor" stroke-width="1.3" fill="none"/><rect x="7.8" y="3" width="4.5" height="9" rx="1.3" stroke="currentColor" stroke-width="1.3" fill="none"/><rect x="13.6" y="3" width="4.5" height="11" rx="1.3" stroke="currentColor" stroke-width="1.3" fill="none"/>'
+    icon: '<rect x="2" y="3" width="4.5" height="14" rx="1.3" stroke="currentColor" stroke-width="1.3" fill="none"/><rect x="7.8" y="3" width="4.5" height="9" rx="1.3" stroke="currentColor" stroke-width="1.3" fill="none"/><rect x="13.6" y="3" width="4.5" height="11" rx="1.3" stroke="currentColor" stroke-width="1.3" fill="none"/>',
+    settingsComponent: DuxBanSettings
   }
 }

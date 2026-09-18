@@ -19,6 +19,13 @@
       class="pomodoro-handle"
       :class="{ connected: isRightConnected }"
     />
+    <Handle
+      id="bottom"
+      type="source"
+      :position="Position.Bottom"
+      class="pomodoro-handle"
+      :class="{ connected: isBottomConnected }"
+    />
 
     <div class="pomodoro-header" :style="{ background: data.headerColor || undefined }">
       <span class="phase-dot" />
@@ -126,6 +133,7 @@ const props = defineProps({
 const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
+const isBottomConnected = isHandleConnected('bottom')
 
 const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   minWidth: 220,

@@ -9,6 +9,7 @@
   >
     <Handle id="left" type="target" :position="Position.Left" class="merlin-handle" :class="{ connected: isLeftConnected }" />
     <Handle id="right" type="source" :position="Position.Right" class="merlin-handle" :class="{ connected: isRightConnected }" />
+    <Handle id="bottom" type="source" :position="Position.Bottom" class="merlin-handle" :class="{ connected: isBottomConnected }" />
 
     <div v-if="menuOpen" class="context-menu nodrag" @click.stop>
       <button class="menu-item" @click="openSettings">
@@ -140,6 +141,7 @@ watch(menuOpen, (open) => {
 const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
+const isBottomConnected = isHandleConnected('bottom')
 
 const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   minWidth: 220,

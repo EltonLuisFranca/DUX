@@ -18,7 +18,8 @@ export function normalizeColumns(raw) {
             id: card.id || crypto.randomUUID(),
             text: card.text || '',
             assignedNodeId: card.assignedNodeId || null,
-            taskState: card.taskState || 'unassigned'
+            taskState: card.taskState || 'unassigned',
+            categoryId: card.categoryId || null
           }))
         : []
     }))
@@ -28,6 +29,73 @@ export function normalizeColumns(raw) {
     { id: crypto.randomUUID(), title: 'Fazendo', cards: [] },
     { id: crypto.randomUUID(), title: 'Feito', cards: [] }
   ]
+}
+
+// Paleta fixa (em vez de color picker livre) pra manter a estética minimalista
+// do resto do app — cada categoria nova pega a próxima cor da lista, ciclando.
+export const CATEGORY_COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444', '#a855f7', '#06b6d4', '#f97316', '#64748b']
+
+export function normalizeCategories(raw) {
+  if (!Array.isArray(raw)) return []
+  return raw.map((cat) => ({
+    id: cat.id || crypto.randomUUID(),
+    name: cat.name || 'Categoria',
+    color: cat.color || CATEGORY_COLORS[0]
+  }))
+}
+
+export function addCategory(data, name, color) {
+  const categories = normalizeCategories(data.categories)
+  const category = {
+    id: crypto.randomUUID(),
+    name: String(name || '').trim() || 'Categoria',
+    color: color || CATEGORY_COLORS[categories.length % CATEGORY_COLORS.length]
+  }
+  categories.push(category)
+  data.categories = categories
+  return category
+}
+
+export function renameCategory(data, categoryId, name) {
+  const categories = normalizeCategories(data.categories)
+  const category = categories.find((c) => c.id === categoryId)
+  if (!category) return
+  category.name = String(name || '').trim() || category.name
+  data.categories = categories
+}
+
+export function recolorCategory(data, categoryId, color) {
+  const categories = normalizeCategories(data.categories)
+  const category = categories.find((c) => c.id === categoryId)
+  if (!category) return
+  category.color = color
+  data.categories = categories
+}
+
+// Some junto de qualquer cartão que apontava pra ela (categoryId -> null) —
+// uma categoria apagada não pode deixar cartão nenhum "orfão" apontando pra
+// um id que não existe mais em data.categories.
+export function removeCategory(data, categoryId) {
+  data.categories = normalizeCategories(data.categories).filter((c) => c.id !== categoryId)
+  const columns = normalizeColumns(data.columns)
+  let changed = false
+  for (const col of columns) {
+    for (const card of col.cards) {
+      if (card.categoryId === categoryId) {
+        card.categoryId = null
+        changed = true
+      }
+    }
+  }
+  if (changed) data.columns = columns
+}
+
+export function setCardCategory(data, cardId, categoryId) {
+  const columns = normalizeColumns(data.columns)
+  const found = findCardById(columns, cardId)
+  if (!found) throw new Error(`cartão não encontrado: ${cardId}`)
+  found.card.categoryId = categoryId || null
+  data.columns = columns
 }
 
 export function findColumnByRef(columns, ref) {
@@ -94,7 +162,13 @@ export function addCard(data, columnRef, text) {
   const columns = normalizeColumns(data.columns)
   const col = findColumnByRef(columns, columnRef) || columns[0]
   if (!col) throw new Error('board sem colunas')
-  const card = { id: crypto.randomUUID(), text: String(text || '').trim(), assignedNodeId: null, taskState: 'unassigned' }
+  const card = {
+    id: crypto.randomUUID(),
+    text: String(text || '').trim(),
+    assignedNodeId: null,
+    taskState: 'unassigned',
+    categoryId: null
+  }
   col.cards.push(card)
   data.columns = columns
   return card
@@ -204,6 +278,7 @@ export function unassignAllForNode(data, nodeId) {
 // `viewerNodeId` marca quais cartões pertencem a quem está perguntando.
 export function serializeBoard(data, agentNames, viewerNodeId) {
   const columns = normalizeColumns(data.columns)
+  const categories = normalizeCategories(data.categories)
   return {
     board: data.name || 'DuxBan',
     columns: columns.map((col) => ({
@@ -211,6 +286,7 @@ export function serializeBoard(data, agentNames, viewerNodeId) {
       cards: col.cards.map((card) => ({
         id: card.id,
         text: card.text,
+        category: card.categoryId ? categories.find((c) => c.id === card.categoryId)?.name || null : null,
         assigned_to: card.assignedNodeId ? agentNames?.[card.assignedNodeId] || card.assignedNodeId : null,
         mine: card.assignedNodeId === viewerNodeId,
         status: card.taskState

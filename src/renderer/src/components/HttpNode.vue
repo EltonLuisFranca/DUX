@@ -19,6 +19,13 @@
       class="http-handle"
       :class="{ connected: isRightConnected }"
     />
+    <Handle
+      id="bottom"
+      type="source"
+      :position="Position.Bottom"
+      class="http-handle"
+      :class="{ connected: isBottomConnected }"
+    />
 
     <div class="http-header" :style="{ background: data.headerColor || undefined }">
       <span class="status-dot" :class="statusDotClass" />
@@ -171,6 +178,7 @@ const props = defineProps({
 const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
+const isBottomConnected = isHandleConnected('bottom')
 
 const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   minWidth: 340,

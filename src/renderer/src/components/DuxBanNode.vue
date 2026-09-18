@@ -19,6 +19,13 @@
       class="duxban-handle"
       :class="{ connected: isRightConnected }"
     />
+    <Handle
+      id="bottom"
+      type="source"
+      :position="Position.Bottom"
+      class="duxban-handle"
+      :class="{ connected: isBottomConnected }"
+    />
 
     <div class="duxban-header" :style="{ background: data.headerColor || undefined }">
       <span class="duxban-title">{{ data.name }}</span>
@@ -84,6 +91,10 @@
               @dragend="onCardDragEnd"
               @dragover.prevent.stop="onCardDragOver(col, cardIndex, $event)"
             >
+              <span v-if="categoryOf(card)" class="category-badge" :style="{ background: categoryOf(card).color }">
+                {{ categoryOf(card).name }}
+              </span>
+
               <textarea
                 v-if="editingCardId === card.id"
                 :ref="(el) => { if (el) cardRefs[card.id] = el }"
@@ -94,11 +105,26 @@
                 @keydown.enter.exact.prevent="stopEdit"
               />
               <p v-else class="card-text" @click="startEdit(card)">{{ card.text || 'Cartão vazio' }}</p>
-              <button class="card-remove" title="Excluir cartão" @click="onRemoveCard(card.id)">
-                <svg viewBox="0 0 16 16" width="10" height="10">
-                  <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-                </svg>
-              </button>
+
+              <div class="card-actions nodrag">
+                <button class="card-icon-btn" title="Mais detalhes" @click="openDetail(card)">
+                  <svg viewBox="0 0 16 16" width="10" height="10">
+                    <path
+                      d="M6.5 3.5h6v6M12.5 3.5L3.5 12.5"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      fill="none"
+                    />
+                  </svg>
+                </button>
+                <button class="card-icon-btn danger" title="Excluir cartão" @click="onRemoveCard(card.id)">
+                  <svg viewBox="0 0 16 16" width="10" height="10">
+                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                  </svg>
+                </button>
+              </div>
 
               <div v-if="connectedAgents.length" class="card-assign">
                 <select
@@ -140,6 +166,75 @@
     <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
       <ResizeGripIcon />
     </div>
+
+    <Teleport to="body">
+      <div v-if="detailCard" class="card-modal-backdrop" @mousedown.self="closeDetail">
+        <div class="card-modal nodrag nowheel nopan">
+          <div class="card-modal-header">
+            <span class="card-modal-title">Detalhes do cartão</span>
+            <button class="header-btn" title="Fechar" @click="closeDetail">
+              <svg viewBox="0 0 16 16" width="12" height="12">
+                <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="card-modal-body">
+            <div class="modal-field">
+              <label class="modal-label">Descrição</label>
+              <textarea v-model="detailCard.text" class="modal-textarea" rows="5" />
+            </div>
+
+            <div class="modal-field">
+              <label class="modal-label">Categoria</label>
+              <select
+                class="modal-select"
+                :value="detailCard.categoryId || ''"
+                @change="setCardCategory(props.data, detailCard.id, $event.target.value || null)"
+              >
+                <option value="">Sem categoria</option>
+                <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+              </select>
+              <p v-if="!categories.length" class="modal-hint">
+                Nenhuma categoria criada ainda — adicione uma nas configurações do board (ícone de engrenagem).
+              </p>
+            </div>
+
+            <div class="modal-field">
+              <label class="modal-label">Coluna</label>
+              <select
+                class="modal-select"
+                :value="detailColumnId"
+                @change="onDetailColumnChange($event.target.value)"
+              >
+                <option v-for="col in columns" :key="col.id" :value="col.id">{{ col.title }}</option>
+              </select>
+            </div>
+
+            <div v-if="connectedAgents.length" class="modal-field">
+              <label class="modal-label">Atribuído a</label>
+              <div class="modal-assign-row">
+                <select
+                  class="modal-select"
+                  :value="detailCard.assignedNodeId || ''"
+                  @change="onAssign(detailCard, $event.target.value)"
+                >
+                  <option value="">Sem atribuição</option>
+                  <option v-for="agent in connectedAgents" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
+                </select>
+                <span v-if="detailCard.assignedNodeId" class="modal-status" :class="detailCard.taskState">
+                  {{ STATUS_LABELS[detailCard.taskState] }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-modal-footer">
+            <button class="delete-card-btn" @click="onRemoveCard(detailCard.id); closeDetail()">Excluir cartão</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -152,7 +247,16 @@ import NodeToolbar from './NodeToolbar.vue'
 import { toggleNodeSettings, AGENT_TERMINAL_TYPES } from '../store/flowStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
 import { useNodeResize } from '../lib/useNodeResize'
-import { normalizeColumns, addCard, removeCard, moveCard, assignCard } from '../lib/duxbanOps'
+import {
+  normalizeColumns,
+  normalizeCategories,
+  addCard,
+  removeCard,
+  moveCard,
+  assignCard,
+  setCardCategory,
+  findCardById
+} from '../lib/duxbanOps'
 
 const STATUS_LABELS = {
   queued: 'Na fila — aguardando o agente ficar livre',
@@ -170,6 +274,7 @@ const { getConnectedEdges, findNode } = useVueFlow()
 const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
+const isBottomConnected = isHandleConnected('bottom')
 
 const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   minWidth: 380,
@@ -209,6 +314,41 @@ if (!props.data.activeDispatch) props.data.activeDispatch = {}
 // `const columns = props.data.columns` capturado uma vez ficaria preso na
 // referência antiga assim que a primeira operação rodasse
 const columns = computed(() => props.data.columns)
+
+// mesma lógica de normalização: `categories` pode não existir ainda em
+// boards salvos antes dessa feature.
+const categories = computed(() => normalizeCategories(props.data.categories))
+
+function categoryOf(card) {
+  if (!card.categoryId) return null
+  return categories.value.find((c) => c.id === card.categoryId) || null
+}
+
+// Painel de detalhes do cartão — guarda só o id (não o objeto do cartão em
+// si) pra sempre reler a referência viva mais recente de `columns` a cada
+// render, do jeito que o resto do node já lida com o array trocado a cada
+// operação (ver comentário acima de `columns`).
+const detailCardId = ref(null)
+const detailCard = computed(() => {
+  if (!detailCardId.value) return null
+  return findCardById(columns.value, detailCardId.value)?.card ?? null
+})
+const detailColumnId = computed(() => {
+  if (!detailCardId.value) return ''
+  return findCardById(columns.value, detailCardId.value)?.col.id ?? ''
+})
+
+function openDetail(card) {
+  detailCardId.value = card.id
+}
+
+function closeDetail() {
+  detailCardId.value = null
+}
+
+function onDetailColumnChange(columnId) {
+  moveCard(props.data, detailCardId.value, columnId)
+}
 
 const drafts = reactive({})
 const editingCardId = ref(null)
@@ -534,7 +674,7 @@ function onColumnDrop(col) {
 .card {
   position: relative;
   flex-shrink: 0;
-  padding: 6px 20px 6px 8px;
+  padding: 6px 38px 6px 8px;
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-strong);
   border-radius: 6px;
@@ -548,6 +688,17 @@ function onColumnDrop(col) {
 
 .card.dragging {
   opacity: 0.4;
+}
+
+.category-badge {
+  display: inline-block;
+  margin-bottom: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1.5;
 }
 
 .card-text {
@@ -576,10 +727,23 @@ function onColumnDrop(col) {
   outline: none;
 }
 
-.card-remove {
+.card-actions {
   position: absolute;
   top: 4px;
   right: 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  cursor: default;
+  transition: opacity 0.12s ease;
+}
+
+.card:hover .card-actions {
+  opacity: 1;
+}
+
+.card-icon-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -589,16 +753,15 @@ function onColumnDrop(col) {
   border-radius: 4px;
   background: transparent;
   color: var(--color-text-tertiary);
-  opacity: 0;
   cursor: pointer;
-  transition: opacity 0.12s ease;
 }
 
-.card:hover .card-remove {
-  opacity: 1;
+.card-icon-btn:hover {
+  background: var(--color-hover);
+  color: var(--color-text-primary);
 }
 
-.card-remove:hover {
+.card-icon-btn.danger:hover {
   background: rgba(255, 107, 107, 0.15);
   color: #ff6b6b;
 }
@@ -741,5 +904,139 @@ function onColumnDrop(col) {
 
 .duxban-node:hover .resize-handle {
   opacity: 1;
+}
+
+.card-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.card-modal {
+  display: flex;
+  flex-direction: column;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px var(--color-shadow);
+  cursor: default;
+}
+
+.card-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.card-modal-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.card-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.modal-field {
+  margin-bottom: 14px;
+}
+
+.modal-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.modal-hint {
+  margin: 6px 0 0;
+  font-size: 10.5px;
+  color: var(--color-text-tertiary);
+}
+
+.modal-textarea {
+  width: 100%;
+  padding: 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-bg-surface-alt);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.modal-textarea:focus {
+  outline: none;
+  border-color: var(--color-text-secondary);
+}
+
+.modal-select {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-bg-surface-alt);
+  color: var(--color-text-primary);
+  font-size: 12px;
+}
+
+.modal-select:focus {
+  outline: none;
+  border-color: var(--color-text-secondary);
+}
+
+.modal-assign-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-status {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.card-modal-footer {
+  flex-shrink: 0;
+  padding: 12px 14px;
+  border-top: 1px solid var(--color-border);
+}
+
+.delete-card-btn {
+  width: 100%;
+  height: 30px;
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  border-radius: 6px;
+  background: transparent;
+  color: #ff6b6b;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.delete-card-btn:hover {
+  background: rgba(255, 107, 107, 0.1);
 }
 </style>

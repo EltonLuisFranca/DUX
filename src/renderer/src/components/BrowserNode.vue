@@ -19,6 +19,13 @@
       class="browser-handle"
       :class="{ connected: isRightConnected }"
     />
+    <Handle
+      id="bottom"
+      type="source"
+      :position="Position.Bottom"
+      class="browser-handle"
+      :class="{ connected: isBottomConnected }"
+    />
 
     <div class="browser-header" :style="{ background: data.headerColor || undefined }">
       <button class="nav-btn nodrag" title="Voltar" :disabled="!canGoBack" @click="goBack">
@@ -107,6 +114,7 @@ const props = defineProps({
 const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
+const isBottomConnected = isHandleConnected('bottom')
 
 const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   minWidth: 360,
