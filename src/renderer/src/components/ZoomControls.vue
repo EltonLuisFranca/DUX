@@ -118,7 +118,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
   align-items: center;
   gap: 2px;
   padding: 6px;
-  background: var(--color-bg-surface-alt);
+  background: #000;
   border: 1px solid var(--color-border);
   border-radius: 18px;
   box-shadow: 0 4px 16px var(--color-shadow);
