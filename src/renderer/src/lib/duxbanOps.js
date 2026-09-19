@@ -19,7 +19,21 @@ export function normalizeColumns(raw) {
             text: card.text || '',
             assignedNodeId: card.assignedNodeId || null,
             taskState: card.taskState || 'unassigned',
-            categoryId: card.categoryId || null
+            // boards antigos guardavam só um categoryId por cartão — migra pra
+            // um array de tagIds (com no máximo essa mesma tag) na primeira
+            // leitura, sem quebrar dado salvo antes dessa feature.
+            tagIds: Array.isArray(card.tagIds)
+              ? card.tagIds
+              : card.categoryId
+                ? [card.categoryId]
+                : [],
+            comments: Array.isArray(card.comments)
+              ? card.comments.map((c) => ({
+                  id: c.id || crypto.randomUUID(),
+                  text: c.text || '',
+                  createdAt: c.createdAt || Date.now()
+                }))
+              : []
           }))
         : []
     }))
@@ -32,57 +46,63 @@ export function normalizeColumns(raw) {
 }
 
 // Paleta fixa (em vez de color picker livre) pra manter a estética minimalista
-// do resto do app — cada categoria nova pega a próxima cor da lista, ciclando.
-export const CATEGORY_COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444', '#a855f7', '#06b6d4', '#f97316', '#64748b']
+// do resto do app — cada tag nova pega a próxima cor da lista, ciclando.
+export const TAG_COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444', '#a855f7', '#06b6d4', '#f97316', '#64748b']
 
-export function normalizeCategories(raw) {
+export function normalizeTags(raw) {
   if (!Array.isArray(raw)) return []
-  return raw.map((cat) => ({
-    id: cat.id || crypto.randomUUID(),
-    name: cat.name || 'Categoria',
-    color: cat.color || CATEGORY_COLORS[0]
+  return raw.map((tag) => ({
+    id: tag.id || crypto.randomUUID(),
+    name: tag.name || 'Tag',
+    color: tag.color || TAG_COLORS[0]
   }))
 }
 
-export function addCategory(data, name, color) {
-  const categories = normalizeCategories(data.categories)
-  const category = {
+// boards antigos guardavam a lista em data.categories — lê o novo campo com
+// fallback pro antigo, sem exigir migração explícita dos dados salvos.
+export function boardTags(data) {
+  return normalizeTags(data.tags || data.categories)
+}
+
+export function addTag(data, name, color) {
+  const tags = boardTags(data)
+  const tag = {
     id: crypto.randomUUID(),
-    name: String(name || '').trim() || 'Categoria',
-    color: color || CATEGORY_COLORS[categories.length % CATEGORY_COLORS.length]
+    name: String(name || '').trim() || 'Tag',
+    color: color || TAG_COLORS[tags.length % TAG_COLORS.length]
   }
-  categories.push(category)
-  data.categories = categories
-  return category
+  tags.push(tag)
+  data.tags = tags
+  return tag
 }
 
-export function renameCategory(data, categoryId, name) {
-  const categories = normalizeCategories(data.categories)
-  const category = categories.find((c) => c.id === categoryId)
-  if (!category) return
-  category.name = String(name || '').trim() || category.name
-  data.categories = categories
+export function renameTag(data, tagId, name) {
+  const tags = boardTags(data)
+  const tag = tags.find((t) => t.id === tagId)
+  if (!tag) return
+  tag.name = String(name || '').trim() || tag.name
+  data.tags = tags
 }
 
-export function recolorCategory(data, categoryId, color) {
-  const categories = normalizeCategories(data.categories)
-  const category = categories.find((c) => c.id === categoryId)
-  if (!category) return
-  category.color = color
-  data.categories = categories
+export function recolorTag(data, tagId, color) {
+  const tags = boardTags(data)
+  const tag = tags.find((t) => t.id === tagId)
+  if (!tag) return
+  tag.color = color
+  data.tags = tags
 }
 
-// Some junto de qualquer cartão que apontava pra ela (categoryId -> null) —
-// uma categoria apagada não pode deixar cartão nenhum "orfão" apontando pra
-// um id que não existe mais em data.categories.
-export function removeCategory(data, categoryId) {
-  data.categories = normalizeCategories(data.categories).filter((c) => c.id !== categoryId)
+// Some junto de qualquer cartão que apontava pra ela (tira do tagIds) — uma
+// tag apagada não pode deixar cartão nenhum "orfão" apontando pra um id que
+// não existe mais em data.tags.
+export function removeTag(data, tagId) {
+  data.tags = boardTags(data).filter((t) => t.id !== tagId)
   const columns = normalizeColumns(data.columns)
   let changed = false
   for (const col of columns) {
     for (const card of col.cards) {
-      if (card.categoryId === categoryId) {
-        card.categoryId = null
+      if (card.tagIds.includes(tagId)) {
+        card.tagIds = card.tagIds.filter((id) => id !== tagId)
         changed = true
       }
     }
@@ -90,11 +110,33 @@ export function removeCategory(data, categoryId) {
   if (changed) data.columns = columns
 }
 
-export function setCardCategory(data, cardId, categoryId) {
+// Liga/desliga uma tag num cartão (um cartão pode ter várias).
+export function toggleCardTag(data, cardId, tagId) {
   const columns = normalizeColumns(data.columns)
   const found = findCardById(columns, cardId)
   if (!found) throw new Error(`cartão não encontrado: ${cardId}`)
-  found.card.categoryId = categoryId || null
+  const tagIds = found.card.tagIds
+  found.card.tagIds = tagIds.includes(tagId) ? tagIds.filter((id) => id !== tagId) : [...tagIds, tagId]
+  data.columns = columns
+}
+
+export function addComment(data, cardId, text) {
+  const body = String(text || '').trim()
+  if (!body) return null
+  const columns = normalizeColumns(data.columns)
+  const found = findCardById(columns, cardId)
+  if (!found) throw new Error(`cartão não encontrado: ${cardId}`)
+  const comment = { id: crypto.randomUUID(), text: body, createdAt: Date.now() }
+  found.card.comments.push(comment)
+  data.columns = columns
+  return comment
+}
+
+export function removeComment(data, cardId, commentId) {
+  const columns = normalizeColumns(data.columns)
+  const found = findCardById(columns, cardId)
+  if (!found) return
+  found.card.comments = found.card.comments.filter((c) => c.id !== commentId)
   data.columns = columns
 }
 
@@ -167,7 +209,8 @@ export function addCard(data, columnRef, text) {
     text: String(text || '').trim(),
     assignedNodeId: null,
     taskState: 'unassigned',
-    categoryId: null
+    tagIds: [],
+    comments: []
   }
   col.cards.push(card)
   data.columns = columns
@@ -278,7 +321,7 @@ export function unassignAllForNode(data, nodeId) {
 // `viewerNodeId` marca quais cartões pertencem a quem está perguntando.
 export function serializeBoard(data, agentNames, viewerNodeId) {
   const columns = normalizeColumns(data.columns)
-  const categories = normalizeCategories(data.categories)
+  const tags = boardTags(data)
   return {
     board: data.name || 'DuxBan',
     columns: columns.map((col) => ({
@@ -286,7 +329,8 @@ export function serializeBoard(data, agentNames, viewerNodeId) {
       cards: col.cards.map((card) => ({
         id: card.id,
         text: card.text,
-        category: card.categoryId ? categories.find((c) => c.id === card.categoryId)?.name || null : null,
+        tags: card.tagIds.map((id) => tags.find((t) => t.id === id)?.name).filter(Boolean),
+        comments: card.comments.map((c) => c.text),
         assigned_to: card.assignedNodeId ? agentNames?.[card.assignedNodeId] || card.assignedNodeId : null,
         mine: card.assignedNodeId === viewerNodeId,
         status: card.taskState

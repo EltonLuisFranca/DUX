@@ -11,20 +11,25 @@
   </div>
 
   <div class="field">
-    <label class="field-label">Categorias</label>
-    <p class="field-hint">Marcam cartões com uma cor pra classificar o tipo de tarefa (bug, feature, etc).</p>
+    <label class="field-label">Tags</label>
+    <p class="field-hint">Marcam cartões com uma cor pra classificar o tipo de tarefa (bug, feature, etc) — um cartão pode ter várias.</p>
 
-    <div v-if="categories.length" class="category-list">
-      <div v-for="cat in categories" :key="cat.id" class="category-row">
-        <span class="color-dot" :style="{ background: cat.color }" />
+    <div v-if="tags.length" class="category-list">
+      <div v-for="tag in tags" :key="tag.id" class="category-row">
+        <span class="color-dot" :style="{ background: tag.color }" />
         <input
           class="category-name-input"
           type="text"
-          :value="cat.name"
-          @input="renameCategory(node.data, cat.id, $event.target.value)"
+          :value="tag.name"
+          @input="renameTag(node.data, tag.id, $event.target.value)"
         />
-        <button class="icon-btn danger" title="Excluir categoria" @click="removeCategory(node.data, cat.id)">
-          <svg viewBox="0 0 16 16" width="10" height="10">
+        <button
+          class="icon-btn danger"
+          :class="{ confirming: pendingDeleteId === tag.id }"
+          :title="pendingDeleteId === tag.id ? 'Clique de novo pra confirmar' : 'Excluir tag'"
+          @click="requestDelete(tag.id, () => removeTag(node.data, tag.id))"
+        >
+          <svg viewBox="0 0 16 16" width="12" height="12">
             <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
           </svg>
         </button>
@@ -36,12 +41,12 @@
         v-model="draftName"
         class="field-input"
         type="text"
-        placeholder="Nova categoria..."
-        @keyup.enter="onAddCategory"
+        placeholder="Nova tag..."
+        @keyup.enter="onAddTag"
       />
       <div class="swatch-row">
         <button
-          v-for="color in CATEGORY_COLORS"
+          v-for="color in TAG_COLORS"
           :key="color"
           class="swatch"
           :class="{ selected: draftColor === color }"
@@ -50,7 +55,7 @@
           @click="draftColor = color"
         />
       </div>
-      <button class="add-btn" :disabled="!draftName.trim()" @click="onAddCategory">+ Adicionar categoria</button>
+      <button class="add-btn" :disabled="!draftName.trim()" @click="onAddTag">+ Adicionar tag</button>
     </div>
   </div>
 
@@ -72,29 +77,46 @@
 import { computed, ref } from 'vue'
 import { updateNodeData, activeWorkspace, AGENT_TERMINAL_TYPES } from '../../store/flowStore'
 import {
-  normalizeCategories,
+  boardTags,
   normalizeColumns,
-  addCategory,
-  renameCategory,
-  removeCategory,
-  CATEGORY_COLORS
+  addTag,
+  renameTag,
+  removeTag,
+  TAG_COLORS
 } from '../../lib/duxbanOps'
 
 const props = defineProps({
   node: { type: Object, required: true }
 })
 
-const categories = computed(() => normalizeCategories(props.node.data.categories))
+const tags = computed(() => boardTags(props.node.data))
 
 const draftName = ref('')
-const draftColor = ref(CATEGORY_COLORS[0])
+const draftColor = ref(TAG_COLORS[0])
 
-function onAddCategory() {
+function onAddTag() {
   const name = draftName.value.trim()
   if (!name) return
-  addCategory(props.node.data, name, draftColor.value)
+  addTag(props.node.data, name, draftColor.value)
   draftName.value = ''
-  draftColor.value = CATEGORY_COLORS[categories.value.length % CATEGORY_COLORS.length]
+  draftColor.value = TAG_COLORS[tags.value.length % TAG_COLORS.length]
+}
+
+// mesmo padrão de confirmação em dois cliques do DuxBanNode.vue — excluir
+// uma tag tira ela de todo cartão que a usava, então merece o freio extra.
+const pendingDeleteId = ref(null)
+let pendingDeleteTimer = null
+function requestDelete(id, action) {
+  clearTimeout(pendingDeleteTimer)
+  if (pendingDeleteId.value === id) {
+    pendingDeleteId.value = null
+    action()
+  } else {
+    pendingDeleteId.value = id
+    pendingDeleteTimer = setTimeout(() => {
+      pendingDeleteId.value = null
+    }, 2500)
+  }
 }
 
 // Lido direto de activeWorkspace.edges/nodes (não via useVueFlow) — este
@@ -212,8 +234,8 @@ const connectedAgents = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   border: none;
   border-radius: 5px;
@@ -225,6 +247,11 @@ const connectedAgents = computed(() => {
 .icon-btn.danger:hover {
   background: rgba(255, 107, 107, 0.15);
   color: #ff6b6b;
+}
+
+.icon-btn.danger.confirming {
+  background: #ff6b6b;
+  color: #fff;
 }
 
 .new-category {

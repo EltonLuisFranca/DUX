@@ -208,7 +208,7 @@ export const nodeTypeRegistry = {
         { id: crypto.randomUUID(), title: 'Fazendo', cards: [] },
         { id: crypto.randomUUID(), title: 'Feito', cards: [] }
       ],
-      categories: []
+      tags: []
     }),
     icon: '<rect x="2" y="3" width="4.5" height="14" rx="1.3" stroke="currentColor" stroke-width="1.3" fill="none"/><rect x="7.8" y="3" width="4.5" height="9" rx="1.3" stroke="currentColor" stroke-width="1.3" fill="none"/><rect x="13.6" y="3" width="4.5" height="11" rx="1.3" stroke="currentColor" stroke-width="1.3" fill="none"/>',
     settingsComponent: DuxBanSettings
