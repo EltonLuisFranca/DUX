@@ -6,6 +6,7 @@ const { WebSocket } = require('ws')
 const agentLink = require('./agentLink')
 const noteLink = require('./noteLink')
 const duxbanLink = require('./duxbanLink')
+const claudeUsage = require('./claudeUsage')
 const { resolveCwd, isDirectory, isFile, listSubdirectories, listDirEntries } = require('./fsHelpers')
 const { getGitInfo } = require('./gitStatus')
 const { startWatchingNote, stopWatchingNote, stopAllNoteWatches, readNoteFile } = require('./noteWatch')
@@ -77,6 +78,10 @@ function createConnectionHandler({ agentPort }) {
         }
 
         sessionId = msg.sessionId || null
+        // só o node do Claude Code escreve os transcripts que claudeUsage lê
+        // (~/.claude/projects/**) — Codex e os shells simples não têm nada
+        // equivalente, então o indicador flutuante de uso não se aplica a eles.
+        let isClaudeCommand = false
 
         try {
           if (msg.command === 'shell') {
@@ -141,6 +146,7 @@ function createConnectionHandler({ agentPort }) {
             }
           } else {
             const command = ALLOWED_COMMANDS[msg.command] || ALLOWED_COMMANDS.claude
+            isClaudeCommand = command === 'claude'
 
             // Só o Claude Code entende --mcp-config (Codex tem seu próprio
             // mecanismo de MCP, tratado à parte se algum dia precisar). O JSON
@@ -190,6 +196,17 @@ function createConnectionHandler({ agentPort }) {
           duxbanLink.registerSession(sessionId, { ptyProcess, ws })
         }
 
+        if (sessionId && isClaudeCommand) {
+          claudeUsage.startWatch(sessionId, {
+            cwd,
+            onUsage: (info) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'claudeUsage', ...info }))
+              }
+            }
+          })
+        }
+
         ptyProcess.onData((data) => {
           if (sessionId) {
             agentLink.onSessionData(sessionId, data)
@@ -208,6 +225,7 @@ function createConnectionHandler({ agentPort }) {
           if (sessionId) {
             agentLink.unregisterSession(sessionId)
             noteLink.unregisterSession(sessionId)
+            claudeUsage.stopWatch(sessionId)
           }
           ptyProcess = null
           // Fecha o socket pra acionar o retry automático que o cliente já usa
@@ -378,6 +396,7 @@ function createConnectionHandler({ agentPort }) {
         agentLink.unregisterSession(sessionId)
         noteLink.unregisterSession(sessionId)
         duxbanLink.unregisterSession(sessionId)
+        claudeUsage.stopWatch(sessionId)
       }
       stopAllNoteWatches(ws)
     })

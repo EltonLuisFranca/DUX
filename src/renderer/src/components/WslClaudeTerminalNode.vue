@@ -40,6 +40,14 @@
         <GearIcon />
       </button>
     </div>
+    <div
+      v-if="usagePercent !== null"
+      class="usage-badge nodrag"
+      :class="usageLevel"
+      :title="usageTooltip"
+    >
+      {{ usagePercent }}%
+    </div>
     <div ref="termEl" class="agent-term nodrag nowheel nopan"></div>
 
     <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
@@ -116,6 +124,27 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
 
 const termEl = ref(null)
 const status = ref('connecting')
+
+// % da janela de contexto do Claude Code em uso nesta sessão, calculado pelo
+// bridge (claudeUsage.js) a partir do transcript da sessão em
+// ~/.claude/projects — null enquanto não chega nenhuma leitura ainda (node
+// que não é Claude Code, sessão recém-aberta sem nenhuma resposta ainda etc).
+const usagePercent = ref(null)
+const usageTokens = ref(null)
+const usageWindow = ref(null)
+
+const usageLevel = computed(() => {
+  if (usagePercent.value >= 90) return 'danger'
+  if (usagePercent.value >= 70) return 'warn'
+  return ''
+})
+
+const usageTooltip = computed(() => {
+  if (usagePercent.value === null) return ''
+  const tokens = usageTokens.value ?? 0
+  const window = usageWindow.value ?? 0
+  return `Contexto usado: ${usagePercent.value}% (~${Math.round(tokens / 1000)}k de ${Math.round(window / 1000)}k tokens)`
+})
 
 let term = null
 let fitAddon = null
@@ -232,16 +261,23 @@ function connect() {
     } else if (msg.type === 'exit') {
       status.value = 'offline'
       term.write(`\r\n\r\n[sessão encerrada — código ${msg.exitCode}]\r\n`)
+      resetUsage()
     } else if (msg.type === 'error') {
       status.value = 'offline'
       term.write(`\r\n\r\n[erro: ${msg.message}]\r\n`)
+      resetUsage()
     } else if (msg.type === 'duxbanRequest') {
       handleDuxbanRequest(msg)
+    } else if (msg.type === 'claudeUsage') {
+      usagePercent.value = msg.percent
+      usageTokens.value = msg.contextTokens
+      usageWindow.value = msg.contextWindow
     }
   }
 
   ws.onclose = () => {
     status.value = 'offline'
+    resetUsage()
     retryTimer = setTimeout(connect, 1500)
   }
 
@@ -257,6 +293,12 @@ function disconnect() {
     ws.close()
     ws = null
   }
+}
+
+function resetUsage() {
+  usagePercent.value = null
+  usageTokens.value = null
+  usageWindow.value = null
 }
 
 // avisa o bridge sobre as conexões já existentes deste node no canvas (ex: um
@@ -462,6 +504,7 @@ onMounted(async () => {
       disconnect()
       term.clear()
       term.write('[reiniciando sessão no novo diretório...]\r\n')
+      resetUsage()
       connect()
     }
   )
@@ -619,6 +662,34 @@ onBeforeUnmount(() => {
 .settings-btn:hover {
   background: var(--color-hover);
   color: var(--color-text-primary);
+}
+
+.usage-badge {
+  position: absolute;
+  top: 38px;
+  right: 8px;
+  z-index: 5;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--color-bg-surface-raised);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  pointer-events: auto;
+  cursor: default;
+  user-select: none;
+}
+
+.usage-badge.warn {
+  color: #d97706;
+  border-color: #d97706;
+}
+
+.usage-badge.danger {
+  color: #ef4444;
+  border-color: #ef4444;
 }
 
 .agent-term {
