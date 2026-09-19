@@ -49,6 +49,7 @@ export function normalizeColumns(raw) {
   return [
     { id: crypto.randomUUID(), title: 'A fazer', cards: [] },
     { id: crypto.randomUUID(), title: 'Fazendo', cards: [] },
+    { id: crypto.randomUUID(), title: 'Em revisão / Bloqueado', cards: [] },
     { id: crypto.randomUUID(), title: 'Feito', cards: [] }
   ]
 }
