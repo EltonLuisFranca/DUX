@@ -370,5 +370,30 @@ server.registerTool(
   }
 )
 
+server.registerTool(
+  'dux_kanban_add_comment',
+  {
+    title: 'Add a comment to a DuxBan card',
+    description:
+      'Add a comment to a card on the connected DuxBan board, by card id. Comments form a persisted timeline ' +
+      '(author + timestamp + text) shown in the card\'s detail modal, meant as working context for humans and for ' +
+      'this agent itself if it resumes the task later. Use this proactively while working a task — not only when ' +
+      'explicitly asked — to record what has already been done, what is being done right now, and any important ' +
+      'decisions made along the way.',
+    inputSchema: {
+      card_id: z.string().describe('id of the card to comment on, as returned by dux_kanban_list'),
+      text: z.string().describe('the comment text')
+    }
+  },
+  async ({ card_id, text }) => {
+    try {
+      const result = await duxbanViaBridge('add_comment', { cardId: card_id, text })
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
 const transport = new StdioServerTransport()
 await server.connect(transport)

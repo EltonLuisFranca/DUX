@@ -36,7 +36,10 @@ export function normalizeColumns(raw) {
               ? card.comments.map((c) => ({
                   id: c.id || crypto.randomUUID(),
                   text: c.text || '',
-                  createdAt: c.createdAt || Date.now()
+                  createdAt: c.createdAt || Date.now(),
+                  // comentários salvos antes do autor existir só podiam ter vindo
+                  // da UI (nenhuma tool MCP escrevia comentário até essa feature)
+                  author: c.author || 'Você'
                 }))
               : []
           }))
@@ -215,13 +218,17 @@ export function removeColumn(data, colId) {
   }
 }
 
-export function addComment(data, cardId, text) {
+// `author` é um nome de exibição livre — 'Você' pra quem comenta pela UI
+// (default), ou o nome do terminal/agente pra quem comenta via MCP
+// (dux_kanban_add_comment, ver WslClaudeTerminalNode.vue), do mesmo jeito que
+// assigned_to já identifica agente por nome e não por nodeId.
+export function addComment(data, cardId, text, author = 'Você') {
   const body = String(text || '').trim()
   if (!body) return null
   const columns = normalizeColumns(data.columns)
   const found = findCardById(columns, cardId)
   if (!found) throw new Error(`cartão não encontrado: ${cardId}`)
-  const comment = { id: crypto.randomUUID(), text: body, createdAt: Date.now() }
+  const comment = { id: crypto.randomUUID(), text: body, createdAt: Date.now(), author: String(author || '').trim() || 'Você' }
   found.card.comments.push(comment)
   data.columns = columns
   return comment
@@ -458,7 +465,11 @@ export function serializeBoard(data, agentNames, viewerNodeId) {
         priority: card.priority || undefined,
         milestone: card.milestoneTotal ? `${card.milestoneCurrent}/${card.milestoneTotal}` : undefined,
         tags: card.tagIds.map((id) => tags.find((t) => t.id === id)?.name).filter(Boolean),
-        comments: card.comments.map((c) => c.text),
+        comments: card.comments.map((c) => ({
+          author: c.author,
+          text: c.text,
+          created_at: new Date(c.createdAt).toISOString()
+        })),
         assigned_to: card.assignedNodeId ? agentNames?.[card.assignedNodeId] || card.assignedNodeId : null,
         mine: card.assignedNodeId === viewerNodeId,
         status: card.taskState

@@ -58,7 +58,10 @@ function buildTaskNotice({ boardName, columnTitle, cardId, cardText }) {
     `to move this card to a column that reflects progress (e.g. one meaning "in progress" or ` +
     `"waiting for review") as work happens, and call "dux_kanban_finish_task" with this card's id when it's done — ` +
     `that also makes DUX send the next queued task on this board to this terminal, if one is waiting. Use ` +
-    `"dux_kanban_list" any time to see the full board.`
+    `"dux_kanban_list" any time to see the full board. Also use "dux_kanban_add_comment" throughout the task, as a ` +
+    `standard practice for every task and not only when asked, to record: what has already been done, what is ` +
+    `being done right now, and any important decisions made along the way — this becomes the working context on ` +
+    `the card for humans and for this same agent if it resumes the task later.`
   )
 }
 

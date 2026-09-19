@@ -29,7 +29,7 @@
 
     <div
       class="git-header"
-      :style="{ background: data.headerColor || undefined, '--header-icon-color': headerIconColorVar }"
+      :style="{ background: data.headerColor || undefined }"
     >
       <span class="status-dot" :class="status" />
       <span class="git-title">{{ data.name }}</span>
@@ -86,7 +86,6 @@ import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { fetchGitStatus } from '../lib/bridgeClient'
 import { useHandleConnection } from '../lib/useHandleConnection'
 import { useNodeResize } from '../lib/useNodeResize'
-import { headerIconColor } from '../lib/colorContrast'
 
 const POLL_INTERVAL_MS = 15_000
 
@@ -107,11 +106,6 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   defaultWidth: 420,
   defaultHeight: 320
 })
-
-// contraste do ícone de engrenagem quando o header tem headerColor
-// customizado — sem isso, a cor fixa do tema (--color-text-secondary) pode
-// ficar ilegível contra uma cor escolhida livremente pelo usuário
-const headerIconColorVar = computed(() => headerIconColor(props.data.headerColor))
 
 const status = ref('connecting')
 const branch = ref('')
@@ -281,15 +275,15 @@ onBeforeUnmount(() => {
   height: 22px;
   flex-shrink: 0;
   border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--header-icon-color, var(--color-text-secondary));
+  border-radius: 999px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
 .header-btn:hover {
   background: var(--color-hover);
-  color: var(--header-icon-color, var(--color-text-primary));
+  color: var(--color-text-primary);
 }
 
 .spinning {

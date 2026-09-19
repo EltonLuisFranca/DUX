@@ -29,7 +29,7 @@
 
     <div
       class="browser-header"
-      :style="{ background: data.headerColor || undefined, '--header-icon-color': headerIconColorVar }"
+      :style="{ background: data.headerColor || undefined }"
     >
       <button class="nav-btn nodrag" title="Voltar" :disabled="!canGoBack" @click="goBack">
         <svg viewBox="0 0 16 16" width="13" height="13">
@@ -107,7 +107,6 @@ import NodeToolbar from './NodeToolbar.vue'
 import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
 import { useNodeResize } from '../lib/useNodeResize'
-import { headerIconColor } from '../lib/colorContrast'
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -126,11 +125,6 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   defaultWidth: 640,
   defaultHeight: 440
 })
-
-// contraste do ícone de engrenagem quando o header tem headerColor
-// customizado — sem isso, a cor fixa do tema (--color-text-secondary) pode
-// ficar ilegível contra uma cor escolhida livremente pelo usuário
-const headerIconColorVar = computed(() => headerIconColor(props.data.headerColor))
 
 const webviewEl = ref(null)
 
@@ -277,8 +271,7 @@ watch(
   border-radius: 9px 9px 0 0;
 }
 
-.nav-btn,
-.settings-btn {
+.nav-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -293,7 +286,17 @@ watch(
 }
 
 .settings-btn {
-  color: var(--header-icon-color, var(--color-text-secondary));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-secondary);
+  cursor: pointer;
 }
 
 .nav-btn:hover:not(:disabled) {
@@ -303,7 +306,7 @@ watch(
 
 .settings-btn:hover {
   background: var(--color-hover);
-  color: var(--header-icon-color, var(--color-text-primary));
+  color: var(--color-text-primary);
 }
 
 .nav-btn:disabled {

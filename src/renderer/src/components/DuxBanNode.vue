@@ -36,7 +36,7 @@
 
     <div
       class="duxban-header"
-      :style="{ background: data.headerColor || undefined, '--header-icon-color': headerIconColorVar }"
+      :style="{ background: data.headerColor || undefined }"
     >
       <span class="duxban-title">{{ data.name }}</span>
       <span v-if="connectedAgents.length" class="agent-count" :title="connectedAgents.map((a) => a.name).join(', ')">
@@ -75,7 +75,7 @@
     <Teleport to="body">
       <Transition name="modal-fade">
         <div v-if="detailCard" class="card-modal-backdrop" @mousedown.self="closeDetail">
-        <div class="card-modal nodrag nowheel nopan">
+        <div class="card-modal card-modal-wide nodrag nowheel nopan">
           <div class="card-modal-header">
             <span class="card-modal-title">Detalhes do cartão</span>
             <button class="header-btn" title="Fechar" @click="closeDetail">
@@ -85,7 +85,8 @@
             </button>
           </div>
 
-          <div class="card-modal-body">
+          <div class="card-modal-body card-modal-body-split">
+          <div class="card-modal-main">
             <div class="modal-field">
               <label class="modal-label">Título</label>
               <textarea v-model="detailCard.text" class="modal-textarea" rows="2" />
@@ -181,40 +182,43 @@
               </div>
             </div>
 
-            <div class="modal-field">
-              <label class="modal-label">Comentários</label>
-              <div v-if="detailCard.comments.length" class="comment-list">
-                <div v-for="comment in detailCard.comments" :key="comment.id" class="comment-row">
-                  <p class="comment-text">{{ comment.text }}</p>
-                  <div class="comment-meta">
-                    <span class="comment-time">{{ formatCommentTime(comment.createdAt) }}</span>
-                    <button
-                      class="comment-remove-btn"
-                      :class="{ confirming: pendingDeleteId === 'comment-' + comment.id }"
-                      :title="pendingDeleteId === 'comment-' + comment.id ? 'Clique de novo pra confirmar' : 'Excluir comentário'"
-                      @click="requestDelete('comment-' + comment.id, () => onRemoveComment(detailCard.id, comment.id))"
-                    >
-                      <svg viewBox="0 0 16 16" width="11" height="11">
-                        <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-                      </svg>
-                    </button>
-                  </div>
+          </div>
+
+          <div class="card-modal-comments">
+            <label class="modal-label comments-panel-label">Comentários</label>
+            <div v-if="detailCard.comments.length" class="comment-list">
+              <div v-for="comment in detailCard.comments" :key="comment.id" class="comment-row">
+                <p class="comment-text">{{ comment.text }}</p>
+                <div class="comment-meta">
+                  <span class="comment-author">{{ comment.author }}</span>
+                  <span class="comment-time">{{ formatCommentTime(comment.createdAt) }}</span>
+                  <button
+                    class="comment-remove-btn"
+                    :class="{ confirming: pendingDeleteId === 'comment-' + comment.id }"
+                    :title="pendingDeleteId === 'comment-' + comment.id ? 'Clique de novo pra confirmar' : 'Excluir comentário'"
+                    @click="requestDelete('comment-' + comment.id, () => onRemoveComment(detailCard.id, comment.id))"
+                  >
+                    <svg viewBox="0 0 16 16" width="11" height="11">
+                      <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                  </button>
                 </div>
               </div>
-              <p v-else class="modal-hint">Nenhum comentário ainda.</p>
-              <div class="comment-add-row">
-                <textarea
-                  v-model="commentDraft"
-                  class="comment-textarea"
-                  rows="2"
-                  placeholder="Escrever um comentário..."
-                  @keydown.enter.exact.prevent="onAddComment(detailCard.id)"
-                />
-                <button class="comment-send-btn" :disabled="!commentDraft.trim()" @click="onAddComment(detailCard.id)">
-                  Enviar
-                </button>
-              </div>
             </div>
+            <p v-else class="modal-hint">Nenhum comentário ainda.</p>
+            <div class="comment-add-row">
+              <textarea
+                v-model="commentDraft"
+                class="comment-textarea"
+                rows="2"
+                placeholder="Escrever um comentário..."
+                @keydown.enter.exact.prevent="onAddComment(detailCard.id)"
+              />
+              <button class="comment-send-btn" :disabled="!commentDraft.trim()" @click="onAddComment(detailCard.id)">
+                Enviar
+              </button>
+            </div>
+          </div>
           </div>
 
           <div class="card-modal-footer">
@@ -344,7 +348,6 @@ import GearIcon from './icons/GearIcon.vue'
 import ResizeGripIcon from './icons/ResizeGripIcon.vue'
 import NodeToolbar from './NodeToolbar.vue'
 import { toggleNodeSettings, AGENT_TERMINAL_TYPES } from '../store/flowStore'
-import { headerIconColor } from '../lib/colorContrast'
 import { useHandleConnection } from '../lib/useHandleConnection'
 import { useNodeResize } from '../lib/useNodeResize'
 import { useConfirmDelete } from '../lib/useConfirmDelete'
@@ -382,11 +385,6 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   defaultWidth: 600,
   defaultHeight: 420
 })
-
-// contraste do ícone de engrenagem quando o header tem headerColor
-// customizado — sem isso, a cor fixa do tema (--color-text-secondary) pode
-// ficar ilegível contra uma cor escolhida livremente pelo usuário
-const headerIconColorVar = computed(() => headerIconColor(props.data.headerColor))
 
 // visualização ativa (Kanban/Lista/...) — guardada direto em data.viewMode
 // (mesmo padrão de mutação direta do resto do board) pra persistir por board
@@ -680,15 +678,15 @@ function onCreateCard() {
   height: 22px;
   flex-shrink: 0;
   border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--header-icon-color, var(--color-text-secondary));
+  border-radius: 999px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
 .header-btn:hover {
   background: var(--color-hover);
-  color: var(--header-icon-color, var(--color-text-primary));
+  color: var(--color-text-primary);
 }
 
 .resize-handle {
@@ -735,6 +733,10 @@ function onCreateCard() {
   cursor: default;
 }
 
+.card-modal-wide {
+  width: 860px;
+}
+
 .card-modal-header {
   display: flex;
   align-items: center;
@@ -756,6 +758,34 @@ function onCreateCard() {
   min-height: 0;
   overflow-y: auto;
   padding: 14px;
+}
+
+.card-modal-body-split {
+  display: flex;
+  align-items: stretch;
+  overflow-y: hidden;
+  padding: 0;
+}
+
+.card-modal-main {
+  flex: 1.3;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.card-modal-comments {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  padding: 14px;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-bg-surface-alt);
+}
+
+.comments-panel-label {
+  flex-shrink: 0;
 }
 
 .modal-field {
@@ -915,16 +945,21 @@ function onCreateCard() {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 220px;
+  flex: 1;
+  min-height: 0;
   margin-bottom: 10px;
   overflow-y: auto;
+}
+
+.card-modal-comments .modal-hint {
+  flex: 1;
 }
 
 .comment-row {
   padding: 8px 10px;
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: var(--color-bg-surface-alt);
+  background: var(--color-bg-surface);
 }
 
 .comment-text {
@@ -939,10 +974,20 @@ function onCreateCard() {
 .comment-meta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
+}
+
+.comment-author {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .comment-time {
+  flex-shrink: 0;
   font-size: 10px;
   color: var(--color-text-tertiary);
 }
@@ -953,6 +998,8 @@ function onCreateCard() {
   justify-content: center;
   width: 18px;
   height: 18px;
+  margin-left: auto;
+  flex-shrink: 0;
   border: none;
   border-radius: 4px;
   background: transparent;
@@ -1111,18 +1158,24 @@ function onCreateCard() {
 }
 
 .comment-list::-webkit-scrollbar,
-.card-modal-body::-webkit-scrollbar {
+.card-modal-body::-webkit-scrollbar,
+.card-modal-main::-webkit-scrollbar,
+.card-modal-comments::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 .comment-list::-webkit-scrollbar-track,
-.card-modal-body::-webkit-scrollbar-track {
+.card-modal-body::-webkit-scrollbar-track,
+.card-modal-main::-webkit-scrollbar-track,
+.card-modal-comments::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .comment-list::-webkit-scrollbar-thumb,
-.card-modal-body::-webkit-scrollbar-thumb {
+.card-modal-body::-webkit-scrollbar-thumb,
+.card-modal-main::-webkit-scrollbar-thumb,
+.card-modal-comments::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
   border-radius: 999px;
 }

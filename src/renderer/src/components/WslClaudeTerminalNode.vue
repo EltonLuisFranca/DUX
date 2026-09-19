@@ -28,7 +28,7 @@
     />
     <div
       class="agent-header"
-      :style="{ background: data.headerColor || undefined, '--header-icon-color': headerIconColorVar }"
+      :style="{ background: data.headerColor || undefined }"
     >
       <span class="status-dot" :class="status" />
       <span class="agent-title">{{ data.name }}</span>
@@ -71,13 +71,13 @@ import {
   recolorTag,
   removeTag,
   addCardTag,
-  removeCardTag
+  removeCardTag,
+  addComment
 } from '../lib/duxbanOps'
 import { pendingVoiceInput, consumePendingVoiceInput, isRecording } from '../store/voiceStore'
 import { speak, ttsEnabled } from '../store/ttsStore'
 import { playNotificationSound } from '../store/notificationSoundStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
-import { headerIconColor } from '../lib/colorContrast'
 import { useNodeResize } from '../lib/useNodeResize'
 
 const props = defineProps({
@@ -113,11 +113,6 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   defaultWidth: 480,
   defaultHeight: 344
 })
-
-// contraste do ícone de engrenagem quando o header tem headerColor
-// customizado — sem isso, a cor fixa do tema (--color-text-secondary) pode
-// ficar ilegível contra uma cor escolhida livremente pelo usuário
-const headerIconColorVar = computed(() => headerIconColor(props.data.headerColor))
 
 const termEl = ref(null)
 const status = ref('connecting')
@@ -372,6 +367,9 @@ function handleDuxbanRequest(msg) {
     } else if (msg.action === 'remove_card_tag') {
       removeCardTag(board.data, msg.payload?.cardId, msg.payload?.tagId)
       reply({ ok: true, card_id: msg.payload?.cardId, tag_id: msg.payload?.tagId })
+    } else if (msg.action === 'add_comment') {
+      const comment = addComment(board.data, msg.payload?.cardId, msg.payload?.text, props.data.name)
+      reply({ ok: true, card_id: msg.payload?.cardId, comment_id: comment?.id })
     } else {
       reply(null, `ação desconhecida: ${msg.action}`)
     }
@@ -612,15 +610,15 @@ onBeforeUnmount(() => {
   height: 22px;
   flex-shrink: 0;
   border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--header-icon-color, var(--color-text-secondary));
+  border-radius: 999px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
 .settings-btn:hover {
   background: var(--color-hover);
-  color: var(--header-icon-color, var(--color-text-primary));
+  color: var(--color-text-primary);
 }
 
 .agent-term {
