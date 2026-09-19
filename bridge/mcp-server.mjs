@@ -130,9 +130,10 @@ server.registerTool(
   {
     title: 'List connected DuxBan board',
     description:
-      'Show the DuxBan board(s) connected to this terminal in the DUX canvas: columns, cards, who each card is ' +
-      'assigned to, and which ones are assigned to this terminal ("mine": true). Use this to see the full picture ' +
-      'before moving or finishing a task, or when picking up work.',
+      'Show the DuxBan board(s) connected to this terminal in the DUX canvas: the board\'s tags (id, name, color), ' +
+      'columns, cards, who each card is assigned to, and which ones are assigned to this terminal ("mine": true). ' +
+      'Use this to see the full picture before moving or finishing a task, or to look up a tag_id for the ' +
+      'dux_kanban_*_tag tools.',
     inputSchema: {}
   },
   async () => {
@@ -150,16 +151,18 @@ server.registerTool(
   {
     title: 'Create a card on the connected DuxBan board',
     description:
-      'Create a new card on the connected DuxBan board, in a given column, with the given text. Use ' +
+      'Create a new card on the connected DuxBan board, in a given column, with a short title and an optional ' +
+      'longer description (same title/description split shown by the card\'s detail modal in the UI). Use ' +
       'dux_kanban_list first to see the exact column titles available.',
     inputSchema: {
       column: z.string().describe('exact title of the column to add the card to, as shown by dux_kanban_list'),
-      text: z.string().describe('text/title of the new card')
+      text: z.string().describe('short title of the new card'),
+      description: z.string().optional().describe('optional longer description, kept separate from the title')
     }
   },
-  async ({ column, text }) => {
+  async ({ column, text, description }) => {
     try {
-      const result = await duxbanViaBridge('create_card', { column, text })
+      const result = await duxbanViaBridge('create_card', { column, text, description })
       return { content: [{ type: 'text', text: JSON.stringify(result) }] }
     } catch (err) {
       return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
@@ -206,6 +209,160 @@ server.registerTool(
   async ({ card_id }) => {
     try {
       const result = await duxbanViaBridge('finish_task', { cardId: card_id })
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
+server.registerTool(
+  'dux_kanban_assign_card',
+  {
+    title: 'Assign a DuxBan card to an agent',
+    description:
+      'Assign a card on the connected DuxBan board to an agent terminal connected to that same board, by card id ' +
+      'and the agent\'s exact name (as shown by dux_kanban_list under "assigned_to", or as seen in the canvas). ' +
+      'Pass an empty agent_name to unassign the card. If the target agent is free, the task dispatches to it ' +
+      'immediately; otherwise it queues until that agent calls dux_kanban_finish_task on its current task.',
+    inputSchema: {
+      card_id: z.string().describe('id of the card to assign, as returned by dux_kanban_list'),
+      agent_name: z
+        .string()
+        .describe('exact name of the agent terminal to assign to, as shown by dux_kanban_list; empty string to unassign')
+    }
+  },
+  async ({ card_id, agent_name }) => {
+    try {
+      const result = await duxbanViaBridge('assign_card', { cardId: card_id, agentName: agent_name })
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
+server.registerTool(
+  'dux_kanban_create_tag',
+  {
+    title: 'Create a tag on the connected DuxBan board',
+    description:
+      'Create a new tag on the connected DuxBan board (tags mark cards with a color to classify the kind of ' +
+      'task — a card can have several). Returns the created tag\'s id, name and color. Omit color to get the ' +
+      'next color from the board\'s fixed palette.',
+    inputSchema: {
+      name: z.string().describe('name of the new tag'),
+      color: z.string().optional().describe('optional hex color (e.g. "#3b82f6"); omit to auto-pick one')
+    }
+  },
+  async ({ name, color }) => {
+    try {
+      const result = await duxbanViaBridge('create_tag', { name, color })
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
+server.registerTool(
+  'dux_kanban_rename_tag',
+  {
+    title: 'Rename a DuxBan tag',
+    description: 'Rename an existing tag on the connected DuxBan board, by tag id (see dux_kanban_list).',
+    inputSchema: {
+      tag_id: z.string().describe('id of the tag to rename, as returned by dux_kanban_list'),
+      name: z.string().describe('new name for the tag')
+    }
+  },
+  async ({ tag_id, name }) => {
+    try {
+      const result = await duxbanViaBridge('rename_tag', { tagId: tag_id, name })
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
+server.registerTool(
+  'dux_kanban_recolor_tag',
+  {
+    title: 'Change a DuxBan tag\'s color',
+    description: 'Change the color of an existing tag on the connected DuxBan board, by tag id (see dux_kanban_list).',
+    inputSchema: {
+      tag_id: z.string().describe('id of the tag to recolor, as returned by dux_kanban_list'),
+      color: z.string().describe('new hex color for the tag (e.g. "#3b82f6")')
+    }
+  },
+  async ({ tag_id, color }) => {
+    try {
+      const result = await duxbanViaBridge('recolor_tag', { tagId: tag_id, color })
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
+server.registerTool(
+  'dux_kanban_remove_tag',
+  {
+    title: 'Delete a DuxBan tag',
+    description:
+      'Delete a tag from the connected DuxBan board, by tag id (see dux_kanban_list). Also removes it from every ' +
+      'card that had it.',
+    inputSchema: {
+      tag_id: z.string().describe('id of the tag to delete, as returned by dux_kanban_list')
+    }
+  },
+  async ({ tag_id }) => {
+    try {
+      const result = await duxbanViaBridge('remove_tag', { tagId: tag_id })
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
+server.registerTool(
+  'dux_kanban_add_card_tag',
+  {
+    title: 'Add a tag to a DuxBan card',
+    description:
+      'Add an existing tag to a card on the connected DuxBan board, by card id and tag id (see dux_kanban_list ' +
+      'for both). Safe to call even if the card already has the tag.',
+    inputSchema: {
+      card_id: z.string().describe('id of the card, as returned by dux_kanban_list'),
+      tag_id: z.string().describe('id of the tag to add, as returned by dux_kanban_list')
+    }
+  },
+  async ({ card_id, tag_id }) => {
+    try {
+      const result = await duxbanViaBridge('add_card_tag', { cardId: card_id, tagId: tag_id })
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
+server.registerTool(
+  'dux_kanban_remove_card_tag',
+  {
+    title: 'Remove a tag from a DuxBan card',
+    description:
+      'Remove a tag from a card on the connected DuxBan board, by card id and tag id (see dux_kanban_list for ' +
+      'both). Safe to call even if the card doesn\'t have the tag.',
+    inputSchema: {
+      card_id: z.string().describe('id of the card, as returned by dux_kanban_list'),
+      tag_id: z.string().describe('id of the tag to remove, as returned by dux_kanban_list')
+    }
+  },
+  async ({ card_id, tag_id }) => {
+    try {
+      const result = await duxbanViaBridge('remove_card_tag', { cardId: card_id, tagId: tag_id })
       return { content: [{ type: 'text', text: JSON.stringify(result) }] }
     } catch (err) {
       return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }

@@ -11,6 +11,66 @@
   </div>
 
   <div class="field">
+    <label class="field-label">Colunas</label>
+    <p class="field-hint">As colunas do board (A fazer, Fazendo, Feito, etc) — reordene, renomeie ou crie novas.</p>
+
+    <div v-if="columns.length" class="category-list">
+      <div v-for="(col, index) in columns" :key="col.id" class="column-row">
+        <div class="reorder-btns">
+          <button
+            class="icon-btn"
+            title="Mover pra cima"
+            :disabled="index === 0"
+            @click="onMoveColumn(col.id, -1)"
+          >
+            <svg viewBox="0 0 16 16" width="10" height="10">
+              <path d="M8 4l4 5H4z" fill="currentColor" />
+            </svg>
+          </button>
+          <button
+            class="icon-btn"
+            title="Mover pra baixo"
+            :disabled="index === columns.length - 1"
+            @click="onMoveColumn(col.id, 1)"
+          >
+            <svg viewBox="0 0 16 16" width="10" height="10">
+              <path d="M8 12L4 7h8z" fill="currentColor" />
+            </svg>
+          </button>
+        </div>
+        <input
+          class="category-name-input"
+          type="text"
+          :value="col.title"
+          placeholder="Título da coluna"
+          @input="onRenameColumn(col.id, $event.target.value)"
+        />
+        <button
+          class="icon-btn danger"
+          :class="{ confirming: pendingColumnDeleteId === col.id }"
+          :title="pendingColumnDeleteId === col.id ? 'Clique de novo pra confirmar' : 'Excluir coluna'"
+          @click="requestColumnDelete(col.id)"
+        >
+          <svg viewBox="0 0 16 16" width="12" height="12">
+            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="new-category">
+      <input
+        v-model="newColumnName"
+        class="field-input"
+        type="text"
+        placeholder="Nova coluna..."
+        @keyup.enter="onAddColumn"
+      />
+      <button class="add-btn" :disabled="!newColumnName.trim()" @click="onAddColumn">+ Adicionar coluna</button>
+    </div>
+  </div>
+
+  <div class="field">
     <label class="field-label">Tags</label>
     <p class="field-hint">Marcam cartões com uma cor pra classificar o tipo de tarefa (bug, feature, etc) — um cartão pode ter várias.</p>
 
@@ -82,7 +142,11 @@ import {
   addTag,
   renameTag,
   removeTag,
-  TAG_COLORS
+  TAG_COLORS,
+  addColumn as addColumnOp,
+  removeColumn as removeColumnOp,
+  moveColumn as moveColumnOp,
+  renameColumn as renameColumnOp
 } from '../../lib/duxbanOps'
 
 const props = defineProps({
@@ -90,6 +154,42 @@ const props = defineProps({
 })
 
 const tags = computed(() => boardTags(props.node.data))
+const columns = computed(() => normalizeColumns(props.node.data.columns))
+
+const newColumnName = ref('')
+function onAddColumn() {
+  const name = newColumnName.value.trim()
+  if (!name) return
+  addColumnOp(props.node.data, name)
+  newColumnName.value = ''
+}
+
+function onRenameColumn(colId, title) {
+  renameColumnOp(props.node.data, colId, title)
+}
+
+function onMoveColumn(colId, direction) {
+  moveColumnOp(props.node.data, colId, direction)
+}
+
+// pendingColumnDeleteId é separado de pendingDeleteId (tags, mais abaixo) de
+// propósito — são duas confirmações em dois cliques independentes; se
+// compartilhassem o mesmo ref, armar a exclusão de uma coluna desarmaria (ou
+// pior, confirmaria) uma exclusão de tag armada por engano.
+const pendingColumnDeleteId = ref(null)
+let pendingColumnDeleteTimer = null
+function requestColumnDelete(colId) {
+  clearTimeout(pendingColumnDeleteTimer)
+  if (pendingColumnDeleteId.value === colId) {
+    pendingColumnDeleteId.value = null
+    removeColumnOp(props.node.data, colId)
+  } else {
+    pendingColumnDeleteId.value = colId
+    pendingColumnDeleteTimer = setTimeout(() => {
+      pendingColumnDeleteId.value = null
+    }, 2500)
+  }
+}
 
 const draftName = ref('')
 const draftColor = ref(TAG_COLORS[0])
@@ -252,6 +352,34 @@ const connectedAgents = computed(() => {
 .icon-btn.danger.confirming {
   background: #ff6b6b;
   color: #fff;
+}
+
+.icon-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.icon-btn:disabled:hover {
+  background: transparent;
+  color: var(--color-text-tertiary);
+}
+
+.column-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reorder-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.reorder-btns .icon-btn {
+  width: 18px;
+  height: 13px;
 }
 
 .new-category {

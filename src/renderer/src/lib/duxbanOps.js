@@ -86,7 +86,7 @@ export function addTag(data, name, color) {
 export function renameTag(data, tagId, name) {
   const tags = boardTags(data)
   const tag = tags.find((t) => t.id === tagId)
-  if (!tag) return
+  if (!tag) throw new Error(`tag não encontrada: ${tagId}`)
   tag.name = String(name || '').trim() || tag.name
   data.tags = tags
 }
@@ -94,7 +94,7 @@ export function renameTag(data, tagId, name) {
 export function recolorTag(data, tagId, color) {
   const tags = boardTags(data)
   const tag = tags.find((t) => t.id === tagId)
-  if (!tag) return
+  if (!tag) throw new Error(`tag não encontrada: ${tagId}`)
   tag.color = color
   data.tags = tags
 }
@@ -125,6 +125,76 @@ export function toggleCardTag(data, cardId, tagId) {
   const tagIds = found.card.tagIds
   found.card.tagIds = tagIds.includes(tagId) ? tagIds.filter((id) => id !== tagId) : [...tagIds, tagId]
   data.columns = columns
+}
+
+// addCardTag/removeCardTag (em vez de reusar toggleCardTag) são de propósito
+// idempotentes — um agente via MCP não tem como saber o estado atual antes de
+// chamar, então "adicionar" e "remover" precisam ter resultado previsível
+// mesmo chamados duas vezes seguidas, ao contrário do toggle usado pela UI
+// (onde quem clica já vê o estado antes de clicar).
+export function addCardTag(data, cardId, tagId) {
+  const columns = normalizeColumns(data.columns)
+  const found = findCardById(columns, cardId)
+  if (!found) throw new Error(`cartão não encontrado: ${cardId}`)
+  if (!found.card.tagIds.includes(tagId)) found.card.tagIds = [...found.card.tagIds, tagId]
+  data.columns = columns
+}
+
+export function removeCardTag(data, cardId, tagId) {
+  const columns = normalizeColumns(data.columns)
+  const found = findCardById(columns, cardId)
+  if (!found) throw new Error(`cartão não encontrado: ${cardId}`)
+  found.card.tagIds = found.card.tagIds.filter((id) => id !== tagId)
+  data.columns = columns
+}
+
+// Gestão de colunas — extraída pra cá (em vez de ficar só como closures locais
+// em DuxBanNode.vue, como era antes) pra ser chamável tanto do node no canvas
+// quanto da sidebar de configuração (DuxBanSettings.vue), do mesmo jeito que
+// addTag/renameTag/removeTag já são.
+export function addColumn(data, title) {
+  const columns = normalizeColumns(data.columns)
+  const col = { id: crypto.randomUUID(), title: String(title || '').trim() || 'Nova coluna', cards: [] }
+  columns.push(col)
+  data.columns = columns
+  return col
+}
+
+export function renameColumn(data, colId, title) {
+  const columns = normalizeColumns(data.columns)
+  const col = columns.find((c) => c.id === colId)
+  if (!col) return
+  col.title = title
+  data.columns = columns
+}
+
+export function moveColumn(data, colId, direction) {
+  const columns = normalizeColumns(data.columns)
+  const index = columns.findIndex((c) => c.id === colId)
+  if (index === -1) return
+  const target = index + direction
+  if (target < 0 || target >= columns.length) return
+  const [col] = columns.splice(index, 1)
+  columns.splice(target, 0, col)
+  data.columns = columns
+}
+
+// Remove a coluna inteira (com seus cards) num passo só — diferente de
+// esvaziar via removeCard chamado card a card, libera a vaga de fila de cada
+// card removido que estava com despacho ativo diretamente aqui, já que a
+// coluna (e os cards nela) já saem de data.columns antes desse loop.
+export function removeColumn(data, colId) {
+  const columns = normalizeColumns(data.columns)
+  const index = columns.findIndex((c) => c.id === colId)
+  if (index === -1) return
+  const [col] = columns.splice(index, 1)
+  data.columns = columns
+  for (const card of col.cards) {
+    if (card.assignedNodeId && data.activeDispatch?.[card.assignedNodeId] === card.id) {
+      clearActiveDispatch(data, card.assignedNodeId)
+      tryDispatchNext(data, card.assignedNodeId)
+    }
+  }
 }
 
 export function addComment(data, cardId, text) {
@@ -207,21 +277,25 @@ export function tryDispatchNext(data, nodeId) {
   return true
 }
 
-export function addCard(data, columnRef, text) {
+// `extra` é opcional — cobre os campos já preenchíveis na criação pelo modal
+// da UI (description, dueDate, priority, tagIds, milestone*). Chamadas via
+// bridge MCP (dux_kanban_create_card) continuam passando só `text` e caem
+// nos defaults de sempre.
+export function addCard(data, columnRef, text, extra = {}) {
   const columns = normalizeColumns(data.columns)
   const col = findColumnByRef(columns, columnRef) || columns[0]
   if (!col) throw new Error('board sem colunas')
   const card = {
     id: crypto.randomUUID(),
     text: String(text || '').trim(),
-    description: '',
-    dueDate: null,
-    priority: null,
-    milestoneCurrent: 0,
-    milestoneTotal: 0,
+    description: String(extra.description || ''),
+    dueDate: extra.dueDate || null,
+    priority: PRIORITIES.includes(extra.priority) ? extra.priority : null,
+    milestoneCurrent: Number.isFinite(extra.milestoneCurrent) ? extra.milestoneCurrent : 0,
+    milestoneTotal: Number.isFinite(extra.milestoneTotal) ? extra.milestoneTotal : 0,
     assignedNodeId: null,
     taskState: 'unassigned',
-    tagIds: [],
+    tagIds: Array.isArray(extra.tagIds) ? extra.tagIds : [],
     comments: []
   }
   col.cards.push(card)
@@ -336,6 +410,7 @@ export function serializeBoard(data, agentNames, viewerNodeId) {
   const tags = boardTags(data)
   return {
     board: data.name || 'DuxBan',
+    tags: tags.map((t) => ({ id: t.id, name: t.name, color: t.color })),
     columns: columns.map((col) => ({
       title: col.title,
       cards: col.cards.map((card) => ({

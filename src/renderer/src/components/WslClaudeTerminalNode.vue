@@ -57,7 +57,19 @@ import '@xterm/xterm/css/xterm.css'
 import { toggleNodeSettings, updateNodeData, activeTerminalId, AGENT_TERMINAL_TYPES } from '../store/flowStore'
 import { theme, XTERM_THEMES } from '../store/themeStore'
 import { linkAgents, linkNoteToAgent } from '../lib/bridgeClient'
-import { serializeBoard, addCard, moveCard, finishTask } from '../lib/duxbanOps'
+import {
+  serializeBoard,
+  addCard,
+  moveCard,
+  finishTask,
+  assignCard,
+  addTag,
+  renameTag,
+  recolorTag,
+  removeTag,
+  addCardTag,
+  removeCardTag
+} from '../lib/duxbanOps'
 import { pendingVoiceInput, consumePendingVoiceInput, isRecording } from '../store/voiceStore'
 import { speak, ttsEnabled } from '../store/ttsStore'
 import { playNotificationSound } from '../store/notificationSoundStore'
@@ -274,6 +286,29 @@ function agentNamesForBoard(duxbanNode) {
   return names
 }
 
+// Resolve um nome de agente (dux_kanban_assign_card) pra um nodeId, só entre
+// os agentes de fato conectados ao board — mesmo universo que
+// agentNamesForBoard já expõe em dux_kanban_list, então um agent_name que
+// veio de lá sempre bate. Match exato primeiro (mesmo critério de
+// agentLink.ask, que é case-sensitive); cai pro primeiro match
+// case-insensitive só como fallback tolerante.
+function resolveAgentNodeId(duxbanNode, agentName) {
+  const name = String(agentName || '').trim()
+  if (!name) return { nodeId: null, found: true }
+  let looseMatch = null
+  for (const edge of getConnectedEdges(duxbanNode.id)) {
+    const otherId = edge.source === duxbanNode.id ? edge.target : edge.source
+    if (otherId === duxbanNode.id) continue
+    const otherNode = findNode(otherId)
+    if (!otherNode) continue
+    const otherName = otherNode.data.name || otherId
+    if (otherName === name) return { nodeId: otherId, found: true }
+    if (!looseMatch && otherName.toLowerCase() === name.toLowerCase()) looseMatch = otherId
+  }
+  if (looseMatch) return { nodeId: looseMatch, found: true }
+  return { nodeId: null, found: false }
+}
+
 // Chega pela mesma conexão ws persistente do terminal (duxbanLink.request,
 // no bridge, escreve nela diretamente) — o board mora aqui no renderer, o
 // bridge só faz a ida-e-volta. Resposta sempre volta como duxbanResponse,
@@ -292,7 +327,9 @@ function handleDuxbanRequest(msg) {
     if (msg.action === 'list') {
       reply(serializeBoard(board.data, agentNamesForBoard(board), props.id))
     } else if (msg.action === 'create_card') {
-      const card = addCard(board.data, msg.payload?.column, msg.payload?.text)
+      const card = addCard(board.data, msg.payload?.column, msg.payload?.text, {
+        description: msg.payload?.description
+      })
       reply({ ok: true, card_id: card.id })
     } else if (msg.action === 'move_card') {
       const card = moveCard(board.data, msg.payload?.cardId, msg.payload?.column)
@@ -300,6 +337,32 @@ function handleDuxbanRequest(msg) {
     } else if (msg.action === 'finish_task') {
       const card = finishTask(board.data, msg.payload?.cardId, props.id)
       reply({ ok: true, card_id: card.id })
+    } else if (msg.action === 'assign_card') {
+      const { nodeId, found } = resolveAgentNodeId(board, msg.payload?.agentName)
+      if (!found) {
+        reply(null, `agente não encontrado ou não conectado a este board: "${msg.payload?.agentName}"`)
+      } else {
+        assignCard(board.data, msg.payload?.cardId, nodeId)
+        reply({ ok: true, card_id: msg.payload?.cardId })
+      }
+    } else if (msg.action === 'create_tag') {
+      const tag = addTag(board.data, msg.payload?.name, msg.payload?.color)
+      reply({ ok: true, tag_id: tag.id, name: tag.name, color: tag.color })
+    } else if (msg.action === 'rename_tag') {
+      renameTag(board.data, msg.payload?.tagId, msg.payload?.name)
+      reply({ ok: true, tag_id: msg.payload?.tagId })
+    } else if (msg.action === 'recolor_tag') {
+      recolorTag(board.data, msg.payload?.tagId, msg.payload?.color)
+      reply({ ok: true, tag_id: msg.payload?.tagId })
+    } else if (msg.action === 'remove_tag') {
+      removeTag(board.data, msg.payload?.tagId)
+      reply({ ok: true, tag_id: msg.payload?.tagId })
+    } else if (msg.action === 'add_card_tag') {
+      addCardTag(board.data, msg.payload?.cardId, msg.payload?.tagId)
+      reply({ ok: true, card_id: msg.payload?.cardId, tag_id: msg.payload?.tagId })
+    } else if (msg.action === 'remove_card_tag') {
+      removeCardTag(board.data, msg.payload?.cardId, msg.payload?.tagId)
+      reply({ ok: true, card_id: msg.payload?.cardId, tag_id: msg.payload?.tagId })
     } else {
       reply(null, `ação desconhecida: ${msg.action}`)
     }

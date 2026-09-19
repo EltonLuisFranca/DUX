@@ -78,7 +78,7 @@
             @input="renameColumn(col, $event)"
           />
           <span class="column-count">{{ col.cards.length }}</span>
-          <button class="column-btn" title="Adicionar cartão" @click="focusAddInput(col)">
+          <button class="column-btn" title="Adicionar cartão" @click="openCreateModal(col)">
             <svg viewBox="0 0 16 16" width="13" height="13">
               <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
             </svg>
@@ -237,18 +237,6 @@
             </div>
           </template>
           <div v-if="isDropTarget(col, col.cards.length)" class="drop-indicator" />
-        </div>
-
-        <div class="add-card-row">
-          <input
-            :ref="(el) => { if (el) addInputRefs[col.id] = el }"
-            v-model="drafts[col.id]"
-            class="add-card-input"
-            type="text"
-            placeholder="Novo cartão..."
-            @keyup.enter="onAddCard(col)"
-          />
-          <button class="add-card-btn" title="Adicionar cartão" @click="onAddCard(col)">+</button>
         </div>
       </div>
 
@@ -417,6 +405,103 @@
         </div>
       </Transition>
     </Teleport>
+
+    <Teleport to="body">
+      <Transition name="modal-fade">
+        <div v-if="creatingCol" class="card-modal-backdrop" @mousedown.self="closeCreateModal">
+        <div class="card-modal nodrag nowheel nopan">
+          <div class="card-modal-header">
+            <span class="card-modal-title">Novo cartão — {{ creatingCol.title }}</span>
+            <button class="header-btn" title="Fechar" @click="closeCreateModal">
+              <svg viewBox="0 0 16 16" width="14" height="14">
+                <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="card-modal-body">
+            <div class="modal-field">
+              <label class="modal-label">Título</label>
+              <textarea
+                ref="newCardTitleRef"
+                v-model="newCardDraft.text"
+                class="modal-textarea"
+                rows="2"
+                placeholder="Título do cartão"
+              />
+            </div>
+
+            <div class="modal-field">
+              <label class="modal-label">Descrição</label>
+              <textarea v-model="newCardDraft.description" class="modal-textarea" rows="4" placeholder="Descrição (opcional)" />
+            </div>
+
+            <div class="modal-field modal-field-row">
+              <div>
+                <label class="modal-label">Vencimento</label>
+                <input
+                  type="date"
+                  class="modal-select"
+                  :value="newCardDraft.dueDate || ''"
+                  @change="newCardDraft.dueDate = $event.target.value || null"
+                />
+              </div>
+              <div>
+                <label class="modal-label">Milestone</label>
+                <div class="milestone-inputs">
+                  <input type="number" min="0" class="modal-number" v-model.number="newCardDraft.milestoneCurrent" />
+                  <span>/</span>
+                  <input type="number" min="0" class="modal-number" v-model.number="newCardDraft.milestoneTotal" />
+                </div>
+              </div>
+            </div>
+
+            <div class="modal-field">
+              <label class="modal-label">Prioridade</label>
+              <div class="priority-picker">
+                <button
+                  v-for="p in PRIORITY_ORDER"
+                  :key="p"
+                  type="button"
+                  class="priority-chip"
+                  :class="{ active: newCardDraft.priority === p }"
+                  :style="{ '--priority-color': PRIORITY_META[p].color }"
+                  @click="newCardDraft.priority = newCardDraft.priority === p ? null : p"
+                >
+                  {{ PRIORITY_META[p].label }}
+                </button>
+              </div>
+            </div>
+
+            <div class="modal-field">
+              <label class="modal-label">Tags</label>
+              <div v-if="tags.length" class="modal-tag-picker">
+                <button
+                  v-for="tag in tags"
+                  :key="tag.id"
+                  type="button"
+                  class="modal-tag-chip"
+                  :class="{ active: newCardDraft.tagIds.includes(tag.id) }"
+                  :style="{ '--tag-color': tag.color }"
+                  @click="toggleNewCardTag(tag.id)"
+                >
+                  {{ tag.name }}
+                </button>
+              </div>
+              <p v-if="!tags.length" class="modal-hint">
+                Nenhuma tag criada ainda — adicione uma nas configurações do board (ícone de engrenagem).
+              </p>
+            </div>
+          </div>
+
+          <div class="card-modal-footer create-footer">
+            <button class="cancel-btn" @click="closeCreateModal">Cancelar</button>
+            <button class="create-card-btn" :disabled="!newCardDraft.text.trim()" @click="onCreateCard">Criar cartão</button>
+          </div>
+        </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -440,7 +525,11 @@ import {
   addComment,
   removeComment,
   findCardById,
-  TAG_COLORS
+  TAG_COLORS,
+  addColumn as addColumnOp,
+  removeColumn as removeColumnOp,
+  moveColumn as moveColumnOp,
+  renameColumn as renameColumnOp
 } from '../lib/duxbanOps'
 
 const STATUS_LABELS = {
@@ -615,6 +704,7 @@ function onDocClick(event) {
 function onKeydown(event) {
   if (event.key !== 'Escape') return
   if (detailCardId.value) closeDetail()
+  if (creatingColId.value) closeCreateModal()
   openCardMenuId.value = null
   openColMenuId.value = null
   assigningCardId.value = null
@@ -672,14 +762,64 @@ function onDetailColumnChange(columnId) {
   moveCard(props.data, detailCardId.value, columnId)
 }
 
-const drafts = reactive({})
 const editingCardId = ref(null)
 const titleRefs = {}
 const cardRefs = {}
-const addInputRefs = {}
 
-function focusAddInput(col) {
-  nextTick(() => addInputRefs[col.id]?.focus())
+// modal de criação de cartão: aberto pelo botão "Adicionar cartão" de uma
+// coluna, substitui o antigo input inline no rodapé — permite já preencher
+// descrição/tags/etc antes do cartão existir, em vez de criar só com o
+// título e editar depois.
+const creatingColId = ref(null)
+const creatingCol = computed(() => {
+  if (!creatingColId.value) return null
+  return columns.value.find((c) => c.id === creatingColId.value) || null
+})
+const newCardTitleRef = ref(null)
+const newCardDraft = reactive({
+  text: '',
+  description: '',
+  dueDate: null,
+  priority: null,
+  tagIds: [],
+  milestoneCurrent: 0,
+  milestoneTotal: 0
+})
+
+function openCreateModal(col) {
+  creatingColId.value = col.id
+  newCardDraft.text = ''
+  newCardDraft.description = ''
+  newCardDraft.dueDate = null
+  newCardDraft.priority = null
+  newCardDraft.tagIds = []
+  newCardDraft.milestoneCurrent = 0
+  newCardDraft.milestoneTotal = 0
+  nextTick(() => newCardTitleRef.value?.focus())
+}
+
+function closeCreateModal() {
+  creatingColId.value = null
+}
+
+function toggleNewCardTag(tagId) {
+  newCardDraft.tagIds = newCardDraft.tagIds.includes(tagId)
+    ? newCardDraft.tagIds.filter((id) => id !== tagId)
+    : [...newCardDraft.tagIds, tagId]
+}
+
+function onCreateCard() {
+  const text = newCardDraft.text.trim()
+  if (!text || !creatingColId.value) return
+  addCard(props.data, creatingColId.value, text, {
+    description: newCardDraft.description.trim(),
+    dueDate: newCardDraft.dueDate,
+    priority: newCardDraft.priority,
+    tagIds: [...newCardDraft.tagIds],
+    milestoneCurrent: newCardDraft.milestoneCurrent,
+    milestoneTotal: newCardDraft.milestoneTotal
+  })
+  closeCreateModal()
 }
 
 // arraste de cartão: estado de quem está sendo arrastado + posição de destino
@@ -690,13 +830,6 @@ const hover = reactive({ colId: null, index: null })
 
 function isDropTarget(col, index) {
   return dragState.cardId !== null && hover.colId === col.id && hover.index === index
-}
-
-function onAddCard(col) {
-  const text = (drafts[col.id] || '').trim()
-  if (!text) return
-  addCard(props.data, col.id, text)
-  drafts[col.id] = ''
 }
 
 function onRemoveCard(cardId) {
@@ -723,8 +856,7 @@ function stopEdit() {
 }
 
 function addColumn() {
-  const col = { id: crypto.randomUUID(), title: 'Nova coluna', cards: [] }
-  columns.value.push(col)
+  const col = addColumnOp(props.data, 'Nova coluna')
   nextTick(() => {
     const el = titleRefs[col.id]
     el?.focus()
@@ -733,26 +865,17 @@ function addColumn() {
 }
 
 function removeColumn(colId) {
-  const col = columns.value.find((c) => c.id === colId)
-  if (!col) return
-  // remove cartão por cartão (em vez de só cortar a coluna) pra liberar
-  // direito qualquer vaga de fila que algum deles estivesse ocupando — cada
-  // chamada troca `data.columns` por um array novo (ver duxbanOps.js), então
-  // reprocura o índice por id depois, não reusa o objeto `col` capturado acima
-  for (const card of [...col.cards]) removeCard(props.data, card.id)
-  const index = columns.value.findIndex((c) => c.id === colId)
-  if (index !== -1) columns.value.splice(index, 1)
+  removeColumnOp(props.data, colId)
 }
 
 function moveColumn(index, direction) {
-  const target = index + direction
-  if (target < 0 || target >= columns.value.length) return
-  const [col] = columns.value.splice(index, 1)
-  columns.value.splice(target, 0, col)
+  const col = columns.value[index]
+  if (!col) return
+  moveColumnOp(props.data, col.id, direction)
 }
 
 function renameColumn(col, event) {
-  col.title = event.target.value
+  renameColumnOp(props.data, col.id, event.target.value)
 }
 
 function onCardDragStart(col, card, event) {
@@ -1414,49 +1537,6 @@ function onColumnDrop(col) {
   }
 }
 
-.add-card-row {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-  padding: 6px;
-  border-top: 1px solid var(--color-border);
-}
-
-.add-card-input {
-  flex: 1;
-  min-width: 0;
-  height: 24px;
-  padding: 0 6px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 5px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  font-size: 11px;
-}
-
-.add-card-input:focus {
-  outline: none;
-  border-color: var(--color-text-secondary);
-}
-
-.add-card-btn {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 5px;
-  background: var(--color-bg-surface-raised);
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.add-card-btn:hover {
-  background: var(--color-hover);
-  color: var(--color-text-primary);
-}
-
 .add-column-btn {
   flex-shrink: 0;
   align-self: flex-start;
@@ -1824,6 +1904,49 @@ function onColumnDrop(col) {
   background: #ff6b6b;
   border-color: #ff6b6b;
   color: #fff;
+}
+
+.create-footer {
+  display: flex;
+  gap: 8px;
+}
+
+.cancel-btn {
+  flex: 1;
+  height: 32px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cancel-btn:hover {
+  background: var(--color-hover);
+  color: var(--color-text-primary);
+}
+
+.create-card-btn {
+  flex: 1;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.create-card-btn:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.create-card-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .modal-fade-enter-active,
