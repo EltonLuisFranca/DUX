@@ -73,7 +73,8 @@
     "publish": {
       "provider": "github",
       "owner": "EltonLuisFranca",
-      "repo": "DUX"
+      "repo": "DUX",
+      "releaseType": "release"
     }
   },
   "dependencies": {
