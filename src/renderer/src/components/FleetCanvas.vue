@@ -34,6 +34,9 @@
     <Panel position="bottom-center" class="bottom-toolbar-stack">
       <ZoomControls />
     </Panel>
+    <Panel position="top-right" class="usage-dock-panel">
+      <ClaudeUsageDock />
+    </Panel>
 
     <DuxSearch v-if="isActiveWorkspace" :workspace="workspace" />
 
@@ -126,6 +129,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, watch } from 'vue'
 import { VueFlow, Panel, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import ZoomControls from './ZoomControls.vue'
+import ClaudeUsageDock from './ClaudeUsageDock.vue'
 import CustomEdge from './CustomEdge.vue'
 import RemoteCursor from './RemoteCursor.vue'
 import WslClaudeTerminalNode from './WslClaudeTerminalNode.vue'
@@ -429,6 +433,13 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+}
+
+:deep(.vue-flow__panel.right.usage-dock-panel) {
+  top: 50%;
+  right: 0;
+  margin: 0;
+  transform: translateY(-50%);
 }
 
 .ghost-node {
