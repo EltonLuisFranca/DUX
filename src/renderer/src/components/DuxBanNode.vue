@@ -52,6 +52,23 @@
         :class="{ 'drop-active': dragState.cardId && hover.colId === col.id }"
       >
         <div class="column-header">
+          <span class="column-dot" :style="{ '--dot-color': columnMetas[colIndex].color }">
+            <svg v-if="columnMetas[colIndex].icon === 'done'" viewBox="0 0 16 16" width="13" height="13">
+              <circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.4" />
+              <path d="M5.3 8.2l1.8 1.8 3.4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+            </svg>
+            <svg v-else-if="columnMetas[colIndex].icon === 'review'" viewBox="0 0 16 16" width="13" height="13">
+              <path d="M4 2.5v11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+              <path d="M4 3h7l-1.6 2L11 7H4" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none" />
+            </svg>
+            <svg v-else-if="columnMetas[colIndex].icon === 'process'" viewBox="0 0 16 16" width="13" height="13">
+              <circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.4" />
+              <path d="M8 4.6v3.7l2.4 1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" />
+            </svg>
+            <svg v-else viewBox="0 0 16 16" width="13" height="13">
+              <circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.4" />
+            </svg>
+          </span>
           <input
             :ref="(el) => { if (el) titleRefs[col.id] = el }"
             class="column-title-input"
@@ -61,36 +78,38 @@
             @input="renameColumn(col, $event)"
           />
           <span class="column-count">{{ col.cards.length }}</span>
-          <button
-            class="column-btn"
-            title="Mover coluna pra esquerda"
-            :disabled="colIndex === 0"
-            @click="moveColumn(colIndex, -1)"
-          >
+          <button class="column-btn" title="Adicionar cartão" @click="focusAddInput(col)">
             <svg viewBox="0 0 16 16" width="13" height="13">
-              <path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+              <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
             </svg>
           </button>
-          <button
-            class="column-btn"
-            title="Mover coluna pra direita"
-            :disabled="colIndex === columns.length - 1"
-            @click="moveColumn(colIndex, 1)"
-          >
-            <svg viewBox="0 0 16 16" width="13" height="13">
-              <path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-            </svg>
-          </button>
-          <button
-            class="column-btn danger"
-            :class="{ confirming: pendingDeleteId === 'col-' + col.id }"
-            :title="pendingDeleteId === 'col-' + col.id ? 'Clique de novo pra confirmar' : 'Excluir coluna'"
-            @click="requestDelete('col-' + col.id, () => removeColumn(col.id))"
-          >
-            <svg viewBox="0 0 16 16" width="14" height="14">
-              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-            </svg>
-          </button>
+          <div class="col-menu-wrap">
+            <button class="column-btn" title="Mais opções" @mousedown.stop @click="toggleColMenu(col.id)">
+              <svg viewBox="0 0 16 16" width="13" height="13">
+                <circle cx="3.2" cy="8" r="1.3" fill="currentColor" />
+                <circle cx="8" cy="8" r="1.3" fill="currentColor" />
+                <circle cx="12.8" cy="8" r="1.3" fill="currentColor" />
+              </svg>
+            </button>
+            <div v-if="openColMenuId === col.id" class="col-menu">
+              <button class="col-menu-item" :disabled="colIndex === 0" @click="moveColumn(colIndex, -1); openColMenuId = null">
+                Mover pra esquerda
+              </button>
+              <button
+                class="col-menu-item"
+                :disabled="colIndex === columns.length - 1"
+                @click="moveColumn(colIndex, 1); openColMenuId = null"
+              >
+                Mover pra direita
+              </button>
+              <button
+                class="col-menu-item danger"
+                @click="requestDelete('col-' + col.id, () => removeColumn(col.id)); openColMenuId = null"
+              >
+                {{ pendingDeleteId === 'col-' + col.id ? 'Clique de novo pra confirmar' : 'Excluir coluna' }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div
@@ -109,6 +128,35 @@
               @dragend="onCardDragEnd"
               @dragover.prevent.stop="onCardDragOver(col, cardIndex, $event)"
             >
+              <div class="card-top-row">
+                <div v-if="card.dueDate" class="due-date">
+                  <svg viewBox="0 0 16 16" width="11" height="11">
+                    <rect x="2.5" y="3" width="11" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3" />
+                    <path d="M2.5 6h11M5.5 2v2.5M10.5 2v2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+                  </svg>
+                  <span>Due: {{ formatDueDate(card.dueDate) }}</span>
+                </div>
+                <span v-else class="due-date-spacer" />
+                <div class="card-menu-wrap">
+                  <button class="card-icon-btn dots-btn" title="Mais opções" @mousedown.stop @click.stop="toggleCardMenu(card.id)">
+                    <svg viewBox="0 0 16 16" width="13" height="13">
+                      <circle cx="3.2" cy="8" r="1.3" fill="currentColor" />
+                      <circle cx="8" cy="8" r="1.3" fill="currentColor" />
+                      <circle cx="12.8" cy="8" r="1.3" fill="currentColor" />
+                    </svg>
+                  </button>
+                  <div v-if="openCardMenuId === card.id" class="card-menu">
+                    <button class="card-menu-item" @click="openDetail(card); openCardMenuId = null">Ver detalhes</button>
+                    <button
+                      class="card-menu-item danger"
+                      @click="requestDelete('card-' + card.id, () => onRemoveCard(card.id)); openCardMenuId = null"
+                    >
+                      {{ pendingDeleteId === 'card-' + card.id ? 'Clique de novo pra confirmar' : 'Excluir cartão' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div v-if="cardTags(card).length" class="tag-badges">
                 <span v-for="tag in cardTags(card)" :key="tag.id" class="category-badge" :style="{ background: tag.color }">
                   {{ tag.name }}
@@ -126,54 +174,65 @@
               />
               <p v-else class="card-text" @click="startEdit(card)">{{ card.text || 'Cartão vazio' }}</p>
 
-              <div v-if="card.comments.length" class="comment-count" :title="`${card.comments.length} comentário${card.comments.length === 1 ? '' : 's'}`">
-                <svg viewBox="0 0 16 16" width="11" height="11">
-                  <path d="M2.5 3.5h11v7h-6l-3 3v-3h-2v-7z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none" />
-                </svg>
-                <span>{{ card.comments.length }}</span>
+              <p v-if="card.description" class="card-description">{{ card.description }}</p>
+
+              <div v-if="card.milestoneTotal" class="milestone-block">
+                <div class="milestone-label-row">
+                  <span>Milestone</span>
+                  <span class="milestone-fraction">{{ card.milestoneCurrent }}/{{ card.milestoneTotal }}</span>
+                </div>
+                <div class="milestone-bar">
+                  <div class="milestone-fill" :style="{ width: milestonePercent(card) + '%' }" />
+                </div>
               </div>
 
-              <div class="card-actions nodrag" :class="{ 'force-visible': pendingDeleteId === 'card-' + card.id }">
-                <button class="card-icon-btn" title="Mais detalhes" @click="openDetail(card)">
-                  <svg viewBox="0 0 16 16" width="13" height="13">
-                    <path
-                      d="M6.5 3.5h6v6M12.5 3.5L3.5 12.5"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      fill="none"
-                    />
-                  </svg>
-                </button>
-                <button
-                  class="card-icon-btn danger"
-                  :class="{ confirming: pendingDeleteId === 'card-' + card.id }"
-                  :title="pendingDeleteId === 'card-' + card.id ? 'Clique de novo pra confirmar' : 'Excluir cartão'"
-                  @click="requestDelete('card-' + card.id, () => onRemoveCard(card.id))"
-                >
-                  <svg viewBox="0 0 16 16" width="13" height="13">
-                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-                  </svg>
-                </button>
-              </div>
-
-              <div v-if="connectedAgents.length" class="card-assign">
+              <div v-if="connectedAgents.length" class="card-assign assign-wrap">
+                <span class="assign-label">Assigned for</span>
                 <select
+                  v-if="assigningCardId === card.id"
                   class="assign-select"
                   :value="card.assignedNodeId || ''"
+                  autofocus
                   @change="onAssign(card, $event.target.value)"
                   @mousedown.stop
                 >
                   <option value="">Sem atribuição</option>
                   <option v-for="agent in connectedAgents" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
                 </select>
+                <button
+                  v-else
+                  class="avatar-btn"
+                  :class="{ empty: !card.assignedNodeId }"
+                  :style="card.assignedNodeId ? { background: avatarColor(card.assignedNodeId) } : {}"
+                  :title="card.assignedNodeId ? agentName(card.assignedNodeId) : 'Sem atribuição — clique pra atribuir'"
+                  @mousedown.stop
+                  @click.stop="toggleAssign(card)"
+                >
+                  {{ card.assignedNodeId ? initials(agentName(card.assignedNodeId)) : '+' }}
+                </button>
                 <span
                   v-if="card.assignedNodeId"
                   class="task-status"
                   :class="card.taskState"
                   :title="STATUS_LABELS[card.taskState]"
                 />
+              </div>
+
+              <div class="card-bottom-row">
+                <span
+                  v-if="card.priority"
+                  class="priority-pill"
+                  :style="{ '--priority-color': PRIORITY_META[card.priority].color }"
+                >
+                  {{ PRIORITY_META[card.priority].label }}
+                </span>
+                <span v-else class="priority-pill-spacer" />
+                <div v-if="card.comments.length" class="comment-count" :title="`${card.comments.length} comentário${card.comments.length === 1 ? '' : 's'}`">
+                  <svg viewBox="0 0 16 16" width="11" height="11">
+                    <path d="M2.5 3.5h11v7h-6l-3 3v-3h-2v-7z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none" />
+                  </svg>
+                  <span>{{ card.comments.length }}</span>
+                </div>
               </div>
             </div>
           </template>
@@ -182,6 +241,7 @@
 
         <div class="add-card-row">
           <input
+            :ref="(el) => { if (el) addInputRefs[col.id] = el }"
             v-model="drafts[col.id]"
             class="add-card-input"
             type="text"
@@ -214,8 +274,50 @@
 
           <div class="card-modal-body">
             <div class="modal-field">
+              <label class="modal-label">Título</label>
+              <textarea v-model="detailCard.text" class="modal-textarea" rows="2" />
+            </div>
+
+            <div class="modal-field">
               <label class="modal-label">Descrição</label>
-              <textarea v-model="detailCard.text" class="modal-textarea" rows="5" />
+              <textarea v-model="detailCard.description" class="modal-textarea" rows="4" />
+            </div>
+
+            <div class="modal-field modal-field-row">
+              <div>
+                <label class="modal-label">Vencimento</label>
+                <input
+                  type="date"
+                  class="modal-select"
+                  :value="detailCard.dueDate || ''"
+                  @change="detailCard.dueDate = $event.target.value || null"
+                />
+              </div>
+              <div>
+                <label class="modal-label">Milestone</label>
+                <div class="milestone-inputs">
+                  <input type="number" min="0" class="modal-number" v-model.number="detailCard.milestoneCurrent" />
+                  <span>/</span>
+                  <input type="number" min="0" class="modal-number" v-model.number="detailCard.milestoneTotal" />
+                </div>
+              </div>
+            </div>
+
+            <div class="modal-field">
+              <label class="modal-label">Prioridade</label>
+              <div class="priority-picker">
+                <button
+                  v-for="p in PRIORITY_ORDER"
+                  :key="p"
+                  type="button"
+                  class="priority-chip"
+                  :class="{ active: detailCard.priority === p }"
+                  :style="{ '--priority-color': PRIORITY_META[p].color }"
+                  @click="detailCard.priority = detailCard.priority === p ? null : p"
+                >
+                  {{ PRIORITY_META[p].label }}
+                </button>
+              </div>
             </div>
 
             <div class="modal-field">
@@ -337,7 +439,8 @@ import {
   toggleCardTag,
   addComment,
   removeComment,
-  findCardById
+  findCardById,
+  TAG_COLORS
 } from '../lib/duxbanOps'
 
 const STATUS_LABELS = {
@@ -345,6 +448,13 @@ const STATUS_LABELS = {
   active: 'Em andamento',
   done: 'Concluído'
 }
+
+const PRIORITY_META = {
+  high: { label: 'Alta', color: '#ef4444' },
+  medium: { label: 'Média', color: '#eab308' },
+  low: { label: 'Baixa', color: '#3b82f6' }
+}
+const PRIORITY_ORDER = ['high', 'medium', 'low']
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -381,6 +491,52 @@ const connectedAgents = computed(() => {
   }
   return list
 })
+
+function agentName(nodeId) {
+  return connectedAgents.value.find((a) => a.id === nodeId)?.name || ''
+}
+
+// hash simples do id só pra escolher uma cor estável da paleta pro avatar do
+// agente — não precisa ser criptográfico, só determinístico entre renders.
+function avatarColor(id) {
+  let hash = 0
+  for (const ch of String(id)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+  return TAG_COLORS[hash % TAG_COLORS.length]
+}
+
+function initials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '?'
+  return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase()
+}
+
+// dot/ícone da coluna é só cosmético e derivado do título (sem campo novo
+// persistido) — casa palavras-chave comuns de board kanban; sem match, cai
+// num dot cinza cor da paleta ciclando pelo índice, igual as tags.
+function columnMeta(col, index) {
+  const t = (col.title || '').toLowerCase()
+  if (/(conclu|feito|complet|done)/.test(t)) return { icon: 'done', color: '#22c55e' }
+  if (/(revis|review)/.test(t)) return { icon: 'review', color: '#ef4444' }
+  if (/(andamento|process|fazendo|progress)/.test(t)) return { icon: 'process', color: '#eab308' }
+  if (/(fazer|todo|to.?do|backlog)/.test(t)) return { icon: 'todo', color: '#3b82f6' }
+  return { icon: 'todo', color: TAG_COLORS[index % TAG_COLORS.length] }
+}
+const columnMetas = computed(() => columns.value.map((col, i) => columnMeta(col, i)))
+
+// "Due: 14 dez 2026" a partir do value cru de <input type="date"> (sempre
+// yyyy-mm-dd) — monta a Date com componentes locais em vez de new Date(str)
+// pra não sofrer o shift de fuso horário do parse ISO em UTC.
+function formatDueDate(value) {
+  if (!value) return ''
+  const [y, m, d] = String(value).split('-').map(Number)
+  if (!y || !m || !d) return ''
+  return new Date(y, m - 1, d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function milestonePercent(card) {
+  if (!card.milestoneTotal) return 0
+  return Math.min(100, Math.max(0, Math.round((card.milestoneCurrent / card.milestoneTotal) * 100)))
+}
 
 // `props.data` é o objeto reativo real do node (o mesmo em workspace.nodes) —
 // diferente dos outros node types, aqui o template lê e edita ele
@@ -433,12 +589,45 @@ function closeDetail() {
   pendingDeleteId.value = null
 }
 
-function onKeydown(event) {
-  if (event.key === 'Escape' && detailCardId.value) closeDetail()
+// menu "⋯" do cartão (ver detalhes / excluir), menu "⋯" da coluna (mover /
+// excluir) e o mini-select de reatribuição no rosto do cartão — os três só
+// um aberto por vez, fechado por clique fora (onDocClick) ou Escape.
+const openCardMenuId = ref(null)
+const openColMenuId = ref(null)
+const assigningCardId = ref(null)
+
+function toggleCardMenu(cardId) {
+  openCardMenuId.value = openCardMenuId.value === cardId ? null : cardId
+}
+function toggleColMenu(colId) {
+  openColMenuId.value = openColMenuId.value === colId ? null : colId
+}
+function toggleAssign(card) {
+  assigningCardId.value = assigningCardId.value === card.id ? null : card.id
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+function onDocClick(event) {
+  if (openCardMenuId.value && !event.target.closest('.card-menu-wrap')) openCardMenuId.value = null
+  if (openColMenuId.value && !event.target.closest('.col-menu-wrap')) openColMenuId.value = null
+  if (assigningCardId.value && !event.target.closest('.assign-wrap')) assigningCardId.value = null
+}
+
+function onKeydown(event) {
+  if (event.key !== 'Escape') return
+  if (detailCardId.value) closeDetail()
+  openCardMenuId.value = null
+  openColMenuId.value = null
+  assigningCardId.value = null
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('mousedown', onDocClick)
+})
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('mousedown', onDocClick)
+})
 
 // confirmação em dois cliques pra qualquer ação destrutiva (cartão, coluna,
 // comentário): primeiro clique arma `pendingDeleteId` (o botão vira vermelho
@@ -487,6 +676,11 @@ const drafts = reactive({})
 const editingCardId = ref(null)
 const titleRefs = {}
 const cardRefs = {}
+const addInputRefs = {}
+
+function focusAddInput(col) {
+  nextTick(() => addInputRefs[col.id]?.focus())
+}
 
 // arraste de cartão: estado de quem está sendo arrastado + posição de destino
 // (coluna + índice) resolvida a cada dragover, usada tanto pro indicador
@@ -512,6 +706,7 @@ function onRemoveCard(cardId) {
 
 function onAssign(card, nodeId) {
   assignCard(props.data, card.id, nodeId || null)
+  assigningCardId.value = null
 }
 
 function startEdit(card) {
@@ -730,6 +925,16 @@ function onColumnDrop(col) {
   border-bottom: 1px solid var(--color-border);
 }
 
+.column-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--dot-color);
+}
+
 .column-title-input {
   flex: 1;
   min-width: 0;
@@ -792,6 +997,54 @@ function onColumnDrop(col) {
   color: #ff6b6b;
 }
 
+.col-menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.col-menu {
+  position: absolute;
+  top: 24px;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  padding: 4px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px var(--color-shadow);
+}
+
+.col-menu-item {
+  padding: 6px 8px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.col-menu-item:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+.col-menu-item:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.col-menu-item.danger {
+  color: #ff6b6b;
+}
+
+.col-menu-item.danger:hover {
+  background: rgba(255, 107, 107, 0.15);
+}
+
 .card-list {
   flex: 1;
   min-height: 0;
@@ -823,7 +1076,7 @@ function onColumnDrop(col) {
 .card {
   position: relative;
   flex-shrink: 0;
-  padding: 6px 46px 6px 8px;
+  padding: 7px 8px;
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-strong);
   border-radius: 6px;
@@ -865,11 +1118,23 @@ function onColumnDrop(col) {
 .card-text {
   margin: 0;
   color: var(--color-text-primary);
-  font-size: 11.5px;
-  line-height: 1.4;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
   white-space: pre-wrap;
   word-break: break-word;
   cursor: text;
+}
+
+.card-description {
+  margin: 3px 0 0;
+  color: var(--color-text-tertiary);
+  font-size: 10.5px;
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .card-textarea {
@@ -888,21 +1153,80 @@ function onColumnDrop(col) {
   outline: none;
 }
 
-.card-actions {
-  position: absolute;
-  top: 4px;
-  right: 4px;
+.card-top-row {
   display: flex;
   align-items: center;
-  gap: 2px;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.due-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.due-date-spacer {
+  flex: 1;
+}
+
+.card-menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.dots-btn {
   opacity: 0;
-  cursor: default;
   transition: opacity 0.12s ease;
 }
 
-.card:hover .card-actions,
-.card-actions.force-visible {
+.card:hover .dots-btn,
+.card-menu-wrap:has(.card-menu) .dots-btn {
   opacity: 1;
+}
+
+.card-menu {
+  position: absolute;
+  top: 22px;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: 4px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px var(--color-shadow);
+  cursor: default;
+}
+
+.card-menu-item {
+  padding: 6px 8px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.card-menu-item:hover {
+  background: var(--color-hover);
+}
+
+.card-menu-item.danger {
+  color: #ff6b6b;
+}
+
+.card-menu-item.danger:hover {
+  background: rgba(255, 107, 107, 0.15);
 }
 
 .card-icon-btn {
@@ -935,11 +1259,42 @@ function onColumnDrop(col) {
   color: #fff;
 }
 
+.milestone-block {
+  margin-top: 6px;
+}
+
+.milestone-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 3px;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+}
+
+.milestone-fraction {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.milestone-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-bg-app);
+  overflow: hidden;
+}
+
+.milestone-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #22c55e;
+  transition: width 0.15s ease;
+}
+
 .comment-count {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  margin-top: 4px;
   color: var(--color-text-tertiary);
   font-size: 10px;
 }
@@ -947,13 +1302,71 @@ function onColumnDrop(col) {
 .card-assign {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-top: 5px;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.assign-label {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.avatar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-bg-surface-raised);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.avatar-btn.empty {
+  border: 1.5px dashed var(--color-border-strong);
+  background: transparent;
+  color: var(--color-text-tertiary);
+}
+
+.avatar-btn:hover {
+  filter: brightness(1.1);
+}
+
+.card-bottom-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.priority-pill,
+.priority-pill-spacer {
+  flex-shrink: 0;
+}
+
+.priority-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--priority-color) 18%, transparent);
+  color: var(--priority-color);
+  font-size: 9.5px;
+  font-weight: 700;
 }
 
 .assign-select {
-  flex: 1;
-  min-width: 0;
+  flex-shrink: 0;
   height: 20px;
   padding: 0 3px;
   border: 1px solid var(--color-border);
@@ -1181,6 +1594,66 @@ function onColumnDrop(col) {
 .modal-select:focus {
   outline: none;
   border-color: var(--color-text-secondary);
+}
+
+.modal-field-row {
+  display: flex;
+  gap: 14px;
+}
+
+.modal-field-row > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.milestone-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-secondary);
+}
+
+.modal-number {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-bg-surface-alt);
+  color: var(--color-text-primary);
+  font-size: 12px;
+}
+
+.modal-number:focus {
+  outline: none;
+  border-color: var(--color-text-secondary);
+}
+
+.priority-picker {
+  display: flex;
+  gap: 6px;
+}
+
+.priority-chip {
+  padding: 4px 10px;
+  border: 1.5px solid var(--priority-color);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--priority-color);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.priority-chip:hover {
+  background: color-mix(in srgb, var(--priority-color) 15%, transparent);
+}
+
+.priority-chip.active {
+  background: var(--priority-color);
+  color: #fff;
 }
 
 .modal-tag-picker {

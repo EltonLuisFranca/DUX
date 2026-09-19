@@ -17,6 +17,11 @@ export function normalizeColumns(raw) {
         ? col.cards.map((card) => ({
             id: card.id || crypto.randomUUID(),
             text: card.text || '',
+            description: card.description || '',
+            dueDate: card.dueDate || null,
+            priority: PRIORITIES.includes(card.priority) ? card.priority : null,
+            milestoneCurrent: Number.isFinite(card.milestoneCurrent) ? card.milestoneCurrent : 0,
+            milestoneTotal: Number.isFinite(card.milestoneTotal) ? card.milestoneTotal : 0,
             assignedNodeId: card.assignedNodeId || null,
             taskState: card.taskState || 'unassigned',
             // boards antigos guardavam só um categoryId por cartão — migra pra
@@ -48,6 +53,8 @@ export function normalizeColumns(raw) {
 // Paleta fixa (em vez de color picker livre) pra manter a estética minimalista
 // do resto do app — cada tag nova pega a próxima cor da lista, ciclando.
 export const TAG_COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444', '#a855f7', '#06b6d4', '#f97316', '#64748b']
+
+export const PRIORITIES = ['low', 'medium', 'high']
 
 export function normalizeTags(raw) {
   if (!Array.isArray(raw)) return []
@@ -207,6 +214,11 @@ export function addCard(data, columnRef, text) {
   const card = {
     id: crypto.randomUUID(),
     text: String(text || '').trim(),
+    description: '',
+    dueDate: null,
+    priority: null,
+    milestoneCurrent: 0,
+    milestoneTotal: 0,
     assignedNodeId: null,
     taskState: 'unassigned',
     tagIds: [],
@@ -329,6 +341,10 @@ export function serializeBoard(data, agentNames, viewerNodeId) {
       cards: col.cards.map((card) => ({
         id: card.id,
         text: card.text,
+        description: card.description || undefined,
+        due_date: card.dueDate || undefined,
+        priority: card.priority || undefined,
+        milestone: card.milestoneTotal ? `${card.milestoneCurrent}/${card.milestoneTotal}` : undefined,
         tags: card.tagIds.map((id) => tags.find((t) => t.id === id)?.name).filter(Boolean),
         comments: card.comments.map((c) => c.text),
         assigned_to: card.assignedNodeId ? agentNames?.[card.assignedNodeId] || card.assignedNodeId : null,
