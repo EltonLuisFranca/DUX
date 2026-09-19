@@ -7,6 +7,7 @@ const agentLink = require('./agentLink')
 const noteLink = require('./noteLink')
 const duxbanLink = require('./duxbanLink')
 const claudeUsage = require('./claudeUsage')
+const claudeAccountUsage = require('./claudeAccountUsage')
 const { resolveCwd, isDirectory, isFile, listSubdirectories, listDirEntries } = require('./fsHelpers')
 const { getGitInfo } = require('./gitStatus')
 const { startWatchingNote, stopWatchingNote, stopAllNoteWatches, readNoteFile } = require('./noteWatch')
@@ -243,6 +244,13 @@ function createConnectionHandler({ agentPort }) {
         }
       } else if (msg.type === 'checkTerminalAvailability') {
         ws.send(JSON.stringify({ type: 'terminalAvailability', ...detectTerminalAvailability() }))
+      } else if (msg.type === 'watchAccountUsage') {
+        // Limite de plano (sessão/semana) é da conta, não deste terminal —
+        // por isso não passa por sessionId/ptyProcess, ao contrário do resto
+        // deste handler; qualquer conexão pode assinar.
+        claudeAccountUsage.subscribe(ws)
+      } else if (msg.type === 'unwatchAccountUsage') {
+        claudeAccountUsage.unsubscribe(ws)
       } else if (msg.type === 'checkPath') {
         const resolved = resolveCwd(msg.path)
         const valid = isDirectory(resolved)
@@ -399,6 +407,7 @@ function createConnectionHandler({ agentPort }) {
         claudeUsage.stopWatch(sessionId)
       }
       stopAllNoteWatches(ws)
+      claudeAccountUsage.unsubscribe(ws)
     })
   }
 }

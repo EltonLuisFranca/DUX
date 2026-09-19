@@ -297,6 +297,24 @@ export function watchNote(path, onChange) {
   }
 }
 
+// Limite de uso do plano Claude Pro/Max (sessão de 5h + semana), o mesmo que
+// o /usage da CLI mostra — é da conta inteira, não de um terminal específico,
+// então (diferente das outras funções deste módulo) essa conexão é pra durar
+// a vida inteira do app: quem chama guarda o unsubscribe só pra fechar junto
+// com o processo, não a cada troca de tela.
+export function watchAccountUsage(onUpdate) {
+  const ws = new WebSocket(BRIDGE_URL)
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'watchAccountUsage' }))
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data)
+    if (msg.type === 'accountUsageUpdate') onUpdate(msg)
+  }
+  return () => {
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'unwatchAccountUsage' }))
+    ws.close()
+  }
+}
+
 export function linkNoteToAgent(sessionId, path) {
   sendControlMessage({ type: 'noteLink', sessionId, path })
 }

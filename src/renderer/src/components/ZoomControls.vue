@@ -8,6 +8,10 @@
 
     <span class="toolbar-divider" />
 
+    <ClaudeUsageBadge />
+
+    <span class="toolbar-divider" />
+
     <AppTooltip label="Diminuir zoom">
       <button class="zoom-btn" @click="handleZoomOut">
         <svg viewBox="0 0 16 16" width="14" height="14">
@@ -74,6 +78,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useVueFlow } from '@vue-flow/core'
 import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
 import VoiceInputBadge from './VoiceInputBadge.vue'
+import ClaudeUsageBadge from './ClaudeUsageBadge.vue'
 import AppTooltip from './AppTooltip.vue'
 import { openAddNodeModal } from '../store/flowStore'
 
