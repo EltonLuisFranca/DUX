@@ -26,7 +26,10 @@
       class="agent-handle"
       :class="{ connected: isBottomConnected }"
     />
-    <div class="agent-header" :style="{ background: data.headerColor || undefined }">
+    <div
+      class="agent-header"
+      :style="{ background: data.headerColor || undefined, '--header-icon-color': headerIconColorVar }"
+    >
       <span class="status-dot" :class="status" />
       <span class="agent-title">{{ data.name }}</span>
       <span class="agent-path">{{ data.cwd }}</span>
@@ -74,6 +77,7 @@ import { pendingVoiceInput, consumePendingVoiceInput, isRecording } from '../sto
 import { speak, ttsEnabled } from '../store/ttsStore'
 import { playNotificationSound } from '../store/notificationSoundStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
+import { headerIconColor } from '../lib/colorContrast'
 import { useNodeResize } from '../lib/useNodeResize'
 
 const props = defineProps({
@@ -109,6 +113,11 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   defaultWidth: 480,
   defaultHeight: 344
 })
+
+// contraste do ícone de engrenagem quando o header tem headerColor
+// customizado — sem isso, a cor fixa do tema (--color-text-secondary) pode
+// ficar ilegível contra uma cor escolhida livremente pelo usuário
+const headerIconColorVar = computed(() => headerIconColor(props.data.headerColor))
 
 const termEl = ref(null)
 const status = ref('connecting')
@@ -605,13 +614,13 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--color-text-secondary);
+  color: var(--header-icon-color, var(--color-text-secondary));
   cursor: pointer;
 }
 
 .settings-btn:hover {
   background: var(--color-hover);
-  color: var(--color-text-primary);
+  color: var(--header-icon-color, var(--color-text-primary));
 }
 
 .agent-term {

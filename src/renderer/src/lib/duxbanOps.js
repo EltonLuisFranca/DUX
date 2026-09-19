@@ -179,6 +179,24 @@ export function moveColumn(data, colId, direction) {
   data.columns = columns
 }
 
+// Reordenação por drag and drop: diferente de moveColumn (que só troca com o
+// vizinho imediato, ±1), aqui o destino é um índice arbitrário — a posição
+// onde o mouse soltou a coluna, calculada pela UI (DuxBanNode.vue /
+// DuxBanSettings.vue) a partir da metade do card/row sob o cursor, contra o
+// array AINDA COM a coluna arrastada dentro dele. Por isso, se o destino vem
+// depois da posição original, precisa recuar 1 — a remoção logo abaixo desloca
+// tudo que vinha depois dela.
+export function reorderColumn(data, colId, targetIndex) {
+  const columns = normalizeColumns(data.columns)
+  const index = columns.findIndex((c) => c.id === colId)
+  if (index === -1) return
+  const [col] = columns.splice(index, 1)
+  let insertAt = targetIndex > index ? targetIndex - 1 : targetIndex
+  insertAt = Math.max(0, Math.min(insertAt, columns.length))
+  columns.splice(insertAt, 0, col)
+  data.columns = columns
+}
+
 // Remove a coluna inteira (com seus cards) num passo só — diferente de
 // esvaziar via removeCard chamado card a card, libera a vaga de fila de cada
 // card removido que estava com despacho ativo diretamente aqui, já que a
@@ -364,6 +382,12 @@ export function unassignCard(data, cardId) {
 // Chamado quando o próprio agente reporta que terminou (tool
 // dux_kanban_finish_task) — libera a vaga de fila do agente pra despachar a
 // próxima tarefa atribuída a ele, se houver.
+// mesma heurística de nome de coluna do columnMeta em duxbanCardUi.js (não
+// importada de lá pra não criar dependência circular — esse módulo já é
+// importado por duxbanCardUi.js) — usada só aqui pra achar onde mover o
+// cartão ao finalizar.
+const DONE_COLUMN_PATTERN = /(conclu|feito|complet|done)/i
+
 export function finishTask(data, cardId, requesterNodeId) {
   const columns = normalizeColumns(data.columns)
   const found = findCardById(columns, cardId)
@@ -379,6 +403,19 @@ export function finishTask(data, cardId, requesterNodeId) {
     clearActiveDispatch(data, nodeId)
     tryDispatchNext(data, nodeId)
   }
+
+  // finalizar só marcava o status internamente (taskState = 'done') sem
+  // mexer na posição do cartão — ele ficava com aparência de concluído mas
+  // visualmente preso na coluna onde estava (ex: "Fazendo"), obrigando o
+  // agente a lembrar de chamar dux_kanban_move_card à parte. Move pra
+  // primeira coluna cujo título bater com a mesma heurística usada pro
+  // ícone/cor de "concluído"; sem coluna assim (board todo renomeado, por
+  // exemplo), deixa o cartão onde está em vez de adivinhar errado.
+  const doneCol = columns.find((c) => DONE_COLUMN_PATTERN.test(c.title || ''))
+  if (doneCol && doneCol.id !== found.col.id) {
+    moveCard(data, cardId, doneCol.id)
+  }
+
   return found.card
 }
 

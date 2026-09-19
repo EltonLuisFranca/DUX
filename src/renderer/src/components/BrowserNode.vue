@@ -27,7 +27,10 @@
       :class="{ connected: isBottomConnected }"
     />
 
-    <div class="browser-header" :style="{ background: data.headerColor || undefined }">
+    <div
+      class="browser-header"
+      :style="{ background: data.headerColor || undefined, '--header-icon-color': headerIconColorVar }"
+    >
       <button class="nav-btn nodrag" title="Voltar" :disabled="!canGoBack" @click="goBack">
         <svg viewBox="0 0 16 16" width="13" height="13">
           <path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
@@ -96,7 +99,7 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import GearIcon from './icons/GearIcon.vue'
 import ResizeGripIcon from './icons/ResizeGripIcon.vue'
@@ -104,6 +107,7 @@ import NodeToolbar from './NodeToolbar.vue'
 import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
 import { useNodeResize } from '../lib/useNodeResize'
+import { headerIconColor } from '../lib/colorContrast'
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -122,6 +126,11 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   defaultWidth: 640,
   defaultHeight: 440
 })
+
+// contraste do ícone de engrenagem quando o header tem headerColor
+// customizado — sem isso, a cor fixa do tema (--color-text-secondary) pode
+// ficar ilegível contra uma cor escolhida livremente pelo usuário
+const headerIconColorVar = computed(() => headerIconColor(props.data.headerColor))
 
 const webviewEl = ref(null)
 
@@ -283,10 +292,18 @@ watch(
   cursor: pointer;
 }
 
-.nav-btn:hover:not(:disabled),
-.settings-btn:hover {
+.settings-btn {
+  color: var(--header-icon-color, var(--color-text-secondary));
+}
+
+.nav-btn:hover:not(:disabled) {
   background: var(--color-hover);
   color: var(--color-text-primary);
+}
+
+.settings-btn:hover {
+  background: var(--color-hover);
+  color: var(--header-icon-color, var(--color-text-primary));
 }
 
 .nav-btn:disabled {

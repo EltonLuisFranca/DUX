@@ -41,6 +41,10 @@ const TASK_READY_MAX_WAIT_MS = 15000
 // terminal ficar ocioso por uma janela maior que a do dux-ask antes de
 // injetar, pra não competir com boot do shell/agente
 const TASK_IDLE_MS = 2500
+// tempo pro /clear (local ao CLI, sem round-trip de LLM) terminar de
+// resetar o transcript antes de escrever a tarefa em cima — sem essa folga,
+// as duas mensagens colidiriam na mesma janela de digitação simulada
+const CONTEXT_CLEAR_SETTLE_MS = 600
 
 // Linguagem factual/verificável, não imperativa — mesmo cuidado de
 // agentLink.buildInstructions pra não ser lido como tentativa de prompt
@@ -72,7 +76,22 @@ function pushTask(sessionId, task, waitedMs = 0) {
     return
   }
 
-  writeAsMessage(session.ptyProcess, decorateDuxMessage(buildTaskNotice(task)))
+  // cada cartão puxado da fila do board começa numa sessão isolada por
+  // padrão — sem isso, o agente ia empilhando o contexto de tarefas sem
+  // relação nenhuma entre si indefinidamente, já que o despacho escreve a
+  // tarefa seguinte na MESMA sessão de CLI já aberta (ver writeAsMessage),
+  // em vez de abrir um terminal novo. "/clear" é suportado tanto pelo
+  // Claude Code quanto pelo Codex CLI (os dois tipos de terminal que
+  // recebem tarefa por aqui, ver AGENT_TERMINAL_TYPES) pra resetar o
+  // transcript mantendo a mesma sessão. Uma continuação de tarefas
+  // relacionadas pedida explicitamente pelo usuário acontece por fora
+  // desse fluxo de despacho automático (o usuário digitando direto no
+  // terminal), então não precisa de tratamento especial aqui.
+  writeAsMessage(session.ptyProcess, '/clear').then(() => {
+    setTimeout(() => {
+      writeAsMessage(session.ptyProcess, decorateDuxMessage(buildTaskNotice(task)))
+    }, CONTEXT_CLEAR_SETTLE_MS)
+  })
 }
 
 // Pergunta estruturada bridge -> renderer, pela MESMA conexão ws persistente

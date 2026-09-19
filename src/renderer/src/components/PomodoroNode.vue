@@ -27,7 +27,10 @@
       :class="{ connected: isBottomConnected }"
     />
 
-    <div class="pomodoro-header" :style="{ background: data.headerColor || undefined }">
+    <div
+      class="pomodoro-header"
+      :style="{ background: data.headerColor || undefined, '--header-icon-color': headerIconColorVar }"
+    >
       <span class="phase-dot" />
       <span class="pomodoro-title">{{ data.name }}</span>
       <button class="header-btn nodrag" title="Configurações" @click="toggleNodeSettings(id)">
@@ -101,6 +104,7 @@ import NodeToolbar from './NodeToolbar.vue'
 import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
 import { useNodeResize } from '../lib/useNodeResize'
+import { headerIconColor } from '../lib/colorContrast'
 
 const FOCUS_COLOR = '#3b82f6'
 const BREAK_COLOR = '#22c55e'
@@ -149,6 +153,11 @@ const cyclesCompleted = ref(props.data.cyclesCompleted || 0)
 
 const phaseLabel = computed(() => PHASE_LABELS[phase.value])
 const phaseColor = computed(() => PHASE_COLORS[phase.value])
+
+// contraste do ícone de engrenagem quando o header tem headerColor
+// customizado — sem isso, a cor fixa do tema (--color-text-secondary) pode
+// ficar ilegível contra uma cor escolhida livremente pelo usuário
+const headerIconColorVar = computed(() => headerIconColor(props.data.headerColor))
 
 const formattedTime = computed(() => {
   const m = Math.floor(secondsLeft.value / 60)
@@ -329,13 +338,13 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 5px;
   background: transparent;
-  color: var(--color-text-secondary);
+  color: var(--header-icon-color, var(--color-text-secondary));
   cursor: pointer;
 }
 
 .header-btn:hover {
   background: var(--color-hover);
-  color: var(--color-text-primary);
+  color: var(--header-icon-color, var(--color-text-primary));
 }
 
 .pomodoro-body {

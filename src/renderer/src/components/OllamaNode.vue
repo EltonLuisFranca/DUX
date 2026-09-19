@@ -27,7 +27,10 @@
       :class="{ connected: isBottomConnected }"
     />
 
-    <div class="ollama-header" :style="{ background: data.headerColor || undefined }">
+    <div
+      class="ollama-header"
+      :style="{ background: data.headerColor || undefined, '--header-icon-color': headerIconColorVar }"
+    >
       <span class="status-dot" :class="status" />
       <span class="ollama-title">{{ data.name || data.model }}</span>
       <span class="ollama-model">{{ data.model }}</span>
@@ -145,7 +148,7 @@
 </template>
 
 <script setup>
-import { nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import GearIcon from './icons/GearIcon.vue'
 import ResizeGripIcon from './icons/ResizeGripIcon.vue'
@@ -158,6 +161,7 @@ import { streamChat } from '../lib/ollamaClient'
 import { FILE_TOOLS, executeTool } from '../lib/ollamaTools'
 import { useHandleConnection } from '../lib/useHandleConnection'
 import { useNodeResize } from '../lib/useNodeResize'
+import { headerIconColor } from '../lib/colorContrast'
 
 const MAX_TOOL_ITERATIONS = 4
 
@@ -233,6 +237,11 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   defaultWidth: 420,
   defaultHeight: 480
 })
+
+// contraste do ícone de engrenagem quando o header tem headerColor
+// customizado — sem isso, a cor fixa do tema (--color-text-secondary) pode
+// ficar ilegível contra uma cor escolhida livremente pelo usuário
+const headerIconColorVar = computed(() => headerIconColor(props.data.headerColor))
 
 const historyEl = ref(null)
 const fileInputEl = ref(null)
@@ -481,13 +490,13 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--color-text-secondary);
+  color: var(--header-icon-color, var(--color-text-secondary));
   cursor: pointer;
 }
 
 .settings-btn:hover {
   background: var(--color-hover);
-  color: var(--color-text-primary);
+  color: var(--header-icon-color, var(--color-text-primary));
 }
 
 .settings-btn:disabled {

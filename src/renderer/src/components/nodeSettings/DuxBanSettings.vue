@@ -15,47 +15,72 @@
     <p class="field-hint">As colunas do board (A fazer, Fazendo, Feito, etc) — reordene, renomeie ou crie novas.</p>
 
     <div v-if="columns.length" class="category-list">
-      <div v-for="(col, index) in columns" :key="col.id" class="column-row">
-        <div class="reorder-btns">
-          <button
-            class="icon-btn"
-            title="Mover pra cima"
-            :disabled="index === 0"
-            @click="onMoveColumn(col.id, -1)"
+      <template v-for="(col, index) in columns" :key="col.id">
+        <div v-if="isColDropTarget(index)" class="drop-indicator-row" />
+        <div
+          class="column-row"
+          :class="{ 'col-dragging': colDragState.colId === col.id }"
+          @dragover.prevent="onColDragOver(index, $event)"
+          @drop.prevent="onColDrop"
+        >
+          <span
+            class="column-drag-handle"
+            title="Arrastar para reordenar"
+            draggable="true"
+            @dragstart="onColDragStart(col, $event)"
+            @dragend="onColDragEnd"
           >
             <svg viewBox="0 0 16 16" width="10" height="10">
-              <path d="M8 4l4 5H4z" fill="currentColor" />
+              <circle cx="5" cy="4" r="1.2" fill="currentColor" />
+              <circle cx="5" cy="8" r="1.2" fill="currentColor" />
+              <circle cx="5" cy="12" r="1.2" fill="currentColor" />
+              <circle cx="11" cy="4" r="1.2" fill="currentColor" />
+              <circle cx="11" cy="8" r="1.2" fill="currentColor" />
+              <circle cx="11" cy="12" r="1.2" fill="currentColor" />
             </svg>
-          </button>
+          </span>
+          <div class="reorder-btns">
+            <button
+              class="icon-btn"
+              title="Mover pra cima"
+              :disabled="index === 0"
+              @click="onMoveColumn(col.id, -1)"
+            >
+              <svg viewBox="0 0 16 16" width="10" height="10">
+                <path d="M8 4l4 5H4z" fill="currentColor" />
+              </svg>
+            </button>
+            <button
+              class="icon-btn"
+              title="Mover pra baixo"
+              :disabled="index === columns.length - 1"
+              @click="onMoveColumn(col.id, 1)"
+            >
+              <svg viewBox="0 0 16 16" width="10" height="10">
+                <path d="M8 12L4 7h8z" fill="currentColor" />
+              </svg>
+            </button>
+          </div>
+          <input
+            class="category-name-input"
+            type="text"
+            :value="col.title"
+            placeholder="Título da coluna"
+            @input="onRenameColumn(col.id, $event.target.value)"
+          />
           <button
-            class="icon-btn"
-            title="Mover pra baixo"
-            :disabled="index === columns.length - 1"
-            @click="onMoveColumn(col.id, 1)"
+            class="icon-btn danger"
+            :class="{ confirming: pendingColumnDeleteId === col.id }"
+            :title="pendingColumnDeleteId === col.id ? 'Clique de novo pra confirmar' : 'Excluir coluna'"
+            @click="requestColumnDelete(col.id)"
           >
-            <svg viewBox="0 0 16 16" width="10" height="10">
-              <path d="M8 12L4 7h8z" fill="currentColor" />
+            <svg viewBox="0 0 16 16" width="12" height="12">
+              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
             </svg>
           </button>
         </div>
-        <input
-          class="category-name-input"
-          type="text"
-          :value="col.title"
-          placeholder="Título da coluna"
-          @input="onRenameColumn(col.id, $event.target.value)"
-        />
-        <button
-          class="icon-btn danger"
-          :class="{ confirming: pendingColumnDeleteId === col.id }"
-          :title="pendingColumnDeleteId === col.id ? 'Clique de novo pra confirmar' : 'Excluir coluna'"
-          @click="requestColumnDelete(col.id)"
-        >
-          <svg viewBox="0 0 16 16" width="12" height="12">
-            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-          </svg>
-        </button>
-      </div>
+      </template>
+      <div v-if="isColDropTarget(columns.length)" class="drop-indicator-row" />
     </div>
 
     <div class="new-category">
@@ -134,7 +159,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { updateNodeData, activeWorkspace, AGENT_TERMINAL_TYPES } from '../../store/flowStore'
 import {
   boardTags,
@@ -146,7 +171,8 @@ import {
   addColumn as addColumnOp,
   removeColumn as removeColumnOp,
   moveColumn as moveColumnOp,
-  renameColumn as renameColumnOp
+  renameColumn as renameColumnOp,
+  reorderColumn as reorderColumnOp
 } from '../../lib/duxbanOps'
 
 const props = defineProps({
@@ -170,6 +196,45 @@ function onRenameColumn(colId, title) {
 
 function onMoveColumn(colId, direction) {
   moveColumnOp(props.node.data, colId, direction)
+}
+
+// arraste por handle dedicado (lista vertical aqui, ao contrário do header
+// horizontal do node) — mesmo padrão de estado de DuxBanNode.vue, cálculo de
+// antes/depois no eixo Y em vez de X
+const colDragState = reactive({ colId: null })
+const colHoverIndex = ref(null)
+
+function isColDropTarget(index) {
+  return colDragState.colId !== null && colHoverIndex.value === index
+}
+
+function onColDragStart(col, event) {
+  colDragState.colId = col.id
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/plain', col.id)
+}
+
+function onColDragEnd() {
+  colDragState.colId = null
+  colHoverIndex.value = null
+}
+
+function onColDragOver(index, event) {
+  if (!colDragState.colId) return
+  const rect = event.currentTarget.getBoundingClientRect()
+  const before = event.clientY < rect.top + rect.height / 2
+  colHoverIndex.value = before ? index : index + 1
+}
+
+function onColDrop() {
+  if (!colDragState.colId || colHoverIndex.value === null) {
+    colDragState.colId = null
+    colHoverIndex.value = null
+    return
+  }
+  reorderColumnOp(props.node.data, colDragState.colId, colHoverIndex.value)
+  colDragState.colId = null
+  colHoverIndex.value = null
 }
 
 // pendingColumnDeleteId é separado de pendingDeleteId (tags, mais abaixo) de
@@ -368,6 +433,33 @@ const connectedAgents = computed(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.column-row.col-dragging {
+  opacity: 0.4;
+}
+
+.drop-indicator-row {
+  flex-shrink: 0;
+  height: 2px;
+  margin: 0 2px;
+  border-radius: 999px;
+  background: #3b82f6;
+}
+
+.column-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 14px;
+  height: 24px;
+  color: var(--color-text-tertiary);
+  cursor: grab;
+}
+
+.column-drag-handle:active {
+  cursor: grabbing;
 }
 
 .reorder-btns {

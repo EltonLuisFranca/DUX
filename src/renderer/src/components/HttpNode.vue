@@ -27,7 +27,10 @@
       :class="{ connected: isBottomConnected }"
     />
 
-    <div class="http-header" :style="{ background: data.headerColor || undefined }">
+    <div
+      class="http-header"
+      :style="{ background: data.headerColor || undefined, '--header-icon-color': headerIconColorVar }"
+    >
       <span class="status-dot" :class="statusDotClass" />
       <span class="http-title">{{ data.name }}</span>
       <button class="header-btn nodrag" title="Configurações" @click="toggleNodeSettings(id)">
@@ -166,6 +169,7 @@ import NodeToolbar from './NodeToolbar.vue'
 import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
 import { useNodeResize } from '../lib/useNodeResize'
+import { headerIconColor } from '../lib/colorContrast'
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 
@@ -186,6 +190,11 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   defaultWidth: 420,
   defaultHeight: 380
 })
+
+// contraste do ícone de engrenagem quando o header tem headerColor
+// customizado — sem isso, a cor fixa do tema (--color-text-secondary) pode
+// ficar ilegível contra uma cor escolhida livremente pelo usuário
+const headerIconColorVar = computed(() => headerIconColor(props.data.headerColor))
 
 const url = ref(props.data.url || '')
 const method = ref(props.data.method || 'GET')
@@ -384,13 +393,13 @@ async function send() {
   border: none;
   border-radius: 5px;
   background: transparent;
-  color: var(--color-text-secondary);
+  color: var(--header-icon-color, var(--color-text-secondary));
   cursor: pointer;
 }
 
 .header-btn:hover {
   background: var(--color-hover);
-  color: var(--color-text-primary);
+  color: var(--header-icon-color, var(--color-text-primary));
 }
 
 .request-row {
