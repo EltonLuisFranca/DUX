@@ -29,8 +29,11 @@ export function setTheme(value) {
   theme.value = value
 }
 
+const CANVAS_VARIANT_VALUES = ['dots', 'lines', 'none']
+const storedCanvasVariant = localStorage.getItem(CANVAS_VARIANT_STORAGE_KEY)
+
 export const canvasVariant = ref(
-  localStorage.getItem(CANVAS_VARIANT_STORAGE_KEY) === 'lines' ? 'lines' : 'dots'
+  CANVAS_VARIANT_VALUES.includes(storedCanvasVariant) ? storedCanvasVariant : 'dots'
 )
 
 watchEffect(() => {

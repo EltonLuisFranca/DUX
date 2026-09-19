@@ -19,7 +19,7 @@
             @dragstart="onColHeaderDragStart(col, $event)"
             @dragend="onColHeaderDragEnd"
           >
-            <svg viewBox="0 0 16 16" width="10" height="10">
+            <svg viewBox="0 0 16 16" width="12" height="12">
               <circle cx="5" cy="4" r="1.2" fill="currentColor" />
               <circle cx="5" cy="8" r="1.2" fill="currentColor" />
               <circle cx="5" cy="12" r="1.2" fill="currentColor" />
@@ -41,13 +41,13 @@
           />
           <span class="column-count">{{ col.cards.length }}</span>
           <button class="column-btn" title="Adicionar cartão" @click="$emit('open-create', col)">
-            <svg viewBox="0 0 16 16" width="13" height="13">
+            <svg viewBox="0 0 16 16" width="15" height="15">
               <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
             </svg>
           </button>
           <div class="col-menu-wrap">
             <button class="column-btn" title="Mais opções" @mousedown.stop @click="toggleColMenu(col.id)">
-              <svg viewBox="0 0 16 16" width="13" height="13">
+              <svg viewBox="0 0 16 16" width="15" height="15">
                 <circle cx="3.2" cy="8" r="1.3" fill="currentColor" />
                 <circle cx="8" cy="8" r="1.3" fill="currentColor" />
                 <circle cx="12.8" cy="8" r="1.3" fill="currentColor" />
@@ -93,7 +93,7 @@
             >
               <div class="card-top-row">
                 <div v-if="card.dueDate" class="due-date">
-                  <svg viewBox="0 0 16 16" width="11" height="11">
+                  <svg viewBox="0 0 16 16" width="13" height="13">
                     <rect x="2.5" y="3" width="11" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3" />
                     <path d="M2.5 6h11M5.5 2v2.5M10.5 2v2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
                   </svg>
@@ -102,7 +102,7 @@
                 <span v-else class="due-date-spacer" />
                 <div class="card-menu-wrap">
                   <button class="card-icon-btn dots-btn" title="Mais opções" @mousedown.stop @click.stop="toggleCardMenu(card.id)">
-                    <svg viewBox="0 0 16 16" width="13" height="13">
+                    <svg viewBox="0 0 16 16" width="15" height="15">
                       <circle cx="3.2" cy="8" r="1.3" fill="currentColor" />
                       <circle cx="8" cy="8" r="1.3" fill="currentColor" />
                       <circle cx="12.8" cy="8" r="1.3" fill="currentColor" />
@@ -182,7 +182,7 @@
                 </span>
                 <span v-else class="priority-pill-spacer" />
                 <div v-if="card.comments.length" class="comment-count" :title="`${card.comments.length} comentário${card.comments.length === 1 ? '' : 's'}`">
-                  <svg viewBox="0 0 16 16" width="11" height="11">
+                  <svg viewBox="0 0 16 16" width="13" height="13">
                     <path d="M2.5 3.5h11v7h-6l-3 3v-3h-2v-7z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none" />
                   </svg>
                   <span>{{ card.comments.length }}</span>
@@ -457,8 +457,8 @@ function onColumnDropForReorder() {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 14px;
-  height: 22px;
+  width: 16px;
+  height: 24px;
   color: var(--color-text-tertiary);
   cursor: grab;
 }
@@ -481,8 +481,8 @@ function onColumnDropForReorder() {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   color: var(--dot-color);
 }
 
@@ -518,8 +518,8 @@ function onColumnDropForReorder() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 21px;
-  height: 21px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   border: none;
   border-radius: 4px;
@@ -767,8 +767,8 @@ function onColumnDropForReorder() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border: none;
   border-radius: 4px;
   background: transparent;

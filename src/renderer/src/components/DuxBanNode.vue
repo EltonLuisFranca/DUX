@@ -79,7 +79,7 @@
           <div class="card-modal-header">
             <span class="card-modal-title">Detalhes do cartão</span>
             <button class="header-btn" title="Fechar" @click="closeDetail">
-              <svg viewBox="0 0 16 16" width="14" height="14">
+              <svg viewBox="0 0 16 16" width="16" height="16">
                 <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
               </svg>
             </button>
@@ -198,7 +198,7 @@
                     :title="pendingDeleteId === 'comment-' + comment.id ? 'Clique de novo pra confirmar' : 'Excluir comentário'"
                     @click="requestDelete('comment-' + comment.id, () => onRemoveComment(detailCard.id, comment.id))"
                   >
-                    <svg viewBox="0 0 16 16" width="11" height="11">
+                    <svg viewBox="0 0 16 16" width="13" height="13">
                       <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
                     </svg>
                   </button>
@@ -242,7 +242,7 @@
           <div class="card-modal-header">
             <span class="card-modal-title">Novo cartão — {{ creatingCol.title }}</span>
             <button class="header-btn" title="Fechar" @click="closeCreateModal">
-              <svg viewBox="0 0 16 16" width="14" height="14">
+              <svg viewBox="0 0 16 16" width="16" height="16">
                 <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
               </svg>
             </button>
@@ -674,8 +674,8 @@ function onCreateCard() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
   border: none;
   border-radius: 999px;
@@ -734,7 +734,7 @@ function onCreateCard() {
 }
 
 .card-modal-wide {
-  width: 860px;
+  width: 1040px;
 }
 
 .card-modal-header {
@@ -996,8 +996,8 @@ function onCreateCard() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   margin-left: auto;
   flex-shrink: 0;
   border: none;

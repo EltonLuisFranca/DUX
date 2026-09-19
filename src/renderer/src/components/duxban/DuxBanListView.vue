@@ -3,7 +3,7 @@
     <div class="list-toolbar">
       <span class="list-count">{{ allCards.length }} cartão{{ allCards.length === 1 ? '' : 's' }}</span>
       <button class="add-card-btn" title="Novo cartão" :disabled="!columns.length" @click="$emit('open-create', columns[0])">
-        <svg viewBox="0 0 16 16" width="12" height="12">
+        <svg viewBox="0 0 16 16" width="14" height="14">
           <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
         </svg>
         Novo cartão
@@ -197,8 +197,8 @@ function onMoveCard(card, columnId) {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   color: var(--dot-color);
 }
 

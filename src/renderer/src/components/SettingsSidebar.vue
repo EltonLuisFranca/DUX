@@ -64,6 +64,13 @@
                 >
                   Linhas
                 </button>
+                <button
+                  class="segmented-btn"
+                  :class="{ active: canvasVariant === 'none' }"
+                  @click="setCanvasVariant('none')"
+                >
+                  Nenhum
+                </button>
               </div>
             </div>
 

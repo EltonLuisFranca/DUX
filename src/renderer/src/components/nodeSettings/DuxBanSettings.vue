@@ -30,7 +30,7 @@
             @dragstart="onColDragStart(col, $event)"
             @dragend="onColDragEnd"
           >
-            <svg viewBox="0 0 16 16" width="10" height="10">
+            <svg viewBox="0 0 16 16" width="12" height="12">
               <circle cx="5" cy="4" r="1.2" fill="currentColor" />
               <circle cx="5" cy="8" r="1.2" fill="currentColor" />
               <circle cx="5" cy="12" r="1.2" fill="currentColor" />
@@ -46,7 +46,7 @@
               :disabled="index === 0"
               @click="onMoveColumn(col.id, -1)"
             >
-              <svg viewBox="0 0 16 16" width="10" height="10">
+              <svg viewBox="0 0 16 16" width="12" height="12">
                 <path d="M8 4l4 5H4z" fill="currentColor" />
               </svg>
             </button>
@@ -56,7 +56,7 @@
               :disabled="index === columns.length - 1"
               @click="onMoveColumn(col.id, 1)"
             >
-              <svg viewBox="0 0 16 16" width="10" height="10">
+              <svg viewBox="0 0 16 16" width="12" height="12">
                 <path d="M8 12L4 7h8z" fill="currentColor" />
               </svg>
             </button>
@@ -74,7 +74,7 @@
             :title="pendingColumnDeleteId === col.id ? 'Clique de novo pra confirmar' : 'Excluir coluna'"
             @click="requestColumnDelete(col.id)"
           >
-            <svg viewBox="0 0 16 16" width="12" height="12">
+            <svg viewBox="0 0 16 16" width="14" height="14">
               <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
             </svg>
           </button>
@@ -114,7 +114,7 @@
           :title="pendingDeleteId === tag.id ? 'Clique de novo pra confirmar' : 'Excluir tag'"
           @click="requestDelete(tag.id, () => removeTag(node.data, tag.id))"
         >
-          <svg viewBox="0 0 16 16" width="12" height="12">
+          <svg viewBox="0 0 16 16" width="14" height="14">
             <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
           </svg>
         </button>
