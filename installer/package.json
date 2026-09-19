@@ -1,6 +1,6 @@
 {
   "name": "dux-installer",
-  "version": "1.2.28",
+  "version": "1.2.29",
   "description": "Instalador customizado do DUX",
   "main": "src/main.js",
   "scripts": {
