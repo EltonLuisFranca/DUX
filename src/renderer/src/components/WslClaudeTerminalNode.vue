@@ -30,6 +30,9 @@
       <span class="status-dot" :class="status" />
       <span class="agent-title">{{ data.name }}</span>
       <span class="agent-path">{{ data.cwd }}</span>
+      <span v-if="connectedPeers.length" class="peer-count" :title="connectedPeers.map((a) => a.name).join(', ')">
+        {{ connectedPeers.length }} agente{{ connectedPeers.length === 1 ? '' : 's' }}
+      </span>
       <button class="settings-btn nodrag" title="Configurações" @click="toggleNodeSettings(id)">
         <GearIcon />
       </button>
@@ -43,7 +46,7 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import GearIcon from './icons/GearIcon.vue'
 import ResizeGripIcon from './icons/ResizeGripIcon.vue'
@@ -51,7 +54,7 @@ import NodeToolbar from './NodeToolbar.vue'
 import { FitAddon } from '@xterm/addon-fit'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import '@xterm/xterm/css/xterm.css'
-import { toggleNodeSettings, updateNodeData, activeTerminalId } from '../store/flowStore'
+import { toggleNodeSettings, updateNodeData, activeTerminalId, AGENT_TERMINAL_TYPES } from '../store/flowStore'
 import { theme, XTERM_THEMES } from '../store/themeStore'
 import { linkAgents, linkNoteToAgent } from '../lib/bridgeClient'
 import { serializeBoard, addCard, moveCard, finishTask } from '../lib/duxbanOps'
@@ -72,6 +75,21 @@ const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
 const isBottomConnected = isHandleConnected('bottom')
+
+// Outros terminais de agente ligados a este por edge — mesmo mecanismo do
+// badge "N agentes" do DuxBan (DuxBanNode.vue): deriva das edges em vez de
+// guardar estado à parte, então some/aparece sozinho ao ligar/desligar.
+const connectedPeers = computed(() => {
+  const list = []
+  for (const edge of getConnectedEdges(props.id)) {
+    const otherId = edge.source === props.id ? edge.target : edge.source
+    const otherNode = findNode(otherId)
+    if (otherNode && AGENT_TERMINAL_TYPES.includes(otherNode.type)) {
+      list.push({ id: otherId, name: otherNode.data.name || otherId })
+    }
+  }
+  return list
+})
 
 const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   minWidth: 320,
@@ -500,6 +518,17 @@ onBeforeUnmount(() => {
   color: var(--color-text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peer-count {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
