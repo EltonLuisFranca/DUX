@@ -10,7 +10,6 @@ import { registerBrowserNodeIpc } from './ipc/browserNode'
 import { registerImageNodeIpc } from './ipc/imageNode'
 
 const WSL_DISTRO = 'Debian'
-const BRIDGE_CMD = 'source ~/.zshrc; cd /mnt/c/Users/57224/dux-fleet/bridge && node server.js'
 // bridge/ está listado em asarUnpack (precisa rodar como processo real, não
 // dentro do arquivo virtual .asar), então empacotado ele vive em
 // app.asar.unpacked/bridge, não em app.asar/../../bridge como o __dirname
@@ -18,6 +17,28 @@ const BRIDGE_CMD = 'source ~/.zshrc; cd /mnt/c/Users/57224/dux-fleet/bridge && n
 const BRIDGE_DIR = app.isPackaged
   ? join(__dirname, '../../bridge').replace('app.asar', 'app.asar.unpacked')
   : join(__dirname, '../../bridge')
+
+// Traduz o path Windows (ex: C:\Users\x\dux-fleet\bridge) pro equivalente
+// dentro do WSL (/mnt/c/Users/x/dux-fleet/bridge) — BRIDGE_DIR é resolvido
+// pelo processo main rodando no Windows, mas quem executa server.js é o zsh
+// dentro do WSL, então não dá pra usar o path Windows direto no `cd`.
+function toWslPath(winPath) {
+  const drive = winPath[0].toLowerCase()
+  const rest = winPath.slice(2).replace(/\\/g, '/')
+  return `/mnt/${drive}${rest}`
+}
+
+// `source ~/.zshrc` sozinho não garante node no PATH: o alias "default" do
+// nvm pode apontar pra uma versão LTS que não está mais instalada
+// localmente (ex: nvm atualizou a tabela de aliases remotos numa instalação
+// posterior sem reinstalar essa versão), e nesse caso o `nvm use default`
+// automático que o nvm.sh dispara ao ser sourced falha em silêncio, sem
+// deixar node no PATH. "nvm use node" força a última versão *realmente
+// instalada*, sidestepando esse alias — só roda se nvm existir, pra não
+// quebrar em máquinas com node do sistema (sem nvm).
+function buildBridgeCmd(wslDir) {
+  return `source ~/.zshrc >/dev/null 2>&1; type nvm >/dev/null 2>&1 && nvm use --silent node >/dev/null 2>&1; cd '${wslDir}' && exec node server.js`
+}
 
 ipcMain.on('app:get-version-sync', (event) => {
   event.returnValue = app.getVersion()
@@ -36,7 +57,14 @@ let mainWindowRef = null
 // splash mostra progresso enquanto baixa. Timeout curto pra nunca travar o
 // startup se o GitHub estiver fora do ar ou sem internet — nesse caso segue
 // direto pra janela principal, sem bloquear o usuário.
-const STARTUP_CHECK_TIMEOUT_MS = 6_000
+// Só cobre a checagem em si (uma requisição HTTP pequena pro latest.yml) —
+// se o GitHub estiver fora do ar ou sem internet, não trava o startup.
+const NO_UPDATE_TIMEOUT_MS = 6_000
+// Cobre o download do instalador (~130-200MB): precisa de tempo real, não os
+// mesmos 6s da checagem — do contrário o splash fecha e abre a versão antiga
+// antes do download terminar, e como o usuário normalmente fecha o app antes
+// dele completar em segundo plano, a atualização nunca chega a ser aplicada.
+const DOWNLOAD_TIMEOUT_MS = 10 * 60_000
 
 function checkForUpdateBeforeLaunch() {
   return new Promise((resolve) => {
@@ -60,6 +88,7 @@ function checkForUpdateBeforeLaunch() {
     const setStatus = (label, percent) => splash.webContents.send('splash:status', { label, percent })
 
     let settled = false
+    let timeoutHandle
     const finish = (willInstall) => {
       if (settled) return
       settled = true
@@ -68,11 +97,15 @@ function checkForUpdateBeforeLaunch() {
       resolve({ willInstall })
     }
 
-    const timeoutHandle = setTimeout(() => finish(false), STARTUP_CHECK_TIMEOUT_MS)
+    timeoutHandle = setTimeout(() => finish(false), NO_UPDATE_TIMEOUT_MS)
 
     autoUpdater.autoDownload = true
     autoUpdater.once('update-not-available', () => finish(false))
     autoUpdater.once('error', () => finish(false))
+    autoUpdater.once('update-available', () => {
+      clearTimeout(timeoutHandle)
+      timeoutHandle = setTimeout(() => finish(false), DOWNLOAD_TIMEOUT_MS)
+    })
     autoUpdater.on('download-progress', (progress) => {
       setStatus('Baixando atualização...', progress.percent)
     })
@@ -91,7 +124,14 @@ let bridgeProcess = null
 
 function startBridge() {
   if (process.platform === 'win32') {
-    bridgeProcess = spawn('wsl.exe', ['-d', WSL_DISTRO, '--', 'zsh', '-c', BRIDGE_CMD])
+    bridgeProcess = spawn('wsl.exe', [
+      '-d',
+      WSL_DISTRO,
+      '--',
+      'zsh',
+      '-c',
+      buildBridgeCmd(toWslPath(BRIDGE_DIR))
+    ])
   } else {
     // spawn('node', ...) depende do PATH do processo que lançou o Electron
     // resolver "node" — funciona quando o Electron herda um shell com nvm/asdf
