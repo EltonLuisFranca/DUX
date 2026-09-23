@@ -65,7 +65,11 @@ export function fetchDockerContainers(host) {
       ws.close()
     }
 
-    const timeout = setTimeout(() => finish({ valid: false, error: 'timeout' }), 8000)
+    // Acima do timeout de 10s do execFile em bridge/dockerStatus.js — senão
+    // este timeout sempre ganha a corrida primeiro e mostra o "timeout" cru
+    // aqui em vez da mensagem melhor que o bridge devolveria (ex: "tempo
+    // esgotado esperando o docker responder" ou o stderr real do docker).
+    const timeout = setTimeout(() => finish({ valid: false, error: 'timeout' }), 12000)
 
     ws.onopen = () => ws.send(JSON.stringify({ type: 'dockerList', host }))
 
@@ -117,7 +121,9 @@ export function fetchDockerLogs(containerId, { tail, host } = {}) {
       ws.close()
     }
 
-    const timeout = setTimeout(() => finish({ ok: false, error: 'timeout' }), 8000)
+    // Mesmo motivo do timeout de fetchDockerContainers: fica acima do
+    // timeout de 10s do execFile em bridge/dockerStatus.js.
+    const timeout = setTimeout(() => finish({ ok: false, error: 'timeout' }), 12000)
 
     ws.onopen = () => ws.send(JSON.stringify({ type: 'dockerLogs', containerId, tail, host }))
 
