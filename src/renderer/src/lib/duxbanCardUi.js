@@ -64,6 +64,14 @@ export function cardTags(card, tags) {
   return card.tagIds.map((id) => tags.find((t) => t.id === id)).filter(Boolean)
 }
 
+// total de imagens do cartão pra badge na face do card (Kanban) — soma a
+// descrição do cartão em si com as de todo comentário, já que as duas contam
+// como "esse cartão tem anexo visual" pra quem só olha o board sem abrir o
+// modal de detalhe.
+export function cardImageCount(card) {
+  return card.images.length + card.comments.reduce((sum, c) => sum + (c.images?.length || 0), 0)
+}
+
 export function agentName(nodeId, connectedAgents) {
   return connectedAgents.find((a) => a.id === nodeId)?.name || ''
 }

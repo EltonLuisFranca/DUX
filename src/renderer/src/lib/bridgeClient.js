@@ -438,3 +438,118 @@ export function unlinkNoteFromAgent(sessionId, path) {
 export function sendDuxbanTaskToAgent(sessionId, { boardName, columnTitle, cardId, cardText }) {
   sendControlMessage({ type: 'duxbanTaskToAgent', sessionId, boardName, columnTitle, cardId, cardText })
 }
+
+// Diferente das funções de request/response única deste módulo: o teste de
+// força bruta de credenciais roda por vários segundos/minutos no bridge e
+// precisa empurrar progresso tentativa-a-tentativa (não só um resultado no
+// final) — por isso mantém a conexão viva, mesmo padrão de watchNote, só que
+// disparada por credentialTestStart em vez de assinatura passiva.
+export function runCredentialTest(payload, { onProgress, onResult, onConnectionError }) {
+  const ws = new WebSocket(BRIDGE_URL)
+  const requestId = crypto.randomUUID()
+  let done = false
+
+  const finish = (result) => {
+    if (done) return
+    done = true
+    onResult(result)
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close()
+  }
+
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'credentialTestStart', requestId, ...payload }))
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data)
+    if (msg.requestId !== requestId) return
+    if (msg.type === 'credentialTestProgress') onProgress(msg)
+    else if (msg.type === 'credentialTestResult') finish(msg)
+  }
+
+  ws.onerror = () => {
+    onConnectionError?.()
+    finish({ requestId, cancelled: false, error: 'connection', totalAttempts: 0, findings: [], rateLimit: null })
+  }
+
+  return {
+    requestId,
+    stop() {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'credentialTestStop', requestId }))
+    }
+  }
+}
+
+// Mesmo padrão de streaming de runCredentialTest (conexão viva, progresso
+// porta-a-porta em vez de só o resultado final) — a varredura de portas roda
+// no bridge (bridge/portScan.js) por poder levar segundos/minutos dependendo
+// da quantidade de portas.
+export function runPortScan(payload, { onProgress, onResult, onConnectionError }) {
+  const ws = new WebSocket(BRIDGE_URL)
+  const requestId = crypto.randomUUID()
+  let done = false
+
+  const finish = (result) => {
+    if (done) return
+    done = true
+    onResult(result)
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close()
+  }
+
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'portScanStart', requestId, ...payload }))
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data)
+    if (msg.requestId !== requestId) return
+    if (msg.type === 'portScanProgress') onProgress(msg)
+    else if (msg.type === 'portScanResult') finish(msg)
+  }
+
+  ws.onerror = () => {
+    onConnectionError?.()
+    finish({ requestId, cancelled: false, error: 'connection', totalPorts: 0, openPorts: [] })
+  }
+
+  return {
+    requestId,
+    stop() {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'portScanStop', requestId }))
+    }
+  }
+}
+
+// Mesmo padrão de streaming dos outros dois (runCredentialTest/runPortScan)
+// — teste de carga roda no bridge (bridge/loadTest.js) por segundos/minutos,
+// com progresso de RPS/latência/erro empurrado periodicamente, não só o
+// resumo final.
+export function runLoadTest(payload, { onProgress, onResult, onConnectionError }) {
+  const ws = new WebSocket(BRIDGE_URL)
+  const requestId = crypto.randomUUID()
+  let done = false
+
+  const finish = (result) => {
+    if (done) return
+    done = true
+    onResult(result)
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close()
+  }
+
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'loadTestStart', requestId, ...payload }))
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data)
+    if (msg.requestId !== requestId) return
+    if (msg.type === 'loadTestProgress') onProgress(msg)
+    else if (msg.type === 'loadTestResult') finish(msg)
+  }
+
+  ws.onerror = () => {
+    onConnectionError?.()
+    finish({ requestId, cancelled: false, error: 'connection', totalCompleted: 0 })
+  }
+
+  return {
+    requestId,
+    stop() {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'loadTestStop', requestId }))
+    }
+  }
+}

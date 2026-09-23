@@ -8,6 +8,13 @@ const { createConnectionHandler } = require('./wsHandlers')
 const PORT = 4577
 const AGENT_PORT = 4578
 
+// 1MB bastava antes de dux_kanban_create_card/add_comment aceitarem
+// image_paths (mcp-server.mjs) — uma imagem só em base64 já passa disso.
+// Local (127.0.0.1) e single-user, então um teto maior não é risco de DoS
+// relevante; 8MB por imagem (ver MAX_IMAGE_BYTES em mcp-server.mjs) + folga
+// pro overhead do base64/JSON e pra múltiplos anexos no mesmo request.
+const MAX_BODY_BYTES = 24 * 1024 * 1024
+
 const wss = new WebSocketServer({ host: '127.0.0.1', port: PORT })
 wss.on('connection', createConnectionHandler({ agentPort: AGENT_PORT }))
 
@@ -20,7 +27,7 @@ const agentServer = http.createServer((req, res) => {
   let body = ''
   req.on('data', (chunk) => {
     body += chunk
-    if (body.length > 1e6) req.destroy()
+    if (body.length > MAX_BODY_BYTES) req.destroy()
   })
 
   if (req.url === '/ask') {

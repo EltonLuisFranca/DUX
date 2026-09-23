@@ -13,6 +13,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import http from 'node:http'
+import { readFileSync, statSync } from 'node:fs'
 
 const sessionId = process.env.DUX_SESSION_ID
 const agentPort = Number(process.env.DUX_AGENT_PORT || '4578')
@@ -142,6 +143,48 @@ function dockerViaBridge(action, payload) {
   })
 }
 
+// dux_kanban_create_card/add_comment recebem `image_paths` (paths locais,
+// neste mesmo ambiente WSL do terminal) em vez de bytes — o agente que cola
+// um print na conversa só enxerga o path onde o CLI já cacheou a imagem, não
+// tem como mandar bytes brutos por uma tool call de texto. Aqui é onde esse
+// path vira data URL, ANTES de seguir pro bridge (que só repassa JSON pro
+// canvas via duxbanLink.request) — mesmo formato já usado por
+// ImageNode/BrowserNode no renderer (ver src/main/ipc/imageNode.js).
+const IMAGE_MIME_BY_EXT = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp'
+}
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024
+
+function imagePathToDataUrl(filePath) {
+  const ext = filePath.slice(filePath.lastIndexOf('.')).toLowerCase()
+  const mime = IMAGE_MIME_BY_EXT[ext]
+  if (!mime) {
+    throw new Error(
+      `extensão de imagem não suportada em "${filePath}" (aceitas: ${Object.keys(IMAGE_MIME_BY_EXT).join(', ')})`
+    )
+  }
+  let size
+  try {
+    size = statSync(filePath).size
+  } catch {
+    throw new Error(`arquivo de imagem não encontrado: "${filePath}"`)
+  }
+  if (size > MAX_IMAGE_BYTES) {
+    throw new Error(`imagem "${filePath}" tem ${(size / 1024 / 1024).toFixed(1)}MB, acima do limite de 8MB`)
+  }
+  const base64 = readFileSync(filePath).toString('base64')
+  return `data:${mime};base64,${base64}`
+}
+
+function imagePathsToDataUrls(imagePaths) {
+  if (!Array.isArray(imagePaths) || !imagePaths.length) return []
+  return imagePaths.map(imagePathToDataUrl)
+}
+
 const server = new McpServer({ name: 'dux', version: '1.0.0' })
 
 server.registerTool(
@@ -198,12 +241,21 @@ server.registerTool(
     inputSchema: {
       column: z.string().describe('exact title of the column to add the card to, as shown by dux_kanban_list'),
       text: z.string().describe('short title of the new card'),
-      description: z.string().optional().describe('optional longer description, kept separate from the title')
+      description: z.string().optional().describe('optional longer description, kept separate from the title'),
+      image_paths: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'optional list of local image file paths (png/jpg/jpeg/gif/webp, max 8MB each) to attach to the card as ' +
+            'visual context — e.g. a screenshot already saved to this terminal\'s local cache. Paths are read from ' +
+            'this terminal\'s own filesystem, not the user\'s.'
+        )
     }
   },
-  async ({ column, text, description }) => {
+  async ({ column, text, description, image_paths }) => {
     try {
-      const result = await duxbanViaBridge('create_card', { column, text, description })
+      const images = imagePathsToDataUrls(image_paths)
+      const result = await duxbanViaBridge('create_card', { column, text, description, images })
       return { content: [{ type: 'text', text: JSON.stringify(result) }] }
     } catch (err) {
       return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
@@ -420,15 +472,28 @@ server.registerTool(
       '(author + timestamp + text) shown in the card\'s detail modal, meant as working context for humans and for ' +
       'this agent itself if it resumes the task later. Use this proactively while working a task — not only when ' +
       'explicitly asked — to record what has already been done, what is being done right now, and any important ' +
-      'decisions made along the way.',
+      'decisions made along the way. Can optionally attach one or more local image files (e.g. a screenshot as ' +
+      'visual evidence) via image_paths; text may be omitted only if image_paths is given.',
     inputSchema: {
       card_id: z.string().describe('id of the card to comment on, as returned by dux_kanban_list'),
-      text: z.string().describe('the comment text')
+      text: z.string().optional().describe('the comment text (optional if image_paths is given)'),
+      image_paths: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'optional list of local image file paths (png/jpg/jpeg/gif/webp, max 8MB each) to attach to the comment ' +
+            '— e.g. a screenshot already saved to this terminal\'s local cache. Paths are read from this ' +
+            'terminal\'s own filesystem, not the user\'s.'
+        )
     }
   },
-  async ({ card_id, text }) => {
+  async ({ card_id, text, image_paths }) => {
     try {
-      const result = await duxbanViaBridge('add_comment', { cardId: card_id, text })
+      if (!text?.trim() && !image_paths?.length) {
+        throw new Error('informe "text" ou "image_paths" (ou os dois) — um comentário não pode ficar vazio')
+      }
+      const images = imagePathsToDataUrls(image_paths)
+      const result = await duxbanViaBridge('add_comment', { cardId: card_id, text, images })
       return { content: [{ type: 'text', text: JSON.stringify(result) }] }
     } catch (err) {
       return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }

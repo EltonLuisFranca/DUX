@@ -72,12 +72,22 @@ function buildTaskNotice({ boardName, columnTitle, cardId, cardText }) {
 // agente já começar a tratar a tarefa).
 function pushTask(sessionId, task, waitedMs = 0) {
   const session = sessions.get(sessionId)
-  if (!session) return
 
-  if (!isIdle(session, TASK_IDLE_MS) && waitedMs < TASK_READY_MAX_WAIT_MS) {
+  // Sem sessão ainda (terminal desconectado, ou reconectando bem na hora do
+  // dispatch — o retry automático do client é ~1.5s, ver connect() em
+  // WslClaudeTerminalNode.vue) OU sessão ocupada: os dois casos esperam e
+  // tentam de novo, até o mesmo teto de 15s. Antes disso era só
+  // `if (!session) return` — um dispatch que chegasse alguns instantes antes
+  // do terminal-alvo terminar de registrar a sessão no bridge se perdia
+  // silenciosamente pra sempre, sem nenhum sinal em lugar nenhum (card
+  // 717cc845). Esse teto de 15s cobre gaps curtos; gaps mais longos (terminal
+  // fechado e só reaberto bem depois) ficam por conta do catch-up que roda ao
+  // conectar (ver resendPendingDispatch em duxbanOps.js).
+  if ((!session || !isIdle(session, TASK_IDLE_MS)) && waitedMs < TASK_READY_MAX_WAIT_MS) {
     setTimeout(() => pushTask(sessionId, task, waitedMs + TASK_READY_POLL_MS), TASK_READY_POLL_MS)
     return
   }
+  if (!session) return
 
   // cada cartão puxado da fila do board começa numa sessão isolada por
   // padrão — sem isso, o agente ia empilhando o contexto de tarefas sem

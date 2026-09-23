@@ -11,6 +11,9 @@ const claudeAccountUsage = require('./claudeAccountUsage')
 const { resolveCwd, isDirectory, isFile, listSubdirectories, listDirEntries } = require('./fsHelpers')
 const { getGitInfo } = require('./gitStatus')
 const { listContainers, containerAction, containerLogs } = require('./dockerStatus')
+const { createRunner: createCredentialTestRunner } = require('./credentialTest')
+const { createRunner: createPortScanRunner } = require('./portScan')
+const { createRunner: createLoadTestRunner } = require('./loadTest')
 const { startWatchingNote, stopWatchingNote, stopAllNoteWatches, readNoteFile } = require('./noteWatch')
 const { detectTerminalAvailability } = require('./terminalAvailability')
 
@@ -60,6 +63,17 @@ function createConnectionHandler({ agentPort }) {
   return function handleConnection(ws) {
     let ptyProcess = null
     let sessionId = null
+    // runners de teste de força bruta em andamento nesta conexão, por
+    // requestId — permite credentialTestStop encontrar o certo, e garante
+    // que fechar o node/terminal mata o teste em vez de deixá-lo martelando
+    // o alvo sozinho em background (mesmo cuidado do ptyProcess.kill() no ws.close())
+    const activeCredentialTests = new Map()
+    // mesmo cuidado, agora pra varredura de portas (portScanStop / ws.close())
+    const activePortScans = new Map()
+    // mesmo cuidado, agora pro teste de carga (loadTestStop / ws.close()) —
+    // aqui importa ainda mais: sem isso, fechar o node no meio deixaria o
+    // agendador de RPS martelando o alvo sozinho em background pra sempre
+    const activeLoadTests = new Map()
 
     ws.on('message', (raw) => {
       let msg
@@ -276,6 +290,75 @@ function createConnectionHandler({ agentPort }) {
         containerLogs(msg.containerId, { tail: msg.tail, host: msg.host }).then((info) => {
           ws.send(JSON.stringify({ type: 'dockerLogsResult', requestId: msg.requestId, ...info }))
         })
+      } else if (msg.type === 'credentialTestStart') {
+        const requestId = msg.requestId
+        if (!requestId || activeCredentialTests.has(requestId)) return
+        if (!/^https?:\/\//i.test(msg.target?.url || '')) {
+          ws.send(JSON.stringify({ type: 'credentialTestResult', requestId, error: 'URL inválida (precisa começar com http:// ou https://)' }))
+          return
+        }
+        const runner = createCredentialTestRunner(msg, {
+          onProgress: (progress) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'credentialTestProgress', requestId, ...progress }))
+            }
+          },
+          onDone: (summary) => {
+            activeCredentialTests.delete(requestId)
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'credentialTestResult', requestId, ...summary }))
+            }
+          }
+        })
+        activeCredentialTests.set(requestId, runner)
+      } else if (msg.type === 'credentialTestStop') {
+        activeCredentialTests.get(msg.requestId)?.stop()
+      } else if (msg.type === 'portScanStart') {
+        const requestId = msg.requestId
+        if (!requestId || activePortScans.has(requestId)) return
+        if (!String(msg.host || '').trim()) {
+          ws.send(JSON.stringify({ type: 'portScanResult', requestId, error: 'Host alvo não informado' }))
+          return
+        }
+        const runner = createPortScanRunner(msg, {
+          onProgress: (progress) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'portScanProgress', requestId, ...progress }))
+            }
+          },
+          onDone: (summary) => {
+            activePortScans.delete(requestId)
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'portScanResult', requestId, ...summary }))
+            }
+          }
+        })
+        activePortScans.set(requestId, runner)
+      } else if (msg.type === 'portScanStop') {
+        activePortScans.get(msg.requestId)?.stop()
+      } else if (msg.type === 'loadTestStart') {
+        const requestId = msg.requestId
+        if (!requestId || activeLoadTests.has(requestId)) return
+        if (!/^https?:\/\//i.test(msg.target?.url || '')) {
+          ws.send(JSON.stringify({ type: 'loadTestResult', requestId, error: 'URL inválida (precisa começar com http:// ou https://)' }))
+          return
+        }
+        const runner = createLoadTestRunner(msg, {
+          onProgress: (progress) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'loadTestProgress', requestId, ...progress }))
+            }
+          },
+          onDone: (summary) => {
+            activeLoadTests.delete(requestId)
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'loadTestResult', requestId, ...summary }))
+            }
+          }
+        })
+        activeLoadTests.set(requestId, runner)
+      } else if (msg.type === 'loadTestStop') {
+        activeLoadTests.get(msg.requestId)?.stop()
       } else if (msg.type === 'link') {
         agentLink.linkSessions(msg.sessionA, msg.sessionB)
       } else if (msg.type === 'unlink') {
@@ -413,6 +496,12 @@ function createConnectionHandler({ agentPort }) {
     })
 
     ws.on('close', () => {
+      for (const runner of activeCredentialTests.values()) runner.stop()
+      activeCredentialTests.clear()
+      for (const runner of activePortScans.values()) runner.stop()
+      activePortScans.clear()
+      for (const runner of activeLoadTests.values()) runner.stop()
+      activeLoadTests.clear()
       ptyProcess?.kill()
       ptyProcess = null
       if (sessionId) {

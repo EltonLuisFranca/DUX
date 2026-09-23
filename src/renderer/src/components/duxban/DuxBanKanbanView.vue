@@ -187,6 +187,18 @@
                   </svg>
                   <span>{{ card.comments.length }}</span>
                 </div>
+                <div
+                  v-if="cardImageCount(card)"
+                  class="comment-count"
+                  :title="`${cardImageCount(card)} imagem${cardImageCount(card) === 1 ? '' : 'ns'} anexada${cardImageCount(card) === 1 ? '' : 's'}`"
+                >
+                  <svg viewBox="0 0 16 16" width="13" height="13">
+                    <rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3" fill="none" />
+                    <circle cx="5.5" cy="6.5" r="1.1" fill="currentColor" />
+                    <path d="M3 12l3.5-4 2.5 3 2-2.5 3 3.5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <span>{{ cardImageCount(card) }}</span>
+                </div>
               </div>
             </div>
           </template>
@@ -213,6 +225,7 @@ import {
   initials,
   columnMeta,
   cardTags,
+  cardImageCount,
   agentName
 } from '../../lib/duxbanCardUi'
 import {

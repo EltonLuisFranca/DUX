@@ -32,6 +32,9 @@ export function normalizeColumns(raw) {
               : card.categoryId
                 ? [card.categoryId]
                 : [],
+            // anexos de imagem do cartão (ver comentário em addCard) — data
+            // URLs base64, mesmo formato já usado por ImageNode/BrowserNode.
+            images: Array.isArray(card.images) ? card.images.filter((i) => typeof i === 'string') : [],
             comments: Array.isArray(card.comments)
               ? card.comments.map((c) => ({
                   id: c.id || crypto.randomUUID(),
@@ -39,7 +42,8 @@ export function normalizeColumns(raw) {
                   createdAt: c.createdAt || Date.now(),
                   // comentários salvos antes do autor existir só podiam ter vindo
                   // da UI (nenhuma tool MCP escrevia comentário até essa feature)
-                  author: c.author || 'Você'
+                  author: c.author || 'Você',
+                  images: Array.isArray(c.images) ? c.images.filter((i) => typeof i === 'string') : []
                 }))
               : []
           }))
@@ -222,14 +226,25 @@ export function removeColumn(data, colId) {
 // `author` é um nome de exibição livre — 'Você' pra quem comenta pela UI
 // (default), ou o nome do terminal/agente pra quem comenta via MCP
 // (dux_kanban_add_comment, ver WslClaudeTerminalNode.vue), do mesmo jeito que
-// assigned_to já identifica agente por nome e não por nodeId.
-export function addComment(data, cardId, text, author = 'Você') {
+// assigned_to já identifica agente por nome e não por nodeId. `images` são
+// data URLs já prontas (o path->data URL acontece antes, em
+// bridge/mcp-server.mjs pro caso do MCP, ou no paste handler da UI) — um
+// comentário só de imagem (sem texto) é válido, por isso o guard de "vazio"
+// olha pras duas coisas em vez de só pro texto.
+export function addComment(data, cardId, text, author = 'Você', images = []) {
   const body = String(text || '').trim()
-  if (!body) return null
+  const attachments = Array.isArray(images) ? images.filter((i) => typeof i === 'string' && i) : []
+  if (!body && !attachments.length) return null
   const columns = normalizeColumns(data.columns)
   const found = findCardById(columns, cardId)
   if (!found) throw new Error(`cartão não encontrado: ${cardId}`)
-  const comment = { id: crypto.randomUUID(), text: body, createdAt: Date.now(), author: String(author || '').trim() || 'Você' }
+  const comment = {
+    id: crypto.randomUUID(),
+    text: body,
+    createdAt: Date.now(),
+    author: String(author || '').trim() || 'Você',
+    images: attachments
+  }
   found.card.comments.push(comment)
   data.columns = columns
   return comment
@@ -291,6 +306,27 @@ function pushCardToAgent(data, nodeId, columns, card) {
   })
 }
 
+// Catch-up: reenvia o aviso de tarefa pro terminal que acabou de conectar
+// (ou reconectar), se o board já tinha um dispatch 'active' pendente pra ele
+// — cobre o caso do terminal ter perdido o push original por estar
+// desconectado no momento do dispatch, ou ter caído e voltado no meio da
+// tarefa. Chamado por WslClaudeTerminalNode.vue toda vez que a conexão ws
+// abre (idempotente quando não há nada pendente). Sem isso, activeDispatch
+// fica esperando pra sempre um terminal que nunca soube que tinha trabalho —
+// o teto de retry em bridge/duxbanLink.js::pushTask só cobre gaps de até
+// ~15s, não "terminal ficou fechado por um tempo e só reabriu depois" (bug
+// original, card 717cc845). Só relê e reenvia — não muta nada, por isso não
+// reatribui data.columns como as funções de mutação fazem.
+export function resendPendingDispatch(data, nodeId) {
+  const cardId = data.activeDispatch?.[nodeId]
+  if (!cardId) return false
+  const columns = normalizeColumns(data.columns)
+  const found = findCardById(columns, cardId)
+  if (!found || found.card.assignedNodeId !== nodeId || found.card.taskState !== 'active') return false
+  pushCardToAgent(data, nodeId, columns, found.card)
+  return true
+}
+
 // Se o agente-alvo não tem tarefa ativa agora, pega a próxima da fila (se
 // houver), marca como "active", registra em activeDispatch e escreve no
 // terminal dele via bridge (writeAsMessage, ver bridge/duxbanLink.js).
@@ -328,6 +364,7 @@ export function addCard(data, columnRef, text, extra = {}) {
     assignedNodeId: null,
     taskState: 'unassigned',
     tagIds: Array.isArray(extra.tagIds) ? extra.tagIds : [],
+    images: Array.isArray(extra.images) ? extra.images.filter((i) => typeof i === 'string' && i) : [],
     comments: []
   }
   col.cards.push(card)
@@ -488,10 +525,15 @@ export function serializeBoard(data, agentNames, viewerNodeId) {
         priority: card.priority || undefined,
         milestone: card.milestoneTotal ? `${card.milestoneCurrent}/${card.milestoneTotal}` : undefined,
         tags: card.tagIds.map((id) => tags.find((t) => t.id === id)?.name).filter(Boolean),
+        // só a contagem, nunca os data URLs em si — um card/comentário com
+        // imagem facilmente passa de 1MB em base64, o que inflaria o
+        // dux_kanban_list inteiro (todo cartão de todo agente) a cada chamada.
+        image_count: card.images.length || undefined,
         comments: card.comments.map((c) => ({
           author: c.author,
           text: c.text,
-          created_at: new Date(c.createdAt).toISOString()
+          created_at: new Date(c.createdAt).toISOString(),
+          image_count: c.images.length || undefined
         })),
         assigned_to: card.assignedNodeId ? agentNames?.[card.assignedNodeId] || card.assignedNodeId : null,
         mine: card.assignedNodeId === viewerNodeId,

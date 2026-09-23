@@ -39,6 +39,19 @@ const HTTP_ICON =
 const DOCKER_ICON =
   '<rect x="2.5" y="11" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.3" fill="none"/><rect x="9" y="11" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.3" fill="none"/><rect x="9" y="4.5" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.3" fill="none"/><rect x="15.5" y="11" width="2.5" height="6" rx="0.8" stroke="currentColor" stroke-width="1.2" fill="none"/>'
 
+// chave: círculo do bocal + haste + dentes — mesmo estilo stroke=currentColor dos outros ícones
+const CREDENTIAL_TEST_ICON =
+  '<circle cx="6" cy="10" r="3.3" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M9.1 10H17M13.8 10v3M16.2 10v2.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
+
+// radar de varredura: círculos concêntricos + agulha + um "ping" (porta
+// aberta encontrada) — mesmo estilo stroke=currentColor dos outros ícones
+const PORT_SCAN_ICON =
+  '<circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="10" cy="10" r="3.8" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M10 10L14.5 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="15" cy="5" r="1.4" fill="currentColor"/>'
+
+// medidor tipo velocímetro (carga/RPS) — mesmo estilo stroke=currentColor dos outros ícones
+const LOAD_TEST_ICON =
+  '<path d="M3 14a7 7 0 0 1 14 0" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M10 14L14 7.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="10" cy="14" r="1.3" fill="currentColor"/><path d="M4.5 14h-1M16.5 14h-1M6 8.5l-.7-.7M14 8.5l.7-.7" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>'
+
 // registro de tipos de node: cada tipo novo entra aqui com seu próprio
 // formulário de configurações (sidebar) e, opcionalmente, um formulário de
 // criação (quando precisa de input do usuário antes de existir, ex: um caminho)
@@ -175,6 +188,27 @@ export const nodeTypeRegistry = {
     createData: () => ({ name: 'Docker', host: '' }),
     settingsComponent: DockerSettings,
     icon: DOCKER_ICON
+  },
+  'credential-test': {
+    label: 'Força Bruta de Credenciais',
+    description: 'Testa uma lista de credenciais contra um endpoint de login e reporta credencial fraca + ausência de rate limit/lockout.',
+    category: 'tools',
+    createData: () => ({ name: 'Força Bruta' }),
+    icon: CREDENTIAL_TEST_ICON
+  },
+  'port-scan': {
+    label: 'Varredura de Portas',
+    description: 'Recon inicial: varre portas TCP de um host e tenta identificar o serviço de cada porta aberta — sem depender de nmap instalado.',
+    category: 'tools',
+    createData: () => ({ name: 'Varredura de Portas' }),
+    icon: PORT_SCAN_ICON
+  },
+  'load-test': {
+    label: 'Teste de Carga',
+    description: 'Gera carga controlada (RPS alvo, duração, ramp-up) contra um endpoint próprio e reporta throughput, latência (p50/p95/p99) e taxa de erro.',
+    category: 'tools',
+    createData: () => ({ name: 'Teste de Carga' }),
+    icon: LOAD_TEST_ICON
   },
   image: {
     label: 'Imagem',

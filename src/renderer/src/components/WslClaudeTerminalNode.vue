@@ -80,7 +80,8 @@ import {
   removeTag,
   addCardTag,
   removeCardTag,
-  addComment
+  addComment,
+  resendPendingDispatch
 } from '../lib/duxbanOps'
 import { pendingVoiceInput, consumePendingVoiceInput, isRecording } from '../store/voiceStore'
 import { speak, ttsEnabled } from '../store/ttsStore'
@@ -250,6 +251,7 @@ function connect() {
     )
     status.value = 'online'
     relinkExistingEdges()
+    resendPendingDuxbanTask()
   }
 
   ws.onmessage = (event) => {
@@ -374,9 +376,10 @@ function handleDuxbanRequest(msg) {
       reply(serializeBoard(board.data, agentNamesForBoard(board), props.id))
     } else if (msg.action === 'create_card') {
       const card = addCard(board.data, msg.payload?.column, msg.payload?.text, {
-        description: msg.payload?.description
+        description: msg.payload?.description,
+        images: msg.payload?.images
       })
-      reply({ ok: true, card_id: card.id })
+      reply({ ok: true, card_id: card.id, images_attached: card.images.length || undefined })
     } else if (msg.action === 'move_card') {
       const card = moveCard(board.data, msg.payload?.cardId, msg.payload?.column)
       reply({ ok: true, card_id: card.id })
@@ -410,8 +413,13 @@ function handleDuxbanRequest(msg) {
       removeCardTag(board.data, msg.payload?.cardId, msg.payload?.tagId)
       reply({ ok: true, card_id: msg.payload?.cardId, tag_id: msg.payload?.tagId })
     } else if (msg.action === 'add_comment') {
-      const comment = addComment(board.data, msg.payload?.cardId, msg.payload?.text, props.data.name)
-      reply({ ok: true, card_id: msg.payload?.cardId, comment_id: comment?.id })
+      const comment = addComment(board.data, msg.payload?.cardId, msg.payload?.text, props.data.name, msg.payload?.images)
+      reply({
+        ok: true,
+        card_id: msg.payload?.cardId,
+        comment_id: comment?.id,
+        images_attached: comment?.images?.length || undefined
+      })
     } else {
       reply(null, `ação desconhecida: ${msg.action}`)
     }
@@ -430,6 +438,16 @@ function relinkExistingEdges() {
       linkAgents(props.id, otherId)
     }
   }
+}
+
+// Catch-up de dispatch do DuxBan (ver resendPendingDispatch em duxbanOps.js e
+// o fix em bridge/duxbanLink.js::pushTask) — roda em toda (re)conexão, não só
+// na primeira, porque a sessão no bridge (onde pushTask checa se o terminal
+// está disponível) também é recriada do zero a cada reconexão. Idempotente:
+// não faz nada se este terminal não tiver um dispatch 'active' pendente.
+function resendPendingDuxbanTask() {
+  const board = findConnectedDuxbanNode()
+  if (board) resendPendingDispatch(board.data, props.id)
 }
 
 onMounted(async () => {

@@ -85,6 +85,15 @@
     <template #node-docker="nodeProps">
       <DockerNode v-bind="nodeProps" />
     </template>
+    <template #node-credential-test="nodeProps">
+      <CredentialTestNode v-bind="nodeProps" />
+    </template>
+    <template #node-port-scan="nodeProps">
+      <PortScanNode v-bind="nodeProps" />
+    </template>
+    <template #node-load-test="nodeProps">
+      <LoadTestNode v-bind="nodeProps" />
+    </template>
     <template #node-pomodoro="nodeProps">
       <PomodoroNode v-bind="nodeProps" />
     </template>
@@ -144,6 +153,9 @@ import GitNode from './GitNode.vue'
 import ImageNode from './ImageNode.vue'
 import HttpNode from './HttpNode.vue'
 import DockerNode from './DockerNode.vue'
+import CredentialTestNode from './CredentialTestNode.vue'
+import PortScanNode from './PortScanNode.vue'
+import LoadTestNode from './LoadTestNode.vue'
 import PomodoroNode from './PomodoroNode.vue'
 import DuxBanNode from './DuxBanNode.vue'
 import { theme, canvasVariant, edgeStyle, snapEnabled, SNAP_GRID_SIZE } from '../store/themeStore'

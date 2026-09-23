@@ -94,7 +94,19 @@
 
             <div class="modal-field">
               <label class="modal-label">Descrição</label>
-              <textarea v-model="detailCard.description" class="modal-textarea" rows="4" />
+              <textarea
+                v-model="detailCard.description"
+                class="modal-textarea"
+                rows="4"
+                placeholder="Cole uma imagem aqui (Ctrl+V) pra anexar"
+                @paste="onCardImagePaste"
+              />
+              <div v-if="detailCard.images.length" class="image-thumb-row">
+                <div v-for="(img, idx) in detailCard.images" :key="idx" class="image-thumb">
+                  <img :src="img" alt="" @click="openLightbox(img)" />
+                  <button class="image-thumb-remove" title="Remover imagem" @click="removeCardImage(idx)">×</button>
+                </div>
+              </div>
             </div>
 
             <div class="modal-field modal-field-row">
@@ -188,7 +200,12 @@
             <label class="modal-label comments-panel-label">Comentários</label>
             <div v-if="detailCard.comments.length" class="comment-list">
               <div v-for="comment in detailCard.comments" :key="comment.id" class="comment-row">
-                <p class="comment-text">{{ comment.text }}</p>
+                <p v-if="comment.text" class="comment-text">{{ comment.text }}</p>
+                <div v-if="comment.images && comment.images.length" class="image-thumb-row">
+                  <div v-for="(img, idx) in comment.images" :key="idx" class="image-thumb image-thumb-view">
+                    <img :src="img" alt="" @click="openLightbox(img)" />
+                  </div>
+                </div>
                 <div class="comment-meta">
                   <span class="comment-author">{{ comment.author }}</span>
                   <span class="comment-time">{{ formatCommentTime(comment.createdAt) }}</span>
@@ -211,10 +228,21 @@
                 v-model="commentDraft"
                 class="comment-textarea"
                 rows="2"
-                placeholder="Escrever um comentário..."
+                placeholder="Escrever um comentário... (Ctrl+V cola uma imagem)"
                 @keydown.enter.exact.prevent="onAddComment(detailCard.id)"
+                @paste="onCommentImagePaste"
               />
-              <button class="comment-send-btn" :disabled="!commentDraft.trim()" @click="onAddComment(detailCard.id)">
+              <div v-if="commentImageDrafts.length" class="image-thumb-row">
+                <div v-for="(img, idx) in commentImageDrafts" :key="idx" class="image-thumb">
+                  <img :src="img" alt="" @click="openLightbox(img)" />
+                  <button class="image-thumb-remove" title="Remover imagem" @click="removeCommentDraftImage(idx)">×</button>
+                </div>
+              </div>
+              <button
+                class="comment-send-btn"
+                :disabled="!commentDraft.trim() && !commentImageDrafts.length"
+                @click="onAddComment(detailCard.id)"
+              >
                 Enviar
               </button>
             </div>
@@ -262,7 +290,19 @@
 
             <div class="modal-field">
               <label class="modal-label">Descrição</label>
-              <textarea v-model="newCardDraft.description" class="modal-textarea" rows="4" placeholder="Descrição (opcional)" />
+              <textarea
+                v-model="newCardDraft.description"
+                class="modal-textarea"
+                rows="4"
+                placeholder="Descrição (opcional) — Ctrl+V cola uma imagem"
+                @paste="onNewCardImagePaste"
+              />
+              <div v-if="newCardDraft.images.length" class="image-thumb-row">
+                <div v-for="(img, idx) in newCardDraft.images" :key="idx" class="image-thumb">
+                  <img :src="img" alt="" @click="openLightbox(img)" />
+                  <button class="image-thumb-remove" title="Remover imagem" @click="removeNewCardImage(idx)">×</button>
+                </div>
+              </div>
             </div>
 
             <div class="modal-field">
@@ -335,6 +375,14 @@
             <button class="create-card-btn" :disabled="!newCardDraft.text.trim()" @click="onCreateCard">Criar cartão</button>
           </div>
         </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <Teleport to="body">
+      <Transition name="modal-fade">
+        <div v-if="lightboxSrc" class="image-lightbox-backdrop" @mousedown.self="closeLightbox">
+          <img :src="lightboxSrc" class="image-lightbox-img" alt="" />
         </div>
       </Transition>
     </Teleport>
@@ -420,9 +468,15 @@ const connectedAgents = computed(() => {
 // agente (dux_kanban_move_card etc, via WslClaudeTerminalNode.vue) muda esse
 // mesmo objeto por fora, e precisa aparecer na tela sozinha, sem nenhum
 // mecanismo extra de sincronização.
-if (!Array.isArray(props.data.columns) || !props.data.columns.length) {
-  props.data.columns = normalizeColumns(props.data.columns)
-}
+// Sempre normaliza no mount (não só quando columns está vazio/ausente) —
+// board salvo por uma versão anterior do app pode ter cartões sem campos
+// adicionados depois (tagIds, images, ...), e o template lê esses campos
+// direto (ex: detailCard.images.length) sem passar por normalizeColumns de
+// novo até a primeira mutação (addCard/moveCard/...) acontecer. Sem isso, um
+// board antigo recém-aberto quebraria ao abrir o modal de detalhe antes de
+// qualquer operação ser feita. normalizeColumns é idempotente, então rodar
+// de novo num board já normalizado não muda nada.
+props.data.columns = normalizeColumns(props.data.columns)
 if (!props.data.activeDispatch) props.data.activeDispatch = {}
 // computed, não uma referência fixa: duxbanOps troca `data.columns` por um
 // array NOVO a cada operação (ver comentário no topo de duxbanOps.js) — um
@@ -450,22 +504,91 @@ const detailColumnId = computed(() => {
 })
 
 const commentDraft = ref('')
+// anexos pendentes do comentário sendo escrito — só viram parte do comentário
+// de verdade quando onAddComment roda (ver addComment em duxbanOps.js); até
+// lá é só estado local do formulário, igual ao commentDraft de texto.
+const commentImageDrafts = ref([])
 
 function openDetail(card) {
   detailCardId.value = card.id
   commentDraft.value = ''
+  commentImageDrafts.value = []
 }
 
 function closeDetail() {
   detailCardId.value = null
   commentDraft.value = ''
+  commentImageDrafts.value = []
   deleteConfirm.reset()
 }
 
 function onKeydown(event) {
   if (event.key !== 'Escape') return
+  if (lightboxSrc.value) return closeLightbox()
   if (detailCardId.value) closeDetail()
   if (creatingColId.value) closeCreateModal()
+}
+
+// Anexo por Ctrl+V — cada card/comentário guarda a imagem como data URL
+// inline (mesmo formato de ImageNode/BrowserNode, ver src/main/ipc/), então
+// colar aqui é só ler o File do clipboard e converter via FileReader; sem
+// upload nem path nenhum envolvido nesse caminho (diferente do agente via
+// MCP, que manda um path local — ver bridge/mcp-server.mjs). Só intercepta o
+// paste quando tem imagem de fato: colar texto normal continua funcionando.
+function handleImagePaste(event, onImage) {
+  const items = event.clipboardData?.items
+  if (!items) return
+  const imageItems = Array.from(items).filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+  if (!imageItems.length) return
+  event.preventDefault()
+  for (const item of imageItems) {
+    const file = item.getAsFile()
+    if (!file) continue
+    const reader = new FileReader()
+    reader.onload = () => onImage(reader.result)
+    reader.readAsDataURL(file)
+  }
+}
+
+function onCardImagePaste(event) {
+  handleImagePaste(event, (dataUrl) => {
+    detailCard.value.images = [...detailCard.value.images, dataUrl]
+  })
+}
+
+function removeCardImage(index) {
+  detailCard.value.images = detailCard.value.images.filter((_, i) => i !== index)
+}
+
+function onNewCardImagePaste(event) {
+  handleImagePaste(event, (dataUrl) => {
+    newCardDraft.images = [...newCardDraft.images, dataUrl]
+  })
+}
+
+function removeNewCardImage(index) {
+  newCardDraft.images = newCardDraft.images.filter((_, i) => i !== index)
+}
+
+function onCommentImagePaste(event) {
+  handleImagePaste(event, (dataUrl) => {
+    commentImageDrafts.value = [...commentImageDrafts.value, dataUrl]
+  })
+}
+
+function removeCommentDraftImage(index) {
+  commentImageDrafts.value = commentImageDrafts.value.filter((_, i) => i !== index)
+}
+
+// lightbox simples (ver imagem em tamanho maior) — compartilhado pelos três
+// lugares que mostram thumbnail (descrição do card, comentários já postados,
+// anexos pendentes do comentário sendo escrito).
+const lightboxSrc = ref(null)
+function openLightbox(src) {
+  lightboxSrc.value = src
+}
+function closeLightbox() {
+  lightboxSrc.value = null
 }
 
 onMounted(() => {
@@ -483,9 +606,10 @@ const { pendingDeleteId, requestDelete } = deleteConfirm
 
 function onAddComment(cardId) {
   const text = commentDraft.value.trim()
-  if (!text) return
-  addComment(props.data, cardId, text)
+  if (!text && !commentImageDrafts.value.length) return
+  addComment(props.data, cardId, text, 'Você', commentImageDrafts.value)
   commentDraft.value = ''
+  commentImageDrafts.value = []
 }
 
 function onRemoveComment(cardId, commentId) {
@@ -531,7 +655,8 @@ const newCardDraft = reactive({
   priority: null,
   tagIds: [],
   milestoneCurrent: 0,
-  milestoneTotal: 0
+  milestoneTotal: 0,
+  images: []
 })
 
 function openCreateModal(col) {
@@ -544,6 +669,7 @@ function openCreateModal(col) {
   newCardDraft.tagIds = []
   newCardDraft.milestoneCurrent = 0
   newCardDraft.milestoneTotal = 0
+  newCardDraft.images = []
   nextTick(() => newCardTitleRef.value?.focus())
 }
 
@@ -566,7 +692,8 @@ function onCreateCard() {
     priority: newCardDraft.priority,
     tagIds: [...newCardDraft.tagIds],
     milestoneCurrent: newCardDraft.milestoneCurrent,
-    milestoneTotal: newCardDraft.milestoneTotal
+    milestoneTotal: newCardDraft.milestoneTotal,
+    images: [...newCardDraft.images]
   })
   closeCreateModal()
 }
@@ -1015,6 +1142,76 @@ function onCreateCard() {
 .comment-remove-btn.confirming {
   background: #ff6b6b;
   color: #fff;
+}
+
+.image-thumb-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.image-thumb {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+
+.image-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  cursor: zoom-in;
+  background: var(--color-bg-surface-alt);
+}
+
+.image-thumb-view {
+  width: 96px;
+  height: 96px;
+}
+
+.image-thumb-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: #ff6b6b;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.image-thumb-remove:hover {
+  background: #e64545;
+}
+
+.image-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: rgba(0, 0, 0, 0.75);
+  cursor: zoom-out;
+}
+
+.image-lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 
 .comment-add-row {
