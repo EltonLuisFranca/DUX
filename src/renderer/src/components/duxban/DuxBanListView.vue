@@ -54,14 +54,17 @@
 
         <span v-if="entry.card.dueDate" class="row-due">{{ formatDueDate(entry.card.dueDate) }}</span>
 
-        <span
-          class="avatar-btn"
-          :class="{ empty: !entry.card.assignedNodeId }"
-          :style="entry.card.assignedNodeId ? { background: avatarColor(entry.card.assignedNodeId) } : {}"
+        <select
+          class="row-status-select row-assign-select"
+          :value="entry.card.assignedNodeId || ''"
           :title="entry.card.assignedNodeId ? agentName(entry.card.assignedNodeId, connectedAgents) || 'Agente desconectado' : 'Sem atribuição'"
+          @change="onAssignCard(entry.card, $event.target.value)"
+          @mousedown.stop
+          @click.stop
         >
-          {{ entry.card.assignedNodeId ? initials(agentName(entry.card.assignedNodeId, connectedAgents)) : '—' }}
-        </span>
+          <option value="">Sem atribuição</option>
+          <option v-for="agent in connectedAgents" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
+        </select>
       </div>
     </div>
   </div>
@@ -73,13 +76,11 @@ import DuxBanColumnIcon from './DuxBanColumnIcon.vue'
 import {
   PRIORITY_META,
   formatDueDate,
-  avatarColor,
-  initials,
   columnMeta,
   cardTags,
   agentName
 } from '../../lib/duxbanCardUi'
-import { moveCard } from '../../lib/duxbanOps'
+import { moveCard, assignCard } from '../../lib/duxbanOps'
 
 const props = defineProps({
   data: { type: Object, required: true },
@@ -105,6 +106,10 @@ const allCards = computed(() => {
 
 function onMoveCard(card, columnId) {
   moveCard(props.data, card.id, columnId)
+}
+
+function onAssignCard(card, nodeId) {
+  assignCard(props.data, card.id, nodeId || null)
 }
 </script>
 
@@ -273,26 +278,8 @@ function onMoveCard(card, columnId) {
   white-space: nowrap;
 }
 
-.avatar-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: 50%;
-  background: var(--color-bg-surface-raised);
-  color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.avatar-btn.empty {
-  border: 1.5px dashed var(--color-border-strong);
-  background: transparent;
-  color: var(--color-text-tertiary);
+.row-assign-select {
+  max-width: 110px;
 }
 
 .list-body::-webkit-scrollbar {

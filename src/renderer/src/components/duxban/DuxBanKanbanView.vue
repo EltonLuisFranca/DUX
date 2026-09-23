@@ -139,39 +139,6 @@
                 </div>
               </div>
 
-              <div v-if="connectedAgents.length" class="card-assign assign-wrap">
-                <span class="assign-label">Assigned for</span>
-                <select
-                  v-if="assigningCardId === card.id"
-                  class="assign-select"
-                  :value="card.assignedNodeId || ''"
-                  autofocus
-                  @change="onAssign(card, $event.target.value)"
-                  @mousedown.stop
-                  @click.stop
-                >
-                  <option value="">Sem atribuição</option>
-                  <option v-for="agent in connectedAgents" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
-                </select>
-                <button
-                  v-else
-                  class="avatar-btn"
-                  :class="{ empty: !card.assignedNodeId }"
-                  :style="card.assignedNodeId ? { background: avatarColor(card.assignedNodeId) } : {}"
-                  :title="card.assignedNodeId ? agentName(card.assignedNodeId, connectedAgents) : 'Sem atribuição — clique pra atribuir'"
-                  @mousedown.stop
-                  @click.stop="toggleAssign(card)"
-                >
-                  {{ card.assignedNodeId ? initials(agentName(card.assignedNodeId, connectedAgents)) : '+' }}
-                </button>
-                <span
-                  v-if="card.assignedNodeId"
-                  class="task-status"
-                  :class="card.taskState"
-                  :title="STATUS_LABELS[card.taskState]"
-                />
-              </div>
-
               <div class="card-bottom-row">
                 <span
                   v-if="card.priority"
@@ -217,21 +184,16 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import DuxBanColumnIcon from './DuxBanColumnIcon.vue'
 import { useConfirmDelete } from '../../lib/useConfirmDelete'
 import {
-  STATUS_LABELS,
   PRIORITY_META,
   formatDueDate,
   milestonePercent,
-  avatarColor,
-  initials,
   columnMeta,
   cardTags,
-  cardImageCount,
-  agentName
+  cardImageCount
 } from '../../lib/duxbanCardUi'
 import {
   removeCard,
   moveCard,
-  assignCard,
   addColumn as addColumnOp,
   removeColumn as removeColumnOp,
   moveColumn as moveColumnOp,
@@ -250,12 +212,10 @@ const emit = defineEmits(['open-detail', 'open-create'])
 
 const columnMetas = computed(() => props.columns.map((col, i) => columnMeta(col, i)))
 
-// menu "⋯" do cartão (excluir), menu "⋯" da coluna (mover / excluir) e o
-// mini-select de reatribuição no rosto do cartão — os três só um aberto por
-// vez, fechado por clique fora (onDocClick) ou Escape.
+// menu "⋯" do cartão (excluir) e menu "⋯" da coluna (mover / excluir) — só um
+// aberto por vez, fechado por clique fora (onDocClick) ou Escape.
 const openCardMenuId = ref(null)
 const openColMenuId = ref(null)
-const assigningCardId = ref(null)
 
 function toggleCardMenu(cardId) {
   openCardMenuId.value = openCardMenuId.value === cardId ? null : cardId
@@ -263,21 +223,16 @@ function toggleCardMenu(cardId) {
 function toggleColMenu(colId) {
   openColMenuId.value = openColMenuId.value === colId ? null : colId
 }
-function toggleAssign(card) {
-  assigningCardId.value = assigningCardId.value === card.id ? null : card.id
-}
 
 function onDocClick(event) {
   if (openCardMenuId.value && !event.target.closest('.card-menu-wrap')) openCardMenuId.value = null
   if (openColMenuId.value && !event.target.closest('.col-menu-wrap')) openColMenuId.value = null
-  if (assigningCardId.value && !event.target.closest('.assign-wrap')) assigningCardId.value = null
 }
 
 function onKeydown(event) {
   if (event.key !== 'Escape') return
   openCardMenuId.value = null
   openColMenuId.value = null
-  assigningCardId.value = null
 }
 
 onMounted(() => {
@@ -293,11 +248,6 @@ const { pendingDeleteId, requestDelete } = useConfirmDelete()
 
 function onRemoveCard(cardId) {
   removeCard(props.data, cardId)
-}
-
-function onAssign(card, nodeId) {
-  assignCard(props.data, card.id, nodeId || null)
-  assigningCardId.value = null
 }
 
 const titleRefs = {}
@@ -845,50 +795,6 @@ function onColumnDropForReorder() {
   font-size: 10px;
 }
 
-.card-assign {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.assign-label {
-  flex: 1;
-  min-width: 0;
-  color: var(--color-text-tertiary);
-  font-size: 10px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.avatar-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: 50%;
-  background: var(--color-bg-surface-raised);
-  color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.avatar-btn.empty {
-  border: 1.5px dashed var(--color-border-strong);
-  background: transparent;
-  color: var(--color-text-tertiary);
-}
-
-.avatar-btn:hover {
-  filter: brightness(1.1);
-}
-
 .card-bottom-row {
   display: flex;
   align-items: center;
@@ -909,55 +815,6 @@ function onColumnDropForReorder() {
   color: var(--priority-color);
   font-size: 9.5px;
   font-weight: 700;
-}
-
-.assign-select {
-  flex-shrink: 0;
-  height: 20px;
-  padding: 0 3px;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  background: var(--color-bg-surface-alt);
-  color: var(--color-text-secondary);
-  font-size: 10px;
-}
-
-.assign-select:focus {
-  outline: none;
-  border-color: var(--color-text-secondary);
-}
-
-.task-status {
-  flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-text-tertiary);
-}
-
-.task-status.queued {
-  background: transparent;
-  border: 1.5px solid #eab308;
-}
-
-.task-status.active {
-  background: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
-.task-status.done {
-  background: #22c55e;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
 }
 
 .add-column-btn {

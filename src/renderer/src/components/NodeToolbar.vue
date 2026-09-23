@@ -54,7 +54,7 @@
       <span class="tool-divider" />
       <AppTooltip label="Excluir">
         <button class="tool-btn tool-danger" @click="requestDeleteNode(id)">
-          <svg viewBox="0 0 16 16" width="15" height="15">
+          <svg viewBox="0 0 16 16" width="18" height="18">
             <path
               d="M3 4.5h10M6.5 4.5V3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1.5M5 4.5l.5 8a1 1 0 0 0 1 .9h3a1 1 0 0 0 1-.9l.5-8"
               stroke="currentColor"
@@ -134,8 +134,14 @@ function setColor(color) {
   color: var(--color-text-primary);
 }
 
+.tool-danger {
+  width: 26px;
+  height: 26px;
+  color: #ff5252;
+}
+
 .tool-danger:hover {
-  background: rgba(255, 107, 107, 0.15);
+  background: rgba(255, 82, 82, 0.18);
   color: #ff6b6b;
 }
 
