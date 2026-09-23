@@ -45,12 +45,10 @@
             @click="handleSelect(type, entry)"
           >
             <span class="modal-item-icon-wrap">
-              <svg class="modal-item-icon" viewBox="0 0 20 20" width="16" height="16" v-html="entry.icon" />
+              <svg class="modal-item-icon" viewBox="0 0 20 20" width="20" height="20" v-html="entry.icon" />
             </span>
-            <span class="modal-item-text">
-              <span class="modal-item-label">{{ entry.label }}</span>
-              <span class="modal-item-desc">{{ entry.description }}</span>
-            </span>
+            <span class="modal-item-label">{{ entry.label }}</span>
+            <span class="modal-item-desc">{{ entry.description }}</span>
           </button>
 
           <div v-if="filteredEntries.length === 0" class="modal-empty">Nenhum tipo de node encontrado.</div>
@@ -159,8 +157,9 @@ function handleFormSubmit(data) {
 }
 
 .modal {
-  width: 320px;
-  max-height: 70%;
+  width: 640px;
+  max-width: 92vw;
+  max-height: 80%;
   display: flex;
   flex-direction: column;
   background: var(--color-bg-surface-alt);
@@ -273,59 +272,64 @@ function handleFormSubmit(data) {
 
 .modal-list {
   overflow-y: auto;
-  padding: 6px;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  align-content: start;
 }
 
 .modal-item {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 10px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  text-align: left;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  aspect-ratio: 1 / 1;
+  padding: 16px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-bg-surface);
+  text-align: center;
   cursor: pointer;
 }
 
 .modal-item:hover {
   background: var(--color-hover);
+  border-color: var(--color-border-strong);
 }
 
 .modal-item-icon-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
-  border-radius: 8px;
-  background: var(--color-bg-surface);
+  border-radius: 9px;
+  background: var(--color-bg-surface-alt);
   border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
 }
 
-.modal-item-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  padding-top: 2px;
-}
-
 .modal-item-label {
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--color-text-primary);
 }
 
 .modal-item-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
   font-size: 11px;
+  line-height: 1.4;
   color: var(--color-text-tertiary);
 }
 
 .modal-empty {
+  grid-column: 1 / -1;
   padding: 16px 10px;
   text-align: center;
   font-size: 11.5px;

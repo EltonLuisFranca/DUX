@@ -553,3 +553,153 @@ export function runLoadTest(payload, { onProgress, onResult, onConnectionError }
     }
   }
 }
+
+// Mesmo padrão de streaming dos outros três (runCredentialTest/runPortScan/
+// runLoadTest) — a varredura de subdomínios roda no bridge
+// (bridge/subdomainScan.js) por poder levar segundos/minutos dependendo do
+// tamanho da wordlist.
+export function runSubdomainScan(payload, { onProgress, onResult, onConnectionError }) {
+  const ws = new WebSocket(BRIDGE_URL)
+  const requestId = crypto.randomUUID()
+  let done = false
+
+  const finish = (result) => {
+    if (done) return
+    done = true
+    onResult(result)
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close()
+  }
+
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'subdomainScanStart', requestId, ...payload }))
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data)
+    if (msg.requestId !== requestId) return
+    if (msg.type === 'subdomainScanProgress') onProgress(msg)
+    else if (msg.type === 'subdomainScanResult') finish(msg)
+  }
+
+  ws.onerror = () => {
+    onConnectionError?.()
+    finish({ requestId, cancelled: false, error: 'connection', totalSubdomains: 0, found: [] })
+  }
+
+  return {
+    requestId,
+    stop() {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'subdomainScanStop', requestId }))
+    }
+  }
+}
+
+// Mesmo padrão de streaming dos outros quatro (runCredentialTest/runPortScan/
+// runLoadTest/runSubdomainScan) — o fuzzer de diretórios/endpoints roda no
+// bridge (bridge/dirFuzz.js) por poder levar segundos/minutos dependendo do
+// tamanho da wordlist.
+export function runDirFuzz(payload, { onProgress, onResult, onConnectionError }) {
+  const ws = new WebSocket(BRIDGE_URL)
+  const requestId = crypto.randomUUID()
+  let done = false
+
+  const finish = (result) => {
+    if (done) return
+    done = true
+    onResult(result)
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close()
+  }
+
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'dirFuzzStart', requestId, ...payload }))
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data)
+    if (msg.requestId !== requestId) return
+    if (msg.type === 'dirFuzzProgress') onProgress(msg)
+    else if (msg.type === 'dirFuzzResult') finish(msg)
+  }
+
+  ws.onerror = () => {
+    onConnectionError?.()
+    finish({ requestId, cancelled: false, error: 'connection', totalPaths: 0, found: [] })
+  }
+
+  return {
+    requestId,
+    stop() {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'dirFuzzStop', requestId }))
+    }
+  }
+}
+
+// Diferente dos outros cinco: uma única requisição, não uma varredura por
+// wordlist — mas mantém o mesmo formato de conexão viva + Start/Progress/
+// Result/Stop pra encaixar sem mudanças no wsHandlers.js (bridge/securityHeaders.js).
+export function runSecurityHeadersCheck(payload, { onProgress, onResult, onConnectionError }) {
+  const ws = new WebSocket(BRIDGE_URL)
+  const requestId = crypto.randomUUID()
+  let done = false
+
+  const finish = (result) => {
+    if (done) return
+    done = true
+    onResult(result)
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close()
+  }
+
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'securityHeadersStart', requestId, ...payload }))
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data)
+    if (msg.requestId !== requestId) return
+    if (msg.type === 'securityHeadersProgress') onProgress?.(msg)
+    else if (msg.type === 'securityHeadersResult') finish(msg)
+  }
+
+  ws.onerror = () => {
+    onConnectionError?.()
+    finish({ requestId, cancelled: false, error: 'connection' })
+  }
+
+  return {
+    requestId,
+    stop() {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'securityHeadersStop', requestId }))
+    }
+  }
+}
+
+// Mesmo padrão de runSecurityHeadersCheck: uma única checagem (conexão TLS),
+// não uma varredura — mas mantém conexão viva + Start/Progress/Result/Stop
+// pra encaixar sem mudanças no wsHandlers.js (bridge/tlsCheck.js).
+export function runTlsCheck(payload, { onProgress, onResult, onConnectionError }) {
+  const ws = new WebSocket(BRIDGE_URL)
+  const requestId = crypto.randomUUID()
+  let done = false
+
+  const finish = (result) => {
+    if (done) return
+    done = true
+    onResult(result)
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close()
+  }
+
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'tlsCheckStart', requestId, ...payload }))
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data)
+    if (msg.requestId !== requestId) return
+    if (msg.type === 'tlsCheckProgress') onProgress?.(msg)
+    else if (msg.type === 'tlsCheckResult') finish(msg)
+  }
+
+  ws.onerror = () => {
+    onConnectionError?.()
+    finish({ requestId, cancelled: false, error: 'connection' })
+  }
+
+  return {
+    requestId,
+    stop() {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'tlsCheckStop', requestId }))
+    }
+  }
+}

@@ -94,6 +94,18 @@
     <template #node-load-test="nodeProps">
       <LoadTestNode v-bind="nodeProps" />
     </template>
+    <template #node-subdomain-scan="nodeProps">
+      <SubdomainScanNode v-bind="nodeProps" />
+    </template>
+    <template #node-dir-fuzz="nodeProps">
+      <DirFuzzNode v-bind="nodeProps" />
+    </template>
+    <template #node-security-headers="nodeProps">
+      <SecurityHeadersNode v-bind="nodeProps" />
+    </template>
+    <template #node-tls-check="nodeProps">
+      <TlsCheckNode v-bind="nodeProps" />
+    </template>
     <template #node-pomodoro="nodeProps">
       <PomodoroNode v-bind="nodeProps" />
     </template>
@@ -156,6 +168,10 @@ import DockerNode from './DockerNode.vue'
 import CredentialTestNode from './CredentialTestNode.vue'
 import PortScanNode from './PortScanNode.vue'
 import LoadTestNode from './LoadTestNode.vue'
+import SubdomainScanNode from './SubdomainScanNode.vue'
+import DirFuzzNode from './DirFuzzNode.vue'
+import SecurityHeadersNode from './SecurityHeadersNode.vue'
+import TlsCheckNode from './TlsCheckNode.vue'
 import PomodoroNode from './PomodoroNode.vue'
 import DuxBanNode from './DuxBanNode.vue'
 import { theme, canvasVariant, edgeStyle, snapEnabled, SNAP_GRID_SIZE } from '../store/themeStore'

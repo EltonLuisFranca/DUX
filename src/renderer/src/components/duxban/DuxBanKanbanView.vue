@@ -100,23 +100,6 @@
                   <span>Due: {{ formatDueDate(card.dueDate) }}</span>
                 </div>
                 <span v-else class="due-date-spacer" />
-                <div class="card-menu-wrap">
-                  <button class="card-icon-btn dots-btn" title="Mais opções" @mousedown.stop @click.stop="toggleCardMenu(card.id)">
-                    <svg viewBox="0 0 16 16" width="15" height="15">
-                      <circle cx="3.2" cy="8" r="1.3" fill="currentColor" />
-                      <circle cx="8" cy="8" r="1.3" fill="currentColor" />
-                      <circle cx="12.8" cy="8" r="1.3" fill="currentColor" />
-                    </svg>
-                  </button>
-                  <div v-if="openCardMenuId === card.id" class="card-menu">
-                    <button
-                      class="card-menu-item danger"
-                      @click.stop="requestDelete('card-' + card.id, () => onRemoveCard(card.id)); openCardMenuId = null"
-                    >
-                      {{ pendingDeleteId === 'card-' + card.id ? 'Clique de novo pra confirmar' : 'Excluir cartão' }}
-                    </button>
-                  </div>
-                </div>
               </div>
 
               <div v-if="cardTags(card, tags).length" class="tag-badges">
@@ -212,26 +195,20 @@ const emit = defineEmits(['open-detail', 'open-create'])
 
 const columnMetas = computed(() => props.columns.map((col, i) => columnMeta(col, i)))
 
-// menu "⋯" do cartão (excluir) e menu "⋯" da coluna (mover / excluir) — só um
-// aberto por vez, fechado por clique fora (onDocClick) ou Escape.
-const openCardMenuId = ref(null)
+// menu "⋯" da coluna (mover / excluir) — fechado por clique fora (onDocClick)
+// ou Escape.
 const openColMenuId = ref(null)
 
-function toggleCardMenu(cardId) {
-  openCardMenuId.value = openCardMenuId.value === cardId ? null : cardId
-}
 function toggleColMenu(colId) {
   openColMenuId.value = openColMenuId.value === colId ? null : colId
 }
 
 function onDocClick(event) {
-  if (openCardMenuId.value && !event.target.closest('.card-menu-wrap')) openCardMenuId.value = null
   if (openColMenuId.value && !event.target.closest('.col-menu-wrap')) openColMenuId.value = null
 }
 
 function onKeydown(event) {
   if (event.key !== 'Escape') return
-  openCardMenuId.value = null
   openColMenuId.value = null
 }
 
@@ -672,84 +649,6 @@ function onColumnDropForReorder() {
   flex: 1;
 }
 
-.card-menu-wrap {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.dots-btn {
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.card:hover .dots-btn,
-.card-menu-wrap:has(.card-menu) .dots-btn {
-  opacity: 1;
-}
-
-.card-menu {
-  position: absolute;
-  top: 22px;
-  right: 0;
-  z-index: 20;
-  display: flex;
-  flex-direction: column;
-  min-width: 140px;
-  padding: 4px;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 8px;
-  box-shadow: 0 8px 20px var(--color-shadow);
-  cursor: default;
-}
-
-.card-menu-item {
-  padding: 6px 8px;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--color-text-primary);
-  font-size: 11px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.card-menu-item:hover {
-  background: var(--color-hover);
-}
-
-.card-menu-item.danger {
-  color: #ff6b6b;
-}
-
-.card-menu-item.danger:hover {
-  background: rgba(255, 107, 107, 0.15);
-}
-
-.card-icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-}
-
-.card-icon-btn:hover {
-  background: var(--color-hover);
-  color: var(--color-text-primary);
-}
-
-.card-icon-btn.danger:hover {
-  background: rgba(255, 107, 107, 0.15);
-  color: #ff6b6b;
-}
-
-.card-icon-btn.danger.confirming,
 .column-btn.danger.confirming {
   background: #ff6b6b;
   color: #fff;

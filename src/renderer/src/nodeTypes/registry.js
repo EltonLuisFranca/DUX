@@ -52,6 +52,24 @@ const PORT_SCAN_ICON =
 const LOAD_TEST_ICON =
   '<path d="M3 14a7 7 0 0 1 14 0" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M10 14L14 7.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="10" cy="14" r="1.3" fill="currentColor"/><path d="M4.5 14h-1M16.5 14h-1M6 8.5l-.7-.7M14 8.5l.7-.7" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>'
 
+// árvore de domínio: nó raiz ramificando em subdomínios — mesmo estilo stroke=currentColor dos outros ícones
+const SUBDOMAIN_SCAN_ICON =
+  '<circle cx="4" cy="10" r="2" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="16" cy="4" r="2" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="16" cy="10" r="2" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="16" cy="16" r="2" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M6 10h2M10 10V4h4M10 10h4M10 10v6h4" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/>'
+
+// pasta com lupa: fuzzing de diretórios/endpoints escondidos — mesmo estilo stroke=currentColor dos outros ícones
+const DIR_FUZZ_ICON =
+  '<path d="M2.5 6.5a1.3 1.3 0 0 1 1.3-1.3h3.4l1.3 1.6h6.7a1.3 1.3 0 0 1 1.3 1.3v6.1a1.3 1.3 0 0 1-1.3 1.3H3.8a1.3 1.3 0 0 1-1.3-1.3V6.5z" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/><circle cx="12.3" cy="12.3" r="2.3" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M14 14l2 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
+
+// escudo com check: analisa os headers de resposta e reporta o nível de
+// proteção — mesmo estilo stroke=currentColor dos outros ícones
+const SECURITY_HEADERS_ICON =
+  '<path d="M10 2.5l6 2.2v5c0 4-2.6 6.8-6 7.8-3.4-1-6-3.8-6-7.8v-5l6-2.2z" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/><path d="M7 10l2 2 4-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
+
+// cadeado: verificação de certificado/conexão TLS — mesmo estilo
+// stroke=currentColor dos outros ícones
+const TLS_CHECK_ICON =
+  '<rect x="4" y="9" width="12" height="8" rx="1.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M6.5 9V6.5a3.5 3.5 0 0 1 7 0V9" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="10" cy="13" r="1.2" fill="currentColor"/>'
+
 // registro de tipos de node: cada tipo novo entra aqui com seu próprio
 // formulário de configurações (sidebar) e, opcionalmente, um formulário de
 // criação (quando precisa de input do usuário antes de existir, ex: um caminho)
@@ -209,6 +227,34 @@ export const nodeTypeRegistry = {
     category: 'tools',
     createData: () => ({ name: 'Teste de Carga' }),
     icon: LOAD_TEST_ICON
+  },
+  'subdomain-scan': {
+    label: 'Scanner de Subdomínios',
+    description: 'Recon inicial: testa uma wordlist de subdomínios comuns contra um domínio via DNS (com fallback HTTP) e reporta os que existem, com IP e status HTTP.',
+    category: 'tools',
+    createData: () => ({ name: 'Scanner de Subdomínios' }),
+    icon: SUBDOMAIN_SCAN_ICON
+  },
+  'dir-fuzz': {
+    label: 'Fuzzer de Diretórios/Endpoints',
+    description: 'Testa uma wordlist de paths comuns (admin, api, .env, .git, backup...) contra uma URL e reporta os que não retornam 404, com status code e tamanho da resposta.',
+    category: 'tools',
+    createData: () => ({ name: 'Fuzzer de Diretórios' }),
+    icon: DIR_FUZZ_ICON
+  },
+  'security-headers': {
+    label: 'Detector de Headers de Segurança',
+    description: 'Analisa os headers de resposta HTTP de uma URL (CSP, HSTS, X-Frame-Options, cookies...) e reporta o que está presente, ausente ou mal configurado, com um score geral de proteção.',
+    category: 'tools',
+    createData: () => ({ name: 'Headers de Segurança' }),
+    icon: SECURITY_HEADERS_ICON
+  },
+  'tls-check': {
+    label: 'Verificador de SSL/TLS',
+    description: 'Conecta via TLS num host:porta e reporta validade do certificado, cadeia, protocolo negociado e cifra — com alertas de expiração, certificado inválido ou protocolo obsoleto.',
+    category: 'tools',
+    createData: () => ({ name: 'Verificador SSL/TLS' }),
+    icon: TLS_CHECK_ICON
   },
   image: {
     label: 'Imagem',

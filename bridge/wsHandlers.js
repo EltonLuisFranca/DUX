@@ -14,6 +14,10 @@ const { listContainers, containerAction, containerLogs } = require('./dockerStat
 const { createRunner: createCredentialTestRunner } = require('./credentialTest')
 const { createRunner: createPortScanRunner } = require('./portScan')
 const { createRunner: createLoadTestRunner } = require('./loadTest')
+const { createRunner: createSubdomainScanRunner } = require('./subdomainScan')
+const { createRunner: createDirFuzzRunner } = require('./dirFuzz')
+const { createRunner: createSecurityHeadersRunner } = require('./securityHeaders')
+const { createRunner: createTlsCheckRunner } = require('./tlsCheck')
 const { startWatchingNote, stopWatchingNote, stopAllNoteWatches, readNoteFile } = require('./noteWatch')
 const { detectTerminalAvailability } = require('./terminalAvailability')
 
@@ -74,6 +78,14 @@ function createConnectionHandler({ agentPort }) {
     // aqui importa ainda mais: sem isso, fechar o node no meio deixaria o
     // agendador de RPS martelando o alvo sozinho em background pra sempre
     const activeLoadTests = new Map()
+    // mesmo cuidado, agora pra varredura de subdomínios (subdomainScanStop / ws.close())
+    const activeSubdomainScans = new Map()
+    // mesmo cuidado, agora pro fuzzer de diretórios/endpoints (dirFuzzStop / ws.close())
+    const activeDirFuzzes = new Map()
+    // mesmo cuidado, agora pro detector de headers de segurança (securityHeadersStop / ws.close())
+    const activeSecurityHeaderChecks = new Map()
+    // mesmo cuidado, agora pro verificador de SSL/TLS (tlsCheckStop / ws.close())
+    const activeTlsChecks = new Map()
 
     ws.on('message', (raw) => {
       let msg
@@ -359,6 +371,98 @@ function createConnectionHandler({ agentPort }) {
         activeLoadTests.set(requestId, runner)
       } else if (msg.type === 'loadTestStop') {
         activeLoadTests.get(msg.requestId)?.stop()
+      } else if (msg.type === 'subdomainScanStart') {
+        const requestId = msg.requestId
+        if (!requestId || activeSubdomainScans.has(requestId)) return
+        if (!String(msg.domain || '').trim()) {
+          ws.send(JSON.stringify({ type: 'subdomainScanResult', requestId, error: 'Domínio alvo não informado' }))
+          return
+        }
+        const runner = createSubdomainScanRunner(msg, {
+          onProgress: (progress) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'subdomainScanProgress', requestId, ...progress }))
+            }
+          },
+          onDone: (summary) => {
+            activeSubdomainScans.delete(requestId)
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'subdomainScanResult', requestId, ...summary }))
+            }
+          }
+        })
+        activeSubdomainScans.set(requestId, runner)
+      } else if (msg.type === 'subdomainScanStop') {
+        activeSubdomainScans.get(msg.requestId)?.stop()
+      } else if (msg.type === 'dirFuzzStart') {
+        const requestId = msg.requestId
+        if (!requestId || activeDirFuzzes.has(requestId)) return
+        if (!/^https?:\/\//i.test(msg.url || '')) {
+          ws.send(JSON.stringify({ type: 'dirFuzzResult', requestId, error: 'URL inválida (precisa começar com http:// ou https://)' }))
+          return
+        }
+        const runner = createDirFuzzRunner(msg, {
+          onProgress: (progress) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'dirFuzzProgress', requestId, ...progress }))
+            }
+          },
+          onDone: (summary) => {
+            activeDirFuzzes.delete(requestId)
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'dirFuzzResult', requestId, ...summary }))
+            }
+          }
+        })
+        activeDirFuzzes.set(requestId, runner)
+      } else if (msg.type === 'dirFuzzStop') {
+        activeDirFuzzes.get(msg.requestId)?.stop()
+      } else if (msg.type === 'securityHeadersStart') {
+        const requestId = msg.requestId
+        if (!requestId || activeSecurityHeaderChecks.has(requestId)) return
+        if (!/^https?:\/\//i.test(msg.url || '')) {
+          ws.send(JSON.stringify({ type: 'securityHeadersResult', requestId, error: 'URL inválida (precisa começar com http:// ou https://)' }))
+          return
+        }
+        const runner = createSecurityHeadersRunner(msg, {
+          onProgress: (progress) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'securityHeadersProgress', requestId, ...progress }))
+            }
+          },
+          onDone: (summary) => {
+            activeSecurityHeaderChecks.delete(requestId)
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'securityHeadersResult', requestId, ...summary }))
+            }
+          }
+        })
+        activeSecurityHeaderChecks.set(requestId, runner)
+      } else if (msg.type === 'securityHeadersStop') {
+        activeSecurityHeaderChecks.get(msg.requestId)?.stop()
+      } else if (msg.type === 'tlsCheckStart') {
+        const requestId = msg.requestId
+        if (!requestId || activeTlsChecks.has(requestId)) return
+        if (!String(msg.host || '').trim()) {
+          ws.send(JSON.stringify({ type: 'tlsCheckResult', requestId, error: 'Host alvo não informado' }))
+          return
+        }
+        const runner = createTlsCheckRunner(msg, {
+          onProgress: (progress) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'tlsCheckProgress', requestId, ...progress }))
+            }
+          },
+          onDone: (summary) => {
+            activeTlsChecks.delete(requestId)
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'tlsCheckResult', requestId, ...summary }))
+            }
+          }
+        })
+        activeTlsChecks.set(requestId, runner)
+      } else if (msg.type === 'tlsCheckStop') {
+        activeTlsChecks.get(msg.requestId)?.stop()
       } else if (msg.type === 'link') {
         agentLink.linkSessions(msg.sessionA, msg.sessionB)
       } else if (msg.type === 'unlink') {
@@ -502,6 +606,14 @@ function createConnectionHandler({ agentPort }) {
       activePortScans.clear()
       for (const runner of activeLoadTests.values()) runner.stop()
       activeLoadTests.clear()
+      for (const runner of activeSubdomainScans.values()) runner.stop()
+      activeSubdomainScans.clear()
+      for (const runner of activeDirFuzzes.values()) runner.stop()
+      activeDirFuzzes.clear()
+      for (const runner of activeSecurityHeaderChecks.values()) runner.stop()
+      activeSecurityHeaderChecks.clear()
+      for (const runner of activeTlsChecks.values()) runner.stop()
+      activeTlsChecks.clear()
       ptyProcess?.kill()
       ptyProcess = null
       if (sessionId) {
