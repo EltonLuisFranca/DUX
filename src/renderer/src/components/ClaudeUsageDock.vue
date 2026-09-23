@@ -1,5 +1,7 @@
 <template>
-  <div v-if="visible" class="usage-dock">
+  <div v-if="visible" ref="dockRef" class="usage-dock">
+    <div class="dock-surface" :style="dockMaskStyle" />
+
     <div
       v-for="item in items"
       :key="item.key"
@@ -34,11 +36,87 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { session, usageError, week } from '../store/accountUsageStore'
 
 const openKey = ref(null)
 let closeTimer = null
+
+const dockRef = ref(null)
+const dockSize = ref({ width: 0, height: 0 })
+const dockResizeObserver = new ResizeObserver(([entry]) => {
+  if (!entry) return
+  const box = entry.borderBoxSize?.[0]
+  if (box) {
+    dockSize.value = { width: box.inlineSize, height: box.blockSize }
+  } else {
+    const rect = entry.target.getBoundingClientRect()
+    dockSize.value = { width: rect.width, height: rect.height }
+  }
+})
+
+// O root fica atrás de v-if (some quando não há sessão/semana), então
+// dockRef aparece/some ao longo da vida do componente — não dá pra montar
+// o observer uma vez só no onMounted, tem que seguir o ref.
+watch(
+  dockRef,
+  (el, prevEl) => {
+    if (prevEl) dockResizeObserver.unobserve(prevEl)
+    if (el) dockResizeObserver.observe(el)
+  },
+  { immediate: true }
+)
+
+// Fillets côncavos nas pontas de cima/baixo (raio FILLET_SPAN) fundindo com
+// a borda direita da tela, cantos convexos normais (raio CORNER_RADIUS) do
+// lado esquerdo — um único <path> usado como mask-image de .dock-surface,
+// recalculado via ResizeObserver porque a altura do conteúdo varia com o
+// número de itens (sessão/semana). Trocamos a técnica anterior de
+// ::before/::after com radial-gradient (usada no ZoomControls antes de
+// migrar pra SVG real) porque ela também sofre dos mesmos artefatos de
+// composição do Electron.
+//
+// FILLET_SPAN é a ÚNICA fonte de verdade pro tamanho do fillet: tanto o
+// raio do arco côncavo no path quanto o quanto .dock-surface transborda
+// (top/bottom) vêm dela — mudar só a constante já recalcula os dois juntos,
+// sem precisar tocar no path à mão. Se ficassem dessincronizados, o corpo
+// do path (largura cheia, de y=FILLET_SPAN até y=H-FILLET_SPAN) deixaria de
+// coincidir com a caixa de conteúdo real e voltaria a cortar rótulo/anel.
+const FILLET_SPAN = 34
+const CORNER_RADIUS = 18
+
+const dockPath = computed(() => {
+  const { width: w, height: contentHeight } = dockSize.value
+  if (!w || !contentHeight) return null
+  const R = FILLET_SPAN
+  const r = CORNER_RADIUS
+  const h = contentHeight + R * 2
+  return (
+    `M ${w},0 A ${R},${R} 0 0 1 ${w - R},${R} L ${r},${R} A ${r},${r} 0 0 0 0,${R + r} ` +
+    `L 0,${h - R - r} A ${r},${r} 0 0 0 ${r},${h - R} L ${w - R},${h - R} ` +
+    `A ${R},${R} 0 0 1 ${w},${h} Z`
+  )
+})
+
+const dockMaskStyle = computed(() => {
+  if (!dockPath.value) return {}
+  const { width: w, height: contentHeight } = dockSize.value
+  const h = contentHeight + FILLET_SPAN * 2
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><path d="${dockPath.value}" fill="#000"/></svg>`
+  const url = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
+  return {
+    top: `-${FILLET_SPAN}px`,
+    bottom: `-${FILLET_SPAN}px`,
+    maskImage: url,
+    WebkitMaskImage: url,
+    maskSize: '100% 100%',
+    WebkitMaskSize: '100% 100%',
+    maskRepeat: 'no-repeat',
+    WebkitMaskRepeat: 'no-repeat',
+    maskOrigin: 'border-box',
+    WebkitMaskOrigin: 'border-box'
+  }
+})
 
 // 'no-auth' é a única condição em que escondemos o dock de vez — o resto
 // (rede caiu, 401 passageiro) mantém o último valor bom na tela via
@@ -91,7 +169,10 @@ function scheduleClose() {
   }, 200)
 }
 
-onBeforeUnmount(() => clearTimeout(closeTimer))
+onBeforeUnmount(() => {
+  dockResizeObserver.disconnect()
+  clearTimeout(closeTimer)
+})
 </script>
 
 <style scoped>
@@ -103,45 +184,18 @@ onBeforeUnmount(() => clearTimeout(closeTimer))
   gap: 20px;
   width: 64px;
   padding: 24px 8px;
-  background: #000;
-  border: 1px solid var(--color-border);
-  border-top-left-radius: 32px;
-  border-bottom-left-radius: 32px;
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
-  filter: drop-shadow(-3px 2px 14px var(--color-shadow));
 }
 
-/* Fillet convexo: preenche o vão entre o topo/base do pill e a borda da
-   tela, alargando até virar a largura cheia onde encosta no pill — é
-   material sendo ADICIONADO ali, não um recorte no pill. Cada pseudo tem
-   DOIS gradientes empilhados: o de cima pinta o anel na cor da borda (que
-   é translúcida — rgba branco 8%) sobre o de baixo, que é o preenchimento
-   opaco começando exatamente onde o anel começa. Sem essa base opaca por
-   baixo, a borda translúcida mistura com o canvas atrás (em vez de com o
-   preto do pill) e a linha fica "desencontrada" da borda reta do pill. */
-.usage-dock::before,
-.usage-dock::after {
-  content: '';
+/* top/bottom vêm de dockMaskStyle (derivados de FILLET_SPAN, no script) —
+   não hardcode aqui de novo, senão volta a poder dessincronizar do H do
+   path. Left/right ficam fixos: só o eixo vertical transborda. */
+.dock-surface {
   position: absolute;
+  left: 0;
   right: 0;
-  width: 44px;
-  height: 44px;
+  background: #000;
   pointer-events: none;
-}
-
-.usage-dock::before {
-  top: -44px;
-  background:
-    radial-gradient(circle 44px at 0 0, transparent 42px, var(--color-border) 43px, var(--color-border) 44px, transparent 45px),
-    radial-gradient(circle 44px at 0 0, transparent 43px, #000 44px);
-}
-
-.usage-dock::after {
-  bottom: -44px;
-  background:
-    radial-gradient(circle 44px at 0 100%, transparent 42px, var(--color-border) 43px, var(--color-border) 44px, transparent 45px),
-    radial-gradient(circle 44px at 0 100%, transparent 43px, #000 44px);
+  filter: drop-shadow(-3px 2px 14px var(--color-shadow));
 }
 
 .usage-ring-item {

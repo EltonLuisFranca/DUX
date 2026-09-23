@@ -52,6 +52,84 @@ export function fetchGitStatus(path) {
   })
 }
 
+export function fetchDockerContainers(host) {
+  return new Promise((resolve) => {
+    let settled = false
+    const ws = new WebSocket(BRIDGE_URL)
+
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      resolve(result)
+      ws.close()
+    }
+
+    const timeout = setTimeout(() => finish({ valid: false, error: 'timeout' }), 8000)
+
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'dockerList', host }))
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data)
+      if (msg.type === 'dockerListResult') finish(msg)
+    }
+
+    ws.onerror = () => finish({ valid: false, error: 'connection' })
+  })
+}
+
+export function runDockerAction(containerId, action, host) {
+  return new Promise((resolve) => {
+    let settled = false
+    const ws = new WebSocket(BRIDGE_URL)
+
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      resolve(result)
+      ws.close()
+    }
+
+    const timeout = setTimeout(() => finish({ ok: false, error: 'timeout' }), 15000)
+
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'dockerAction', containerId, action, host }))
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data)
+      if (msg.type === 'dockerActionResult') finish(msg)
+    }
+
+    ws.onerror = () => finish({ ok: false, error: 'connection' })
+  })
+}
+
+export function fetchDockerLogs(containerId, { tail, host } = {}) {
+  return new Promise((resolve) => {
+    let settled = false
+    const ws = new WebSocket(BRIDGE_URL)
+
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      resolve(result)
+      ws.close()
+    }
+
+    const timeout = setTimeout(() => finish({ ok: false, error: 'timeout' }), 8000)
+
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'dockerLogs', containerId, tail, host }))
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data)
+      if (msg.type === 'dockerLogsResult') finish(msg)
+    }
+
+    ws.onerror = () => finish({ ok: false, error: 'connection' })
+  })
+}
+
 export function checkTerminalAvailability() {
   return new Promise((resolve) => {
     let settled = false

@@ -6,6 +6,7 @@ import OllamaSettings from '../components/nodeSettings/OllamaSettings.vue'
 import MerlinCreateForm from '../components/nodeCreate/MerlinCreateForm.vue'
 import MerlinSettings from '../components/nodeSettings/MerlinSettings.vue'
 import DuxBanSettings from '../components/nodeSettings/DuxBanSettings.vue'
+import DockerSettings from '../components/nodeSettings/DockerSettings.vue'
 import GitCreateForm from '../components/nodeCreate/GitCreateForm.vue'
 import ImageCreateForm from '../components/nodeCreate/ImageCreateForm.vue'
 import HttpCreateForm from '../components/nodeCreate/HttpCreateForm.vue'
@@ -32,6 +33,11 @@ const IMAGE_ICON =
 
 const HTTP_ICON =
   '<path d="M3 6.5h14M3 13.5h14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 2.5L6 17.5M14 2.5l-2 15" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'
+
+// pilha de caixas (não a baleia do Docker, que é marca registrada) — mesmo
+// estilo stroke=currentColor dos outros ícones deste registry
+const DOCKER_ICON =
+  '<rect x="2.5" y="11" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.3" fill="none"/><rect x="9" y="11" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.3" fill="none"/><rect x="9" y="4.5" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.3" fill="none"/><rect x="15.5" y="11" width="2.5" height="6" rx="0.8" stroke="currentColor" stroke-width="1.2" fill="none"/>'
 
 // registro de tipos de node: cada tipo novo entra aqui com seu próprio
 // formulário de configurações (sidebar) e, opcionalmente, um formulário de
@@ -161,6 +167,14 @@ export const nodeTypeRegistry = {
     category: 'tools',
     createForm: HttpCreateForm,
     icon: HTTP_ICON
+  },
+  docker: {
+    label: 'Docker',
+    description: 'Dashboard de containers Docker: listar, iniciar/parar/reiniciar e ver logs.',
+    category: 'tools',
+    createData: () => ({ name: 'Docker', host: '' }),
+    settingsComponent: DockerSettings,
+    icon: DOCKER_ICON
   },
   image: {
     label: 'Imagem',

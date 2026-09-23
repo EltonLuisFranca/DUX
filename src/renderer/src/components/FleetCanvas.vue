@@ -82,6 +82,9 @@
     <template #node-http="nodeProps">
       <HttpNode v-bind="nodeProps" />
     </template>
+    <template #node-docker="nodeProps">
+      <DockerNode v-bind="nodeProps" />
+    </template>
     <template #node-pomodoro="nodeProps">
       <PomodoroNode v-bind="nodeProps" />
     </template>
@@ -140,6 +143,7 @@ import MerlinNode from './MerlinNode.vue'
 import GitNode from './GitNode.vue'
 import ImageNode from './ImageNode.vue'
 import HttpNode from './HttpNode.vue'
+import DockerNode from './DockerNode.vue'
 import PomodoroNode from './PomodoroNode.vue'
 import DuxBanNode from './DuxBanNode.vue'
 import { theme, canvasVariant, edgeStyle, snapEnabled, SNAP_GRID_SIZE } from '../store/themeStore'
@@ -440,6 +444,11 @@ onBeforeUnmount(() => {
   right: 0;
   margin: 0;
   transform: translateY(-50%);
+}
+
+:deep(.vue-flow__panel.bottom.bottom-toolbar-stack) {
+  bottom: 0;
+  margin: 0;
 }
 
 .ghost-node {

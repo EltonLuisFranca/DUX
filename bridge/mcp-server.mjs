@@ -101,6 +101,47 @@ function duxbanViaBridge(action, payload) {
   })
 }
 
+// Diferente de askViaBridge/duxbanViaBridge: docker não depende de nenhum
+// estado do canvas (o daemon roda no host, não num node), então não carrega
+// sessionId nenhum — o bridge resolve list/action/logs sozinho chamando
+// dockerStatus.js direto (ver /docker em bridge/server.js).
+function dockerViaBridge(action, payload) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({ action, payload })
+
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port: agentPort,
+        path: '/docker',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+        timeout: 20_000
+      },
+      (res) => {
+        let responseBody = ''
+        res.on('data', (chunk) => (responseBody += chunk))
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(responseBody)
+            if (res.statusCode !== 200) return reject(new Error(parsed.error || `bridge respondeu HTTP ${res.statusCode}`))
+            resolve(parsed.result)
+          } catch {
+            reject(new Error('resposta inválida do bridge'))
+          }
+        })
+      }
+    )
+
+    req.on('timeout', () => {
+      req.destroy()
+      reject(new Error('timeout esperando resposta do docker'))
+    })
+    req.on('error', (err) => reject(new Error(`não foi possível falar com o bridge (${err.message})`)))
+    req.end(body)
+  })
+}
+
 const server = new McpServer({ name: 'dux', version: '1.0.0' })
 
 server.registerTool(
@@ -389,6 +430,72 @@ server.registerTool(
     try {
       const result = await duxbanViaBridge('add_comment', { cardId: card_id, text })
       return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
+server.registerTool(
+  'dux_docker_list',
+  {
+    title: 'List Docker containers',
+    description:
+      'List all Docker containers visible on this host (running and stopped), equivalent to `docker ps -a`. ' +
+      'Returns id, name, image, status and ports for each container.',
+    inputSchema: {
+      host: z
+        .string()
+        .optional()
+        .describe('optional Docker host to target (e.g. "tcp://host:2375" or "ssh://user@host"); omit for the local default')
+    }
+  },
+  async ({ host }) => {
+    try {
+      const result = await dockerViaBridge('list', { host })
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
+server.registerTool(
+  'dux_docker_action',
+  {
+    title: 'Start, stop or restart a Docker container',
+    description: 'Start, stop, or restart a Docker container by id or name, as returned by dux_docker_list.',
+    inputSchema: {
+      container: z.string().describe('container id or name, as returned by dux_docker_list'),
+      action: z.enum(['start', 'stop', 'restart']).describe('action to perform'),
+      host: z.string().optional().describe('optional Docker host to target; omit for the local default')
+    }
+  },
+  async ({ container, action, host }) => {
+    try {
+      const result = await dockerViaBridge('action', { container, action, host })
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
+server.registerTool(
+  'dux_docker_logs',
+  {
+    title: 'Get Docker container logs',
+    description: 'Fetch recent logs from a Docker container by id or name, as returned by dux_docker_list.',
+    inputSchema: {
+      container: z.string().describe('container id or name'),
+      tail: z.number().optional().describe('number of lines from the end of the logs (default 200)'),
+      host: z.string().optional().describe('optional Docker host to target; omit for the local default')
+    }
+  },
+  async ({ container, tail, host }) => {
+    try {
+      const result = await dockerViaBridge('logs', { container, tail, host })
+      return { content: [{ type: 'text', text: result.ok ? result.logs : `Error: ${result.error}` }], isError: !result.ok }
     } catch (err) {
       return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
     }

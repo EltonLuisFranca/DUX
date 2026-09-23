@@ -10,6 +10,7 @@ const claudeUsage = require('./claudeUsage')
 const claudeAccountUsage = require('./claudeAccountUsage')
 const { resolveCwd, isDirectory, isFile, listSubdirectories, listDirEntries } = require('./fsHelpers')
 const { getGitInfo } = require('./gitStatus')
+const { listContainers, containerAction, containerLogs } = require('./dockerStatus')
 const { startWatchingNote, stopWatchingNote, stopAllNoteWatches, readNoteFile } = require('./noteWatch')
 const { detectTerminalAvailability } = require('./terminalAvailability')
 
@@ -260,6 +261,20 @@ function createConnectionHandler({ agentPort }) {
         const resolved = resolveCwd(msg.path)
         getGitInfo(resolved).then((info) => {
           ws.send(JSON.stringify({ type: 'gitStatusResult', requestId: msg.requestId, ...info }))
+        })
+      } else if (msg.type === 'dockerList') {
+        listContainers(msg.host).then((info) => {
+          ws.send(JSON.stringify({ type: 'dockerListResult', requestId: msg.requestId, ...info }))
+        })
+      } else if (msg.type === 'dockerAction') {
+        containerAction(msg.containerId, msg.action, msg.host).then((info) => {
+          ws.send(
+            JSON.stringify({ type: 'dockerActionResult', requestId: msg.requestId, containerId: msg.containerId, ...info })
+          )
+        })
+      } else if (msg.type === 'dockerLogs') {
+        containerLogs(msg.containerId, { tail: msg.tail, host: msg.host }).then((info) => {
+          ws.send(JSON.stringify({ type: 'dockerLogsResult', requestId: msg.requestId, ...info }))
         })
       } else if (msg.type === 'link') {
         agentLink.linkSessions(msg.sessionA, msg.sessionB)
