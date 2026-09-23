@@ -278,6 +278,19 @@ export function findNextQueuedCard(columns, nodeId) {
   return null
 }
 
+// Escreve a notícia de tarefa no terminal do agente (bridge/duxbanLink.js) —
+// extraído de tryDispatchNext pra ser reutilizável por assignCard no caso de
+// reatribuição pro mesmo dono ativo (ver comentário lá).
+function pushCardToAgent(data, nodeId, columns, card) {
+  const col = columns.find((c) => c.cards.includes(card))
+  sendDuxbanTaskToAgent(nodeId, {
+    boardName: data.name || 'DuxBan',
+    columnTitle: col?.title || '',
+    cardId: card.id,
+    cardText: card.text
+  })
+}
+
 // Se o agente-alvo não tem tarefa ativa agora, pega a próxima da fila (se
 // houver), marca como "active", registra em activeDispatch e escreve no
 // terminal dele via bridge (writeAsMessage, ver bridge/duxbanLink.js).
@@ -292,14 +305,7 @@ export function tryDispatchNext(data, nodeId) {
   card.taskState = 'active'
   data.columns = columns
   data.activeDispatch = { ...(data.activeDispatch || {}), [nodeId]: card.id }
-
-  const col = columns.find((c) => c.cards.includes(card))
-  sendDuxbanTaskToAgent(nodeId, {
-    boardName: data.name || 'DuxBan',
-    columnTitle: col?.title || '',
-    cardId: card.id,
-    cardText: card.text
-  })
+  pushCardToAgent(data, nodeId, columns, card)
   return true
 }
 
@@ -373,6 +379,22 @@ export function assignCard(data, cardId, nodeId) {
   if (!found) throw new Error(`cartão não encontrado: ${cardId}`)
   const previousNodeId = found.card.assignedNodeId
   found.card.assignedNodeId = nodeId || null
+
+  // Reatribuir ao MESMO agente que já é o dono ativo deste cartão (ex: o
+  // Gerenciador reatribui só pra chamar atenção pra um comentário novo) não
+  // é uma troca de dono de verdade. Sem este caso especial, o taskState
+  // seria forçado de volta pra 'queued' logo abaixo e o tryDispatchNext no
+  // fim da função se recusaria a despachar — data.activeDispatch[nodeId]
+  // continua apontando pra ESTE MESMO cartão (só finishTask libera essa
+  // vaga, moveCard não mexe nisso), então o nó aparece "ocupado" consigo
+  // mesmo e o cartão fica preso em 'queued' pra sempre, sem nunca reenviar a
+  // notificação pro terminal do agente.
+  if (nodeId && nodeId === previousNodeId && data.activeDispatch?.[nodeId] === cardId) {
+    data.columns = columns
+    pushCardToAgent(data, nodeId, columns, found.card)
+    return
+  }
+
   found.card.taskState = nodeId ? 'queued' : 'unassigned'
   data.columns = columns
 

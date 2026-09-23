@@ -387,15 +387,38 @@ export function watchNote(path, onChange) {
 // a vida inteira do app: quem chama guarda o unsubscribe só pra fechar junto
 // com o processo, não a cada troca de tela.
 export function watchAccountUsage(onUpdate) {
-  const ws = new WebSocket(BRIDGE_URL)
-  ws.onopen = () => ws.send(JSON.stringify({ type: 'watchAccountUsage' }))
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data)
-    if (msg.type === 'accountUsageUpdate') onUpdate(msg)
+  let ws = null
+  let retryTimer = null
+
+  // No Windows o bridge sobe dentro do WSL (wsl.exe + shell de login + nvm,
+  // ver startBridge() em src/main/index.js) — bem mais lento que o spawn
+  // direto de node usado no Linux nativo. Essa conexão abre uma única vez, no
+  // boot do app (accountUsageStore.js é singleton de módulo), então sem
+  // retry a primeira tentativa perde a corrida contra o bridge ainda
+  // subindo e o indicador some pro resto da sessão — mesmo reconnect do `ws`
+  // do terminal em WslClaudeTerminalNode.vue.
+  function connect() {
+    ws = new WebSocket(BRIDGE_URL)
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'watchAccountUsage' }))
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data)
+      if (msg.type === 'accountUsageUpdate') onUpdate(msg)
+    }
+    ws.onclose = () => {
+      retryTimer = setTimeout(connect, 1500)
+    }
+    ws.onerror = () => ws?.close()
   }
+
+  connect()
+
   return () => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'unwatchAccountUsage' }))
-    ws.close()
+    clearTimeout(retryTimer)
+    if (ws) {
+      ws.onclose = null
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'unwatchAccountUsage' }))
+      ws.close()
+    }
   }
 }
 
