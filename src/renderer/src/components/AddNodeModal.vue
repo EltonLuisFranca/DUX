@@ -47,8 +47,17 @@
             <span class="modal-item-icon-wrap">
               <svg class="modal-item-icon" viewBox="0 0 20 20" width="20" height="20" v-html="entry.icon" />
             </span>
-            <span class="modal-item-label">{{ entry.label }}</span>
-            <span class="modal-item-desc">{{ entry.description }}</span>
+            <span class="modal-item-body">
+              <span class="modal-item-top">
+                <span class="modal-item-label">{{ entry.label }}</span>
+                <span class="modal-item-add" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="12" height="12">
+                    <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                  </svg>
+                </span>
+              </span>
+              <span class="modal-item-desc">{{ entry.description }}</span>
+            </span>
           </button>
 
           <div v-if="filteredEntries.length === 0" class="modal-empty">Nenhum tipo de node encontrado.</div>
@@ -281,16 +290,13 @@ function handleFormSubmit(data) {
 
 .modal-item {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  aspect-ratio: 1 / 1;
-  padding: 16px 14px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-bg-surface);
-  text-align: center;
+  text-align: left;
   cursor: pointer;
 }
 
@@ -303,8 +309,8 @@ function handleFormSubmit(data) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
   border-radius: 9px;
   background: var(--color-bg-surface-alt);
@@ -312,16 +318,52 @@ function handleFormSubmit(data) {
   color: var(--color-text-secondary);
 }
 
+.modal-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.modal-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .modal-item-label {
   font-size: 12.5px;
   font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-item-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: var(--color-bg-surface-alt);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.modal-item:hover .modal-item-add {
+  background: var(--color-bg-surface);
   color: var(--color-text-primary);
 }
 
 .modal-item-desc {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 2;
   overflow: hidden;
   font-size: 11px;
   line-height: 1.4;
