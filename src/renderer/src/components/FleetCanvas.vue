@@ -491,6 +491,15 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 
+:deep(.vue-flow__handle) {
+  width: 8px;
+  height: 8px;
+  background: #ffffff;
+  border: none;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25);
+}
+
 .ghost-node {
   position: absolute;
   top: 0;

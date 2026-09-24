@@ -155,6 +155,113 @@ function buildHeaderMap(target) {
   return headerMap
 }
 
+// Paths mais comuns de tela de login — cobre o mais provável (WordPress,
+// paineis admin genéricos, apps com /login), não é exaustivo. '' testa a
+// própria URL base, pra pegar SPAs com o form direto na home.
+const LOGIN_CANDIDATE_PATHS = [
+  '/login',
+  '/signin',
+  '/wp-login.php',
+  '/administrator',
+  '/admin',
+  '/admin/login',
+  '/user/login',
+  '/account/login',
+  '/auth/login',
+  ''
+]
+
+function extractForms(html) {
+  const forms = []
+  const re = /<form\b([^>]*)>([\s\S]*?)<\/form>/gi
+  let m
+  while ((m = re.exec(html))) forms.push({ attrs: m[1], body: m[2] })
+  return forms
+}
+
+function attrValue(attrs, name) {
+  const re = new RegExp(`${name}\\s*=\\s*["']([^"']*)["']`, 'i')
+  const m = re.exec(attrs || '')
+  return m ? m[1] : null
+}
+
+function findInputs(body) {
+  const inputs = []
+  const re = /<input\b([^>]*)>/gi
+  let m
+  while ((m = re.exec(body))) {
+    inputs.push({ type: (attrValue(m[1], 'type') || 'text').toLowerCase(), name: attrValue(m[1], 'name') })
+  }
+  return inputs
+}
+
+function resolveFormUrl(pageUrl, action) {
+  try {
+    return new URL(action || '', pageUrl).toString()
+  } catch {
+    return pageUrl
+  }
+}
+
+// Heurística de auto-detecção de formulário de login: varre alguns paths
+// candidatos, procura um <form> com <input type="password">, e monta um
+// target/successRule pro credentialTest.createRunner a partir disso. Igual
+// ao resto das checagens curadas do projeto: cobre o caso mais comum (form
+// HTML simples, sem CSRF token dinâmico), não é infalível — sites com login
+// via JS puro (fetch/XHR sem <form>) ou com token CSRF por requisição não
+// são detectados corretamente, e quem usa isso deve conferir antes de
+// confiar 100% no resultado. A regra de sucesso ("resposta não contém mais
+// o campo de senha") assume que um login falho volta a renderizar o form.
+async function detectLoginForm({ url, timeoutMs }) {
+  const base = String(url || '').trim().replace(/\/+$/, '')
+  const timeout = Math.max(1000, Math.min(20_000, Number(timeoutMs) || DEFAULT_TIMEOUT_MS))
+  if (!/^https?:\/\//i.test(base)) return { found: false }
+
+  for (const path of LOGIN_CANDIDATE_PATHS) {
+    const pageUrl = path ? `${base}${path}` : `${base}/`
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort('timeout'), timeout)
+    let html = ''
+    let finalUrl = pageUrl
+    try {
+      const response = await fetch(pageUrl, { redirect: 'follow', signal: controller.signal })
+      finalUrl = response.url || pageUrl
+      html = await response.text()
+    } catch {
+      continue
+    } finally {
+      clearTimeout(timer)
+    }
+
+    for (const form of extractForms(html)) {
+      const inputs = findInputs(form.body)
+      const passwordField = inputs.find((i) => i.type === 'password' && i.name)
+      if (!passwordField) continue
+      const userField =
+        inputs.find((i) => i.name && i.type !== 'password' && i.type !== 'hidden' && i.type !== 'submit' && /user|email|login|name/i.test(i.name)) ||
+        inputs.find((i) => i.name && (i.type === 'text' || i.type === 'email'))
+      if (!userField) continue
+
+      const method = (attrValue(form.attrs, 'method') || 'POST').toUpperCase()
+      const formUrl = resolveFormUrl(finalUrl, attrValue(form.attrs, 'action'))
+
+      return {
+        found: true,
+        url: formUrl,
+        method: method === 'GET' ? 'GET' : 'POST',
+        contentType: 'form',
+        bodyTemplate: `${encodeURIComponent(userField.name)}={{user}}&${encodeURIComponent(passwordField.name)}={{pass}}`,
+        successRule: { type: 'text', textMode: 'not_contains', text: passwordField.name },
+        sourceUrl: pageUrl,
+        userField: userField.name,
+        passwordField: passwordField.name
+      }
+    }
+  }
+
+  return { found: false }
+}
+
 // Cria e já inicia (fire-and-forget, acompanhado via callbacks) uma corrida
 // de tentativas de credencial. onProgress dispara a cada tentativa concluída
 // (streaming, não só no final — pedido explícito do card); onDone dispara
@@ -253,4 +360,4 @@ function createRunner({ target, credentials: credentialsConfig, successRule, exe
   }
 }
 
-module.exports = { createRunner, parseCredentials, QUICK_CREDENTIALS }
+module.exports = { createRunner, parseCredentials, QUICK_CREDENTIALS, detectLoginForm }

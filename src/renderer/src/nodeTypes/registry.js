@@ -280,7 +280,7 @@ export const nodeTypeRegistry = {
   },
   'vuln-scan': {
     label: 'Scanner de Vulnerabilidades',
-    description: 'Roda uma checklist curada de vulnerabilidades comuns (arquivos sensíveis expostos, SQLi, XSS, CORS, path traversal, métodos perigosos...) contra uma URL — sem depender de nuclei/nikto instalado.',
+    description: 'Suíte completa de pentest: roda DNS/WHOIS, fingerprint de tecnologias, headers de segurança, SSL/TLS, portas, subdomínios, diretórios, checklist de vulnerabilidades e credenciais fracas contra uma URL, cada um na configuração padrão, e consolida tudo num relatório único por severidade (Crítico/Alto/Médio/Baixo).',
     category: 'tools',
     createData: () => ({ name: 'Scanner de Vulnerabilidades' }),
     icon: VULN_SCAN_ICON

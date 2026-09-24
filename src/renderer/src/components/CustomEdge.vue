@@ -1,11 +1,4 @@
 <template>
-  <defs>
-    <linearGradient :id="gradientId" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#3b82f6" />
-      <stop offset="100%" stop-color="#7c3aed" />
-    </linearGradient>
-  </defs>
-
   <BaseEdge :id="id" :path="path" :marker-end="markerEnd" :marker-start="markerStart" :style="edgeStyleAttrs" />
 
   <!-- path invisível mais largo só pra capturar hover em toda a extensão da
@@ -88,16 +81,12 @@ const path = computed(() => pathResult.value[0])
 const labelX = computed(() => pathResult.value[1])
 const labelY = computed(() => pathResult.value[2])
 
-// id do gradiente precisa ser único por edge — todas compartilham o mesmo
-// <svg> pai do vue-flow, então um id fixo faria a primeira edge "vencer" e
-// as outras referenciarem o gradiente errado (ou nenhum).
-const gradientId = computed(() => `dux-edge-gradient-${props.id}`)
-
 const edgeStyleAttrs = computed(() => ({
-  stroke: `url(#${gradientId.value})`,
+  stroke: hovered.value ? '#ffffff' : 'rgba(255, 255, 255, 0.55)',
   strokeWidth: hovered.value ? 2.5 : 2,
-  filter: 'drop-shadow(0 0 4px rgba(124, 58, 237, 0.45))',
-  transition: 'stroke-width 0.12s ease'
+  strokeDasharray: '1 6',
+  strokeLinecap: 'round',
+  transition: 'stroke-width 0.12s ease, stroke 0.12s ease'
 }))
 
 function removeEdge(id) {

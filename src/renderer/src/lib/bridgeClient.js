@@ -814,3 +814,41 @@ export function runDnsWhois(payload, { onProgress, onResult, onConnectionError }
     }
   }
 }
+
+// Orquestrador da suíte de pentest (bridge/pentestSuite.js) — roda os outros
+// 9 módulos em sequência contra a mesma URL/domínio e devolve um resultado
+// agregado (findings por severidade). Mesmo padrão de streaming dos demais:
+// onProgress traz { module, ...subProgress } de qual checagem está rolando.
+export function runPentestSuite(payload, { onProgress, onResult, onConnectionError }) {
+  const ws = new WebSocket(BRIDGE_URL)
+  const requestId = crypto.randomUUID()
+  let done = false
+
+  const finish = (result) => {
+    if (done) return
+    done = true
+    onResult(result)
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close()
+  }
+
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'pentestSuiteStart', requestId, ...payload }))
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data)
+    if (msg.requestId !== requestId) return
+    if (msg.type === 'pentestSuiteProgress') onProgress?.(msg)
+    else if (msg.type === 'pentestSuiteResult') finish(msg)
+  }
+
+  ws.onerror = () => {
+    onConnectionError?.()
+    finish({ requestId, cancelled: false, error: 'connection', findings: [], counts: {} })
+  }
+
+  return {
+    requestId,
+    stop() {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'pentestSuiteStop', requestId }))
+    }
+  }
+}

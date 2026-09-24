@@ -21,6 +21,7 @@ const { createRunner: createTlsCheckRunner } = require('./tlsCheck')
 const { createRunner: createTechFingerprintRunner } = require('./techFingerprint')
 const { createRunner: createVulnScanRunner } = require('./vulnScan')
 const { createRunner: createDnsWhoisRunner } = require('./dnsWhois')
+const { createRunner: createPentestSuiteRunner } = require('./pentestSuite')
 const { startWatchingNote, stopWatchingNote, stopAllNoteWatches, readNoteFile } = require('./noteWatch')
 const { detectTerminalAvailability } = require('./terminalAvailability')
 
@@ -95,6 +96,8 @@ function createConnectionHandler({ agentPort }) {
     const activeVulnScans = new Map()
     // mesmo cuidado, agora pro DNS/WHOIS (dnsWhoisStop / ws.close())
     const activeDnsWhois = new Map()
+    // mesmo cuidado, agora pra suíte consolidada de pentest (pentestSuiteStop / ws.close())
+    const activePentestSuites = new Map()
 
     ws.on('message', (raw) => {
       let msg
@@ -541,6 +544,29 @@ function createConnectionHandler({ agentPort }) {
         activeDnsWhois.set(requestId, runner)
       } else if (msg.type === 'dnsWhoisStop') {
         activeDnsWhois.get(msg.requestId)?.stop()
+      } else if (msg.type === 'pentestSuiteStart') {
+        const requestId = msg.requestId
+        if (!requestId || activePentestSuites.has(requestId)) return
+        if (!/^https?:\/\//i.test(msg.url || '')) {
+          ws.send(JSON.stringify({ type: 'pentestSuiteResult', requestId, error: 'URL inválida (precisa começar com http:// ou https://)' }))
+          return
+        }
+        const runner = createPentestSuiteRunner(msg, {
+          onProgress: (progress) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'pentestSuiteProgress', requestId, ...progress }))
+            }
+          },
+          onDone: (summary) => {
+            activePentestSuites.delete(requestId)
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'pentestSuiteResult', requestId, ...summary }))
+            }
+          }
+        })
+        activePentestSuites.set(requestId, runner)
+      } else if (msg.type === 'pentestSuiteStop') {
+        activePentestSuites.get(msg.requestId)?.stop()
       } else if (msg.type === 'link') {
         agentLink.linkSessions(msg.sessionA, msg.sessionB)
       } else if (msg.type === 'unlink') {
@@ -698,6 +724,8 @@ function createConnectionHandler({ agentPort }) {
       activeVulnScans.clear()
       for (const runner of activeDnsWhois.values()) runner.stop()
       activeDnsWhois.clear()
+      for (const runner of activePentestSuites.values()) runner.stop()
+      activePentestSuites.clear()
       ptyProcess?.kill()
       ptyProcess = null
       if (sessionId) {
