@@ -152,6 +152,9 @@ function buildHeaderMap(target) {
   if (!Object.keys(headerMap).some((k) => k.toLowerCase() === 'content-type')) {
     headerMap['Content-Type'] = target.contentType === 'form' ? 'application/x-www-form-urlencoded' : 'application/json'
   }
+  if (target.cookies && !Object.keys(headerMap).some((k) => k.toLowerCase() === 'cookie')) {
+    headerMap['Cookie'] = target.cookies
+  }
   return headerMap
 }
 
@@ -190,9 +193,21 @@ function findInputs(body) {
   const re = /<input\b([^>]*)>/gi
   let m
   while ((m = re.exec(body))) {
-    inputs.push({ type: (attrValue(m[1], 'type') || 'text').toLowerCase(), name: attrValue(m[1], 'name') })
+    inputs.push({
+      type: (attrValue(m[1], 'type') || 'text').toLowerCase(),
+      name: attrValue(m[1], 'name'),
+      value: attrValue(m[1], 'value')
+    })
   }
   return inputs
+}
+
+function extractSetCookies(response) {
+  const raw =
+    typeof response.headers.getSetCookie === 'function'
+      ? response.headers.getSetCookie()
+      : [response.headers.get('set-cookie')].filter(Boolean)
+  return raw.map((c) => c.split(';')[0].trim()).filter(Boolean).join('; ')
 }
 
 function resolveFormUrl(pageUrl, action) {
@@ -223,9 +238,11 @@ async function detectLoginForm({ url, timeoutMs }) {
     const timer = setTimeout(() => controller.abort('timeout'), timeout)
     let html = ''
     let finalUrl = pageUrl
+    let cookies = ''
     try {
       const response = await fetch(pageUrl, { redirect: 'follow', signal: controller.signal })
       finalUrl = response.url || pageUrl
+      cookies = extractSetCookies(response)
       html = await response.text()
     } catch {
       continue
@@ -245,13 +262,28 @@ async function detectLoginForm({ url, timeoutMs }) {
       const method = (attrValue(form.attrs, 'method') || 'POST').toUpperCase()
       const formUrl = resolveFormUrl(finalUrl, attrValue(form.attrs, 'action'))
 
+      // Campos hidden (token CSRF, etc.) precisam ser reenviados junto em
+      // toda tentativa — sem isso, forms protegidos por CSRF (Laravel,
+      // Rails, Django...) sempre respondem 419/422/403 pra qualquer
+      // credencial, o que sem o guard de status acima virava falso positivo
+      // generalizado (heurística achava que "sumiu o campo de senha" =
+      // sucesso, quando na real era só a página de erro do CSRF).
+      const hiddenFields = inputs.filter(
+        (i) => i.type === 'hidden' && i.name && i.name !== passwordField.name && i.name !== userField.name && i.value != null
+      )
+      const hiddenPart = hiddenFields.map((f) => `${encodeURIComponent(f.name)}=${encodeURIComponent(f.value)}`).join('&')
+      const bodyTemplate = [`${encodeURIComponent(userField.name)}={{user}}`, `${encodeURIComponent(passwordField.name)}={{pass}}`, hiddenPart]
+        .filter(Boolean)
+        .join('&')
+
       return {
         found: true,
         url: formUrl,
         method: method === 'GET' ? 'GET' : 'POST',
         contentType: 'form',
-        bodyTemplate: `${encodeURIComponent(userField.name)}={{user}}&${encodeURIComponent(passwordField.name)}={{pass}}`,
+        bodyTemplate,
         successRule: { type: 'text', textMode: 'not_contains', text: passwordField.name },
+        cookies: cookies || null,
         sourceUrl: pageUrl,
         userField: userField.name,
         passwordField: passwordField.name
@@ -314,7 +346,12 @@ function createRunner({ target, credentials: credentialsConfig, successRule, exe
           baselineLatencyMs = latencies.slice(0, 3).reduce((a, b) => a + b, 0) / 3
         }
 
-        const success = checkSuccess(successRule, result.response, result.bodyText)
+        // Nunca considera sucesso numa resposta de erro (4xx/5xx) — um 419
+        // (CSRF/sessão expirada), 422, 401, 403, 500 etc. costuma renderizar
+        // uma página de erro genérica que não repete o campo de senha, o que
+        // faria a regra "not_contains" (heurística de auto-detecção) disparar
+        // falso positivo em toda tentativa, não só na credencial certa.
+        const success = result.response.status < 400 && checkSuccess(successRule, result.response, result.bodyText)
         const signal = detectLockoutSignal(result.response, result.bodyText, result.latencyMs, baselineLatencyMs)
         if (signal && !rateLimit) {
           rateLimit = { detected: true, afterAttempts: completed, signal, user: cred.user, pass: cred.pass }

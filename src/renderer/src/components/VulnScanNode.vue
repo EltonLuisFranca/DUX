@@ -117,20 +117,316 @@
           </div>
         </div>
 
-        <div v-if="lastResult?.findings?.length" class="findings-list">
-          <div v-for="f in lastResult.findings" :key="f.id" class="finding-card" :class="severityClass(f.severity)">
-            <div class="finding-head">
-              <span class="severity-badge" :class="severityClass(f.severity)">{{ severityLabel(f.severity) }}</span>
-              <span class="finding-name">{{ f.title }}</span>
-              <span class="finding-module">{{ MODULE_LABELS[f.moduleId] }}</span>
+        <div v-if="findingsBySeverity.length" class="acc-list">
+          <div v-for="group in findingsBySeverity" :key="group.severity" class="acc-section" :class="severityClass(group.severity)">
+            <button type="button" class="acc-header" @click="toggleSeverity(group.severity)">
+              <svg class="acc-chevron" :class="{ collapsed: closedSeverities.has(group.severity) }" viewBox="0 0 16 16" width="10" height="10">
+                <path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span class="severity-badge" :class="severityClass(group.severity)">{{ severityLabel(group.severity) }}</span>
+              <span class="acc-count">{{ group.items.length }}</span>
+            </button>
+            <div v-show="!closedSeverities.has(group.severity)" class="acc-body findings-list">
+              <div v-for="f in group.items" :key="f.id" class="finding-card" :class="severityClass(f.severity)">
+                <div class="finding-head">
+                  <span class="finding-name">{{ f.title }}</span>
+                  <span class="finding-module">{{ MODULE_LABELS[f.moduleId] }}</span>
+                </div>
+                <p class="hint finding-evidence">{{ f.evidence }}</p>
+                <p v-if="f.url" class="hint finding-url mono-hint">Testado em: {{ f.url }}</p>
+                <p v-if="f.recommendation" class="finding-recommendation"><strong>Como corrigir:</strong> {{ f.recommendation }}</p>
+              </div>
             </div>
-            <p class="hint finding-evidence">{{ f.evidence }}</p>
-            <p v-if="f.url" class="hint finding-url mono-hint">Testado em: {{ f.url }}</p>
-            <p v-if="f.recommendation" class="finding-recommendation"><strong>Como corrigir:</strong> {{ f.recommendation }}</p>
           </div>
         </div>
         <div v-else-if="lastResult && !running && !lastResult.error" class="banner ok">
           Nenhum achado nos 4 níveis de severidade.
+        </div>
+
+        <div v-if="lastResult" class="acc-list module-results">
+          <span class="section-label">Resultado completo por módulo</span>
+
+          <div v-if="dnsResult" class="acc-section">
+            <button type="button" class="acc-header" @click="toggleModule('dnsWhois')">
+              <svg class="acc-chevron" :class="{ collapsed: !openModules.has('dnsWhois') }" viewBox="0 0 16 16" width="10" height="10">
+                <path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span class="acc-title">DNS / WHOIS</span>
+              <span v-if="dnsResult.error" class="acc-status status-bad">Erro</span>
+            </button>
+            <div v-show="openModules.has('dnsWhois')" class="acc-body">
+              <template v-if="!dnsResult.error">
+                <div class="section-block">
+                  <span class="section-label">Registros DNS</span>
+                  <div v-for="rt in recordGroups" :key="rt.type" class="record-row">
+                    <span class="record-type">{{ rt.type }}</span>
+                    <div class="record-values">
+                      <span v-if="!rt.entries.length" class="hint">(nenhum)</span>
+                      <span v-for="(v, i) in rt.entries" :key="i" class="record-value">{{ v }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="section-block">
+                  <span class="section-label">Email (SPF / DMARC / DKIM)</span>
+                  <div class="pill-row">
+                    <span class="mail-pill" :class="dnsResult.spf ? 'pill-ok' : 'pill-bad'">SPF {{ dnsResult.spf ? 'OK' : 'ausente' }}</span>
+                    <span class="mail-pill" :class="dnsResult.dmarc ? 'pill-ok' : 'pill-bad'">DMARC {{ dnsResult.dmarc ? 'OK' : 'ausente' }}</span>
+                    <span class="mail-pill" :class="dnsResult.dkim?.length ? 'pill-ok' : 'pill-bad'">
+                      DKIM {{ dnsResult.dkim?.length ? `${dnsResult.dkim.length} seletor(es)` : 'não encontrado' }}
+                    </span>
+                  </div>
+                </div>
+                <div class="section-block">
+                  <span class="section-label">WHOIS</span>
+                  <div v-if="dnsResult.whois?.error" class="banner warn">{{ dnsResult.whois.error }}</div>
+                  <div v-else-if="dnsResult.whois?.parsed" class="whois-fields">
+                    <div v-if="dnsResult.whois.parsed.registrar" class="whois-field">
+                      <span class="hint">Registrador</span><span>{{ dnsResult.whois.parsed.registrar }}</span>
+                    </div>
+                    <div v-if="dnsResult.whois.parsed.expiresAt" class="whois-field">
+                      <span class="hint">Expira em</span><span>{{ dnsResult.whois.parsed.expiresAt }}</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="banner danger">{{ dnsResult.error }}</div>
+            </div>
+          </div>
+
+          <div v-if="techResult" class="acc-section">
+            <button type="button" class="acc-header" @click="toggleModule('techFingerprint')">
+              <svg class="acc-chevron" :class="{ collapsed: !openModules.has('techFingerprint') }" viewBox="0 0 16 16" width="10" height="10">
+                <path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span class="acc-title">Detector de Tecnologias</span>
+              <span v-if="!techResult.error" class="acc-status">{{ techResult.detected.length }}</span>
+              <span v-else class="acc-status status-bad">Erro</span>
+            </button>
+            <div v-show="openModules.has('techFingerprint')" class="acc-body">
+              <template v-if="!techResult.error">
+                <p class="hint">HTTP {{ techResult.status }} · {{ techResult.detected.length }} tecnologia(s)</p>
+                <div v-if="techResult.detected.length === 0" class="banner ok">Nenhuma tecnologia identificada pelas assinaturas conhecidas.</div>
+                <div v-else class="category-list">
+                  <div v-for="group in groupedDetected" :key="group.category" class="category-block">
+                    <span class="section-label">{{ CATEGORY_LABELS[group.category] || group.category }}</span>
+                    <div class="tech-pills">
+                      <span v-for="t in group.items" :key="t.id" class="tech-pill" :title="t.evidence">{{ t.name }}</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="banner danger">{{ techResult.error }}</div>
+            </div>
+          </div>
+
+          <div v-if="shResult" class="acc-section">
+            <button type="button" class="acc-header" @click="toggleModule('securityHeaders')">
+              <svg class="acc-chevron" :class="{ collapsed: !openModules.has('securityHeaders') }" viewBox="0 0 16 16" width="10" height="10">
+                <path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span class="acc-title">Headers de Segurança</span>
+              <span v-if="!shResult.error" class="acc-status">{{ shResult.score.grade }}</span>
+              <span v-else class="acc-status status-bad">Erro</span>
+            </button>
+            <div v-show="openModules.has('securityHeaders')" class="acc-body">
+              <template v-if="!shResult.error">
+                <div class="score-banner" :class="gradeClass(shResult.score.grade)">
+                  <span class="score-grade">{{ shResult.score.grade }}</span>
+                  <div class="score-info">
+                    <strong>{{ shResult.score.pct }}% de proteção</strong>
+                    <span class="hint">HTTP {{ shResult.status }}</span>
+                  </div>
+                </div>
+                <div class="header-list">
+                  <div v-for="h in shResult.headers" :key="h.id" class="header-row-item">
+                    <div class="header-row-head">
+                      <span class="header-name">{{ h.label }}</span>
+                      <span class="header-badge" :class="'status-' + h.status">{{ headerStatusLabel(h.status) }}</span>
+                    </div>
+                    <p v-if="h.value" class="hint header-value">{{ h.value }}</p>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="banner danger">{{ shResult.error }}</div>
+            </div>
+          </div>
+
+          <div v-if="tlsResult" class="acc-section">
+            <button type="button" class="acc-header" @click="toggleModule('tlsCheck')">
+              <svg class="acc-chevron" :class="{ collapsed: !openModules.has('tlsCheck') }" viewBox="0 0 16 16" width="10" height="10">
+                <path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span class="acc-title">Verificador SSL/TLS</span>
+              <span v-if="tlsResult.error" class="acc-status status-bad">Erro</span>
+            </button>
+            <div v-show="openModules.has('tlsCheck')" class="acc-body">
+              <template v-if="!tlsResult.error">
+                <div v-for="(a, i) in tlsResult.alerts" :key="i" class="banner" :class="a.level === 'danger' ? 'danger' : 'warn'">{{ a.text }}</div>
+                <div class="tls-summary">
+                  <div class="summary-pill" :class="tlsResult.authorized ? 'pill-ok' : 'pill-bad'">
+                    {{ tlsResult.authorized ? 'Cadeia confiável' : 'Cadeia não confiável' }}
+                  </div>
+                  <div class="summary-pill" :class="protocolPillClass(tlsResult.protocol)">{{ tlsResult.protocol || 'protocolo desconhecido' }}</div>
+                </div>
+                <div class="chain-list">
+                  <div v-for="(c, i) in tlsResult.chain" :key="i" class="chain-item">
+                    <div class="chain-item-head">
+                      <span class="chain-label">{{ i === 0 ? 'Certificado' : c.selfSigned ? 'Raiz (autoassinado)' : 'Emissor' }}</span>
+                      <span v-if="c.daysRemaining !== null" class="chain-days" :class="daysClass(c.daysRemaining)">
+                        {{ c.daysRemaining >= 0 ? `${c.daysRemaining}d restantes` : `expirado há ${Math.abs(c.daysRemaining)}d` }}
+                      </span>
+                    </div>
+                    <p class="hint chain-name">{{ c.subject || '(sem subject)' }}</p>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="banner danger">{{ tlsResult.error }}</div>
+            </div>
+          </div>
+
+          <div v-if="psResult" class="acc-section">
+            <button type="button" class="acc-header" @click="toggleModule('portScan')">
+              <svg class="acc-chevron" :class="{ collapsed: !openModules.has('portScan') }" viewBox="0 0 16 16" width="10" height="10">
+                <path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span class="acc-title">Varredura de Portas</span>
+              <span v-if="!psResult.error" class="acc-status">{{ psResult.openPorts.length }}</span>
+              <span v-else class="acc-status status-bad">Erro</span>
+            </button>
+            <div v-show="openModules.has('portScan')" class="acc-body">
+              <template v-if="!psResult.error">
+                <div v-if="psResult.openPorts.length" class="findings-list">
+                  <div v-for="p in psResult.openPorts" :key="p.port" class="finding-row">
+                    {{ p.port }} <span class="finding-status">({{ p.service }})</span>
+                  </div>
+                </div>
+                <div v-else class="banner ok">Nenhuma porta aberta em {{ psResult.totalPorts }} verificadas.</div>
+              </template>
+              <div v-else class="banner danger">{{ psResult.error }}</div>
+            </div>
+          </div>
+
+          <div v-if="ssResult" class="acc-section">
+            <button type="button" class="acc-header" @click="toggleModule('subdomainScan')">
+              <svg class="acc-chevron" :class="{ collapsed: !openModules.has('subdomainScan') }" viewBox="0 0 16 16" width="10" height="10">
+                <path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span class="acc-title">Scanner de Subdomínios</span>
+              <span v-if="!ssResult.error" class="acc-status">{{ ssResult.found.length }}</span>
+              <span v-else class="acc-status status-bad">Erro</span>
+            </button>
+            <div v-show="openModules.has('subdomainScan')" class="acc-body">
+              <template v-if="!ssResult.error">
+                <div v-if="ssResult.found.length" class="findings-list">
+                  <div v-for="f in ssResult.found" :key="f.hostname" class="finding-row">
+                    {{ f.hostname }}
+                    <span class="finding-status">{{ f.ips?.length ? f.ips.join(', ') : '' }}{{ f.httpStatus ? ' · HTTP ' + f.httpStatus : '' }}</span>
+                  </div>
+                </div>
+                <div v-else class="banner ok">Nenhum subdomínio encontrado em {{ ssResult.totalSubdomains }} testados.</div>
+              </template>
+              <div v-else class="banner danger">{{ ssResult.error }}</div>
+            </div>
+          </div>
+
+          <div v-if="dfResult" class="acc-section">
+            <button type="button" class="acc-header" @click="toggleModule('dirFuzz')">
+              <svg class="acc-chevron" :class="{ collapsed: !openModules.has('dirFuzz') }" viewBox="0 0 16 16" width="10" height="10">
+                <path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span class="acc-title">Fuzzer de Diretórios</span>
+              <span v-if="!dfResult.error" class="acc-status">{{ dfResult.found.length }}</span>
+              <span v-else class="acc-status status-bad">Erro</span>
+            </button>
+            <div v-show="openModules.has('dirFuzz')" class="acc-body">
+              <template v-if="!dfResult.error">
+                <div v-if="dfResult.found.length" class="findings-list">
+                  <div v-for="f in dfResult.found" :key="f.path" class="finding-row">
+                    <span class="status-badge" :class="dirStatusClass(f.status)">{{ f.status }}</span>
+                    /{{ f.path }} <span class="finding-status">{{ formatSize(f.size) }}</span>
+                  </div>
+                </div>
+                <div v-else class="banner ok">Nenhum path encontrado em {{ dfResult.totalPaths }} testados.</div>
+              </template>
+              <div v-else class="banner danger">{{ dfResult.error }}</div>
+            </div>
+          </div>
+
+          <div v-if="vsResult" class="acc-section">
+            <button type="button" class="acc-header" @click="toggleModule('checks')">
+              <svg class="acc-chevron" :class="{ collapsed: !openModules.has('checks') }" viewBox="0 0 16 16" width="10" height="10">
+                <path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span class="acc-title">Checklist de Vulnerabilidades</span>
+              <span v-if="!vsResult.error" class="acc-status">{{ vsResult.findings.length }}/{{ vsResult.totalChecks }}</span>
+              <span v-else class="acc-status status-bad">Erro</span>
+            </button>
+            <div v-show="openModules.has('checks')" class="acc-body">
+              <p v-if="!vsResult.error" class="hint">
+                {{ vsResult.findings.length }} achado(s) em {{ vsResult.totalChecks }} checagens — detalhe nos cards de severidade acima.
+              </p>
+              <div v-else class="banner danger">{{ vsResult.error }}</div>
+            </div>
+          </div>
+
+          <div v-if="ctResult" class="acc-section">
+            <button type="button" class="acc-header" @click="toggleModule('credentialTest')">
+              <svg class="acc-chevron" :class="{ collapsed: !openModules.has('credentialTest') }" viewBox="0 0 16 16" width="10" height="10">
+                <path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span class="acc-title">Teste de Credenciais</span>
+              <span v-if="ctResult.skipped" class="acc-status status-bad">Não detectado</span>
+              <span v-else-if="ctResult.error" class="acc-status status-bad">Erro</span>
+            </button>
+            <div v-show="openModules.has('credentialTest')" class="acc-body">
+              <div v-if="ctResult.skipped" class="banner warn">Login não detectado automaticamente — nenhuma tentativa foi feita.</div>
+              <div v-else-if="ctResult.error" class="banner danger">{{ ctResult.error }}</div>
+              <template v-else>
+                <p class="hint">
+                  Formulário detectado em <code>{{ ctResult.detected?.sourceUrl }}</code> (usuário:
+                  <code>{{ ctResult.detected?.userField }}</code>, senha: <code>{{ ctResult.detected?.passwordField }}</code>).
+                </p>
+                <div v-if="ctResult.findings?.length" class="banner danger">
+                  <strong>Credencial fraca aceita:</strong>
+                  <div v-for="f in ctResult.findings" :key="f.user + ':' + f.pass" class="finding-row">
+                    {{ f.user }} : {{ f.pass }} <span class="finding-status">({{ f.status }})</span>
+                  </div>
+                </div>
+                <div v-else class="banner ok">Nenhuma credencial fraca da lista rápida foi aceita.</div>
+                <div v-if="ctResult.rateLimit?.detected" class="banner ok">
+                  Rate limit/lockout detectado após {{ ctResult.rateLimit.afterAttempts }} tentativas.
+                </div>
+                <div v-else-if="ctResult.totalAttempts" class="banner warn">
+                  Sem rate limit/lockout detectado em {{ ctResult.totalAttempts }} tentativas.
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div v-if="ltResult" class="acc-section">
+            <button type="button" class="acc-header" @click="toggleModule('loadTest')">
+              <svg class="acc-chevron" :class="{ collapsed: !openModules.has('loadTest') }" viewBox="0 0 16 16" width="10" height="10">
+                <path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span class="acc-title">Teste de Carga</span>
+              <span v-if="!ltResult.error" class="acc-status">{{ formatPct(ltResult.errorRate) }}</span>
+              <span v-else class="acc-status status-bad">Erro</span>
+            </button>
+            <div v-show="openModules.has('loadTest')" class="acc-body">
+              <template v-if="!ltResult.error">
+                <div class="banner" :class="ltResult.errorRate >= 0.05 ? 'danger' : ltResult.errorRate > 0 ? 'warn' : 'ok'">
+                  {{ ltResult.totalCompleted }} requisições ({{ Math.round(ltResult.achievedRps) }} req/s médio).
+                </div>
+                <div class="stats-grid">
+                  <div class="stat-tile"><span class="stat-label">Taxa de erro</span><span class="stat-value">{{ formatPct(ltResult.errorRate) }}</span></div>
+                  <div class="stat-tile"><span class="stat-label">Latência p50</span><span class="stat-value">{{ ltResult.latency.p50 }}ms</span></div>
+                  <div class="stat-tile"><span class="stat-label">Latência p95</span><span class="stat-value">{{ ltResult.latency.p95 }}ms</span></div>
+                  <div class="stat-tile"><span class="stat-label">Latência p99</span><span class="stat-value">{{ ltResult.latency.p99 }}ms</span></div>
+                </div>
+              </template>
+              <div v-else class="banner danger">{{ ltResult.error }}</div>
+            </div>
+          </div>
         </div>
 
         <div v-if="lastResult && !lastResult.error" class="summary-row">
@@ -171,44 +467,7 @@
         <p class="hint">DNS/WHOIS · configuração padrão (só usa o domínio derivado na aba Geral).</p>
         <button class="link-btn" :disabled="!canRunSingle('dnsWhois')" @click="runSingleModule('dnsWhois')">Rodar só este módulo</button>
         <div v-if="moduleRunning.dnsWhois" class="progress-bar indeterminate"><div class="progress-fill" /></div>
-
-        <template v-if="dnsResult && !dnsResult.error">
-          <div class="section-block">
-            <span class="section-label">Registros DNS</span>
-            <div v-for="rt in recordGroups" :key="rt.type" class="record-row">
-              <span class="record-type">{{ rt.type }}</span>
-              <div class="record-values">
-                <span v-if="!rt.entries.length" class="hint">(nenhum)</span>
-                <span v-for="(v, i) in rt.entries" :key="i" class="record-value">{{ v }}</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="section-block">
-            <span class="section-label">Email (SPF / DMARC / DKIM)</span>
-            <div class="pill-row">
-              <span class="mail-pill" :class="dnsResult.spf ? 'pill-ok' : 'pill-bad'">SPF {{ dnsResult.spf ? 'OK' : 'ausente' }}</span>
-              <span class="mail-pill" :class="dnsResult.dmarc ? 'pill-ok' : 'pill-bad'">DMARC {{ dnsResult.dmarc ? 'OK' : 'ausente' }}</span>
-              <span class="mail-pill" :class="dnsResult.dkim?.length ? 'pill-ok' : 'pill-bad'">
-                DKIM {{ dnsResult.dkim?.length ? `${dnsResult.dkim.length} seletor(es)` : 'não encontrado' }}
-              </span>
-            </div>
-          </div>
-
-          <div class="section-block">
-            <span class="section-label">WHOIS</span>
-            <div v-if="dnsResult.whois?.error" class="banner warn">{{ dnsResult.whois.error }}</div>
-            <div v-else-if="dnsResult.whois?.parsed" class="whois-fields">
-              <div v-if="dnsResult.whois.parsed.registrar" class="whois-field">
-                <span class="hint">Registrador</span><span>{{ dnsResult.whois.parsed.registrar }}</span>
-              </div>
-              <div v-if="dnsResult.whois.parsed.expiresAt" class="whois-field">
-                <span class="hint">Expira em</span><span>{{ dnsResult.whois.parsed.expiresAt }}</span>
-              </div>
-            </div>
-          </div>
-        </template>
-        <div v-else-if="dnsResult?.error" class="banner danger">{{ dnsResult.error }}</div>
+        <p v-if="dnsResult" class="hint">Resultado disponível na aba Geral.</p>
         <p v-else class="hint">Ainda não executado.</p>
       </div>
 
@@ -217,20 +476,7 @@
         <p class="hint">Detector de Tecnologias · configuração padrão.</p>
         <button class="link-btn" :disabled="!canRunSingle('techFingerprint')" @click="runSingleModule('techFingerprint')">Rodar só este módulo</button>
         <div v-if="moduleRunning.techFingerprint" class="progress-bar indeterminate"><div class="progress-fill" /></div>
-
-        <template v-if="techResult && !techResult.error">
-          <p class="hint">HTTP {{ techResult.status }} · {{ techResult.detected.length }} tecnologia(s)</p>
-          <div v-if="techResult.detected.length === 0" class="banner ok">Nenhuma tecnologia identificada pelas assinaturas conhecidas.</div>
-          <div v-else class="category-list">
-            <div v-for="group in groupedDetected" :key="group.category" class="category-block">
-              <span class="section-label">{{ CATEGORY_LABELS[group.category] || group.category }}</span>
-              <div class="tech-pills">
-                <span v-for="t in group.items" :key="t.id" class="tech-pill" :title="t.evidence">{{ t.name }}</span>
-              </div>
-            </div>
-          </div>
-        </template>
-        <div v-else-if="techResult?.error" class="banner danger">{{ techResult.error }}</div>
+        <p v-if="techResult" class="hint">Resultado disponível na aba Geral.</p>
         <p v-else class="hint">Ainda não executado.</p>
       </div>
 
@@ -239,26 +485,7 @@
         <p class="hint">Headers de Segurança · configuração padrão.</p>
         <button class="link-btn" :disabled="!canRunSingle('securityHeaders')" @click="runSingleModule('securityHeaders')">Rodar só este módulo</button>
         <div v-if="moduleRunning.securityHeaders" class="progress-bar indeterminate"><div class="progress-fill" /></div>
-
-        <template v-if="shResult && !shResult.error">
-          <div class="score-banner" :class="gradeClass(shResult.score.grade)">
-            <span class="score-grade">{{ shResult.score.grade }}</span>
-            <div class="score-info">
-              <strong>{{ shResult.score.pct }}% de proteção</strong>
-              <span class="hint">HTTP {{ shResult.status }}</span>
-            </div>
-          </div>
-          <div class="header-list">
-            <div v-for="h in shResult.headers" :key="h.id" class="header-row-item">
-              <div class="header-row-head">
-                <span class="header-name">{{ h.label }}</span>
-                <span class="header-badge" :class="'status-' + h.status">{{ headerStatusLabel(h.status) }}</span>
-              </div>
-              <p v-if="h.value" class="hint header-value">{{ h.value }}</p>
-            </div>
-          </div>
-        </template>
-        <div v-else-if="shResult?.error" class="banner danger">{{ shResult.error }}</div>
+        <p v-if="shResult" class="hint">Resultado disponível na aba Geral.</p>
         <p v-else class="hint">Ainda não executado.</p>
       </div>
 
@@ -267,28 +494,7 @@
         <p class="hint">Verificador SSL/TLS · configuração padrão (porta 443).</p>
         <button class="link-btn" :disabled="!canRunSingle('tlsCheck')" @click="runSingleModule('tlsCheck')">Rodar só este módulo</button>
         <div v-if="moduleRunning.tlsCheck" class="progress-bar indeterminate"><div class="progress-fill" /></div>
-
-        <template v-if="tlsResult && !tlsResult.error">
-          <div v-for="(a, i) in tlsResult.alerts" :key="i" class="banner" :class="a.level === 'danger' ? 'danger' : 'warn'">{{ a.text }}</div>
-          <div class="tls-summary">
-            <div class="summary-pill" :class="tlsResult.authorized ? 'pill-ok' : 'pill-bad'">
-              {{ tlsResult.authorized ? 'Cadeia confiável' : 'Cadeia não confiável' }}
-            </div>
-            <div class="summary-pill" :class="protocolPillClass(tlsResult.protocol)">{{ tlsResult.protocol || 'protocolo desconhecido' }}</div>
-          </div>
-          <div class="chain-list">
-            <div v-for="(c, i) in tlsResult.chain" :key="i" class="chain-item">
-              <div class="chain-item-head">
-                <span class="chain-label">{{ i === 0 ? 'Certificado' : c.selfSigned ? 'Raiz (autoassinado)' : 'Emissor' }}</span>
-                <span v-if="c.daysRemaining !== null" class="chain-days" :class="daysClass(c.daysRemaining)">
-                  {{ c.daysRemaining >= 0 ? `${c.daysRemaining}d restantes` : `expirado há ${Math.abs(c.daysRemaining)}d` }}
-                </span>
-              </div>
-              <p class="hint chain-name">{{ c.subject || '(sem subject)' }}</p>
-            </div>
-          </div>
-        </template>
-        <div v-else-if="tlsResult?.error" class="banner danger">{{ tlsResult.error }}</div>
+        <p v-if="tlsResult" class="hint">Resultado disponível na aba Geral.</p>
         <p v-else class="hint">Ainda não executado.</p>
       </div>
 
@@ -332,16 +538,7 @@
 
         <button class="link-btn" :disabled="!canRunSingle('portScan')" @click="runSingleModule('portScan')">Rodar só este módulo</button>
         <div v-if="moduleRunning.portScan" class="progress-bar indeterminate"><div class="progress-fill" /></div>
-
-        <template v-if="psResult && !psResult.error">
-          <div v-if="psResult.openPorts.length" class="findings-list">
-            <div v-for="p in psResult.openPorts" :key="p.port" class="finding-row">
-              {{ p.port }} <span class="finding-status">({{ p.service }})</span>
-            </div>
-          </div>
-          <div v-else class="banner ok">Nenhuma porta aberta em {{ psResult.totalPorts }} verificadas.</div>
-        </template>
-        <div v-else-if="psResult?.error" class="banner danger">{{ psResult.error }}</div>
+        <p v-if="psResult" class="hint">Resultado disponível na aba Geral.</p>
         <p v-else class="hint">Ainda não executado.</p>
       </div>
 
@@ -379,17 +576,7 @@
 
         <button class="link-btn" :disabled="!canRunSingle('subdomainScan')" @click="runSingleModule('subdomainScan')">Rodar só este módulo</button>
         <div v-if="moduleRunning.subdomainScan" class="progress-bar indeterminate"><div class="progress-fill" /></div>
-
-        <template v-if="ssResult && !ssResult.error">
-          <div v-if="ssResult.found.length" class="findings-list">
-            <div v-for="f in ssResult.found" :key="f.hostname" class="finding-row">
-              {{ f.hostname }}
-              <span class="finding-status">{{ f.ips?.length ? f.ips.join(', ') : '' }}{{ f.httpStatus ? ' · HTTP ' + f.httpStatus : '' }}</span>
-            </div>
-          </div>
-          <div v-else class="banner ok">Nenhum subdomínio encontrado em {{ ssResult.totalSubdomains }} testados.</div>
-        </template>
-        <div v-else-if="ssResult?.error" class="banner danger">{{ ssResult.error }}</div>
+        <p v-if="ssResult" class="hint">Resultado disponível na aba Geral.</p>
         <p v-else class="hint">Ainda não executado.</p>
       </div>
 
@@ -427,17 +614,7 @@
 
         <button class="link-btn" :disabled="!canRunSingle('dirFuzz')" @click="runSingleModule('dirFuzz')">Rodar só este módulo</button>
         <div v-if="moduleRunning.dirFuzz" class="progress-bar indeterminate"><div class="progress-fill" /></div>
-
-        <template v-if="dfResult && !dfResult.error">
-          <div v-if="dfResult.found.length" class="findings-list">
-            <div v-for="f in dfResult.found" :key="f.path" class="finding-row">
-              <span class="status-badge" :class="dirStatusClass(f.status)">{{ f.status }}</span>
-              /{{ f.path }} <span class="finding-status">{{ formatSize(f.size) }}</span>
-            </div>
-          </div>
-          <div v-else class="banner ok">Nenhum path encontrado em {{ dfResult.totalPaths }} testados.</div>
-        </template>
-        <div v-else-if="dfResult?.error" class="banner danger">{{ dfResult.error }}</div>
+        <p v-if="dfResult" class="hint">Resultado disponível na aba Geral.</p>
         <p v-else class="hint">Ainda não executado.</p>
       </div>
 
@@ -446,11 +623,7 @@
         <p class="hint">Checklist de Vulnerabilidades · {{ CHECKS_CLIENT.length }} checagens, configuração padrão.</p>
         <button class="link-btn" :disabled="!canRunSingle('checks')" @click="runSingleModule('checks')">Rodar só este módulo</button>
         <div v-if="moduleRunning.checks" class="progress-bar indeterminate"><div class="progress-fill" /></div>
-
-        <div v-if="vsResult && !vsResult.error" class="summary-row">
-          <span class="hint">{{ vsResult.findings.length }} achado(s) em {{ vsResult.totalChecks }} checagens — detalhe completo na aba Geral.</span>
-        </div>
-        <div v-else-if="vsResult?.error" class="banner danger">{{ vsResult.error }}</div>
+        <p v-if="vsResult" class="hint">Resultado disponível na aba Geral.</p>
 
         <div v-for="group in CHECKS_BY_SEVERITY" :key="group.severity" class="category-block">
           <span class="section-label severity-label" :class="severityClass(group.severity)">{{ severityLabel(group.severity) }}</span>
@@ -467,30 +640,7 @@
           formulário de login (varre paths comuns como /login, /wp-login.php etc). Sem botão manual aqui — não há um
           endpoint de login configurável nesta aba.
         </p>
-
-        <template v-if="ctResult">
-          <div v-if="ctResult.skipped" class="banner warn">Login não detectado automaticamente — nenhuma tentativa foi feita.</div>
-          <div v-else-if="ctResult.error" class="banner danger">{{ ctResult.error }}</div>
-          <template v-else>
-            <p class="hint">
-              Formulário detectado em <code>{{ ctResult.detected?.sourceUrl }}</code> (usuário:
-              <code>{{ ctResult.detected?.userField }}</code>, senha: <code>{{ ctResult.detected?.passwordField }}</code>).
-            </p>
-            <div v-if="ctResult.findings?.length" class="banner danger">
-              <strong>Credencial fraca aceita:</strong>
-              <div v-for="f in ctResult.findings" :key="f.user + ':' + f.pass" class="finding-row">
-                {{ f.user }} : {{ f.pass }} <span class="finding-status">({{ f.status }})</span>
-              </div>
-            </div>
-            <div v-else class="banner ok">Nenhuma credencial fraca da lista rápida foi aceita.</div>
-            <div v-if="ctResult.rateLimit?.detected" class="banner ok">
-              Rate limit/lockout detectado após {{ ctResult.rateLimit.afterAttempts }} tentativas.
-            </div>
-            <div v-else-if="ctResult.totalAttempts" class="banner warn">
-              Sem rate limit/lockout detectado em {{ ctResult.totalAttempts }} tentativas.
-            </div>
-          </template>
-        </template>
+        <p v-if="ctResult" class="hint">Resultado disponível na aba Geral.</p>
         <p v-else class="hint">Ainda não executado — rode "Executar tudo" na aba Geral.</p>
       </div>
 
@@ -506,19 +656,7 @@
         </p>
         <button class="link-btn" :disabled="!canRunSingle('loadTest')" @click="runSingleModule('loadTest')">Rodar só este módulo</button>
         <div v-if="moduleRunning.loadTest" class="progress-bar indeterminate"><div class="progress-fill" /></div>
-
-        <template v-if="ltResult && !ltResult.error">
-          <div class="banner" :class="ltResult.errorRate >= 0.05 ? 'danger' : ltResult.errorRate > 0 ? 'warn' : 'ok'">
-            {{ ltResult.totalCompleted }} requisições ({{ Math.round(ltResult.achievedRps) }} req/s médio).
-          </div>
-          <div class="stats-grid">
-            <div class="stat-tile"><span class="stat-label">Taxa de erro</span><span class="stat-value">{{ formatPct(ltResult.errorRate) }}</span></div>
-            <div class="stat-tile"><span class="stat-label">Latência p50</span><span class="stat-value">{{ ltResult.latency.p50 }}ms</span></div>
-            <div class="stat-tile"><span class="stat-label">Latência p95</span><span class="stat-value">{{ ltResult.latency.p95 }}ms</span></div>
-            <div class="stat-tile"><span class="stat-label">Latência p99</span><span class="stat-value">{{ ltResult.latency.p99 }}ms</span></div>
-          </div>
-        </template>
-        <div v-else-if="ltResult?.error" class="banner danger">{{ ltResult.error }}</div>
+        <p v-if="ltResult" class="hint">Resultado disponível na aba Geral.</p>
         <p v-else class="hint">Ainda não executado.</p>
       </div>
     </div>
@@ -744,6 +882,12 @@ const lastResult = ref(props.data.lastResult || null)
 const moduleRunning = reactive({})
 const completedModules = reactive(new Set())
 
+// Achados por severidade começam abertos (padrão pedido no card); os
+// detalhes brutos por módulo começam fechados — só os achados "que
+// importam" (críticos pra baixo) ficam visíveis de cara.
+const closedSeverities = ref(new Set())
+const openModules = ref(new Set())
+
 let controller = null
 let moduleController = null
 
@@ -874,6 +1018,27 @@ function severityClass(severity) {
 
 function severityLabel(severity) {
   return SEVERITY_LABELS[severity] || severity
+}
+
+const findingsBySeverity = computed(() => {
+  const findings = lastResult.value?.findings || []
+  return Object.keys(SEVERITY_ORDER)
+    .map((severity) => ({ severity, items: findings.filter((f) => f.severity === severity) }))
+    .filter((g) => g.items.length)
+})
+
+function toggleSeverity(severity) {
+  const next = new Set(closedSeverities.value)
+  if (next.has(severity)) next.delete(severity)
+  else next.add(severity)
+  closedSeverities.value = next
+}
+
+function toggleModule(moduleId) {
+  const next = new Set(openModules.value)
+  if (next.has(moduleId)) next.delete(moduleId)
+  else next.add(moduleId)
+  openModules.value = next
 }
 
 function headerStatusLabel(status) {
@@ -1718,6 +1883,105 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border);
   border-radius: 7px;
   background: var(--color-bg-surface);
+}
+
+.acc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.module-results {
+  margin-top: 4px;
+}
+
+.acc-section {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  overflow: hidden;
+}
+
+.acc-section + .acc-section {
+  margin-top: 6px;
+}
+
+.acc-section.sev-critical,
+.acc-section.sev-high,
+.acc-section.sev-medium,
+.acc-section.sev-low,
+.acc-section.sev-info {
+  border-left-width: 3px;
+}
+
+.acc-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.acc-header:hover {
+  background: var(--color-hover);
+}
+
+.acc-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  transition: transform 0.12s ease;
+}
+
+.acc-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.acc-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.acc-count {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-secondary);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.acc-status {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-secondary);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.acc-status.status-bad {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.acc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.acc-body.findings-list {
+  gap: 6px;
 }
 
 .record-row {
