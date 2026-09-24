@@ -48,20 +48,27 @@
     </div>
 
     <div class="tab-body nodrag nowheel nopan">
-      <!-- Alvo -->
-      <div v-if="activeTab === 'target'" class="pane">
-        <div class="field-block">
-          <span class="section-label">URL alvo</span>
-          <input v-model="url" class="header-input mono" type="text" placeholder="https://exemplo.com" @input="syncData" />
-          <p class="hint">
-            Roda os 9 módulos de recon/pentest do DUX (DNS/WHOIS, Detector de Tecnologias, Headers de Segurança,
-            SSL/TLS, Varredura de Portas, Scanner de Subdomínios, Fuzzer de Diretórios, Checklist de
-            Vulnerabilidades e Teste de Credenciais) contra este alvo, cada um na configuração padrão, e consolida
-            tudo num único relatório por severidade. Use apenas em sistemas que você tem autorização para testar.
-          </p>
+      <!-- Geral (Alvo + Execução) -->
+      <div v-if="activeTab === 'overview'" class="pane overview-pane">
+        <div class="target-hero">
+          <div class="target-hero-head">
+            <span class="section-label">Alvo</span>
+            <span class="info-wrap">
+              <button type="button" class="info-btn" title="Sobre este scanner" @click="showTargetInfo = !showTargetInfo">?</button>
+              <Transition name="tip-fade">
+                <div v-if="showTargetInfo" class="info-tooltip">
+                  Roda os 9 módulos de recon/pentest do DUX (DNS/WHOIS, Detector de Tecnologias, Headers de
+                  Segurança, SSL/TLS, Varredura de Portas, Scanner de Subdomínios, Fuzzer de Diretórios, Checklist
+                  de Vulnerabilidades e Teste de Credenciais) contra este alvo — cada um na configuração padrão ou
+                  na que você ajustar na aba dele — e consolida tudo num único relatório por severidade. Use apenas
+                  em sistemas que você tem autorização para testar.
+                </div>
+              </Transition>
+            </span>
+          </div>
+          <input v-model="url" class="target-input mono" type="text" placeholder="https://exemplo.com" @input="syncData" />
+          <p v-if="domain" class="hint mono-hint">Domínio derivado para DNS/WHOIS, Subdomínios e TLS: {{ domain }}</p>
         </div>
-
-        <p v-if="domain" class="hint mono-hint">Domínio derivado para DNS/WHOIS, Subdomínios e TLS: {{ domain }}</p>
 
         <div class="field-row">
           <label class="exec-field">
@@ -73,10 +80,7 @@
             <input v-model.number="concurrency" type="number" min="1" max="50" :disabled="running" @input="syncData" />
           </label>
         </div>
-      </div>
 
-      <!-- Visão Geral -->
-      <div v-else-if="activeTab === 'overview'" class="pane">
         <div class="counts-row">
           <div class="count-pill sev-critical">
             <span class="count-value">{{ lastResult?.counts?.critical || 0 }}</span>
@@ -98,7 +102,7 @@
 
         <div v-if="!running && !showConfirm" class="start-row">
           <button class="btn-primary" :disabled="!canStart" @click="clickStart">Executar tudo</button>
-          <span v-if="!url" class="hint">Informe a URL alvo na aba Alvo.</span>
+          <span v-if="!url" class="hint">Informe a URL alvo acima.</span>
         </div>
 
         <div v-if="showConfirm" class="confirm-panel">
@@ -113,16 +117,6 @@
           </div>
         </div>
 
-        <div v-if="running" class="progress-panel">
-          <div class="progress-bar" :class="{ indeterminate: !progressPct }">
-            <div class="progress-fill" :style="progressPct ? { width: progressPct + '%' } : undefined" />
-          </div>
-          <div class="progress-row">
-            <span class="hint">{{ progressLabel }}</span>
-            <button class="btn-secondary" @click="stopScan">Parar</button>
-          </div>
-        </div>
-
         <div v-if="lastResult?.findings?.length" class="findings-list">
           <div v-for="f in lastResult.findings" :key="f.id" class="finding-card" :class="severityClass(f.severity)">
             <div class="finding-head">
@@ -131,6 +125,8 @@
               <span class="finding-module">{{ MODULE_LABELS[f.moduleId] }}</span>
             </div>
             <p class="hint finding-evidence">{{ f.evidence }}</p>
+            <p v-if="f.url" class="hint finding-url mono-hint">Testado em: {{ f.url }}</p>
+            <p v-if="f.recommendation" class="finding-recommendation"><strong>Como corrigir:</strong> {{ f.recommendation }}</p>
           </div>
         </div>
         <div v-else-if="lastResult && !running && !lastResult.error" class="banner ok">
@@ -143,11 +139,36 @@
           </span>
         </div>
         <div v-if="lastResult && lastResult.error" class="banner danger">{{ lastResult.error }}</div>
+
+        <div class="stage-footer">
+          <div v-if="running" class="progress-panel">
+            <div class="progress-bar" :class="{ indeterminate: !progressPct }">
+              <div class="progress-fill" :style="progressPct ? { width: progressPct + '%' } : undefined" />
+            </div>
+            <div class="progress-row">
+              <span class="hint">{{ progressLabel }}</span>
+              <button class="btn-secondary" @click="stopScan">Parar</button>
+            </div>
+          </div>
+          <div class="stage-badges">
+            <button
+              v-for="s in visibleStages"
+              :key="s.id"
+              type="button"
+              class="stage-badge"
+              :class="stageStatus(s.id)"
+              :title="MODULE_LABELS[s.id]"
+              @click="activeTab = s.tab"
+            >
+              {{ s.label }}
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- DNS / WHOIS -->
       <div v-else-if="activeTab === 'dnsWhois'" class="pane">
-        <p class="hint">DNS/WHOIS · configuração padrão (só usa o domínio derivado na aba Alvo).</p>
+        <p class="hint">DNS/WHOIS · configuração padrão (só usa o domínio derivado na aba Geral).</p>
         <button class="link-btn" :disabled="!canRunSingle('dnsWhois')" @click="runSingleModule('dnsWhois')">Rodar só este módulo</button>
         <div v-if="moduleRunning.dnsWhois" class="progress-bar indeterminate"><div class="progress-fill" /></div>
 
@@ -273,7 +294,42 @@
 
       <!-- Portas -->
       <div v-else-if="activeTab === 'portScan'" class="pane">
-        <p class="hint">Varredura de Portas · configuração padrão (top 20 portas comuns, banner grab ativo).</p>
+        <p class="hint">Varredura de Portas · banner grab ativo. Padrão é top 20, mas dá pra ajustar antes de rodar.</p>
+
+        <div class="mode-row">
+          <label class="radio-label">
+            <input type="radio" value="top20" v-model="portsMode" @change="syncData" />
+            Comuns (top 20)
+          </label>
+          <label class="radio-label">
+            <input type="radio" value="top100" v-model="portsMode" @change="syncData" />
+            Estendida (top 100)
+          </label>
+          <label class="radio-label">
+            <input type="radio" value="custom" v-model="portsMode" @change="syncData" />
+            Customizada
+          </label>
+        </div>
+
+        <div v-if="portsMode === 'top20'">
+          <div class="quick-grid">
+            <span v-for="p in TOP20_PORTS_CLIENT" :key="p.port" class="quick-pill">{{ p.port }}/{{ p.service }}</span>
+          </div>
+        </div>
+        <div v-else-if="portsMode === 'top100'">
+          <p class="hint">{{ TOP20_PORTS_CLIENT.length }} portas comuns + ~80 adicionais (bancos de dados, filas, containers, k8s, ferramentas de dev...).</p>
+        </div>
+        <div v-else class="custom-list">
+          <textarea
+            v-model="customPorts"
+            class="body-editor wordlist-editor"
+            spellcheck="false"
+            placeholder="22,80,443,8000-8100"
+            @input="syncData"
+          />
+          <p class="hint">Portas separadas por vírgula, ou faixas com hífen (ex: 8000-8100). Até 10.000 portas.</p>
+        </div>
+
         <button class="link-btn" :disabled="!canRunSingle('portScan')" @click="runSingleModule('portScan')">Rodar só este módulo</button>
         <div v-if="moduleRunning.portScan" class="progress-bar indeterminate"><div class="progress-fill" /></div>
 
@@ -291,7 +347,36 @@
 
       <!-- Subdomínios -->
       <div v-else-if="activeTab === 'subdomainScan'" class="pane">
-        <p class="hint">Scanner de Subdomínios · configuração padrão (wordlist comum).</p>
+        <p class="hint">Scanner de Subdomínios · padrão é a wordlist comum, mas dá pra customizar antes de rodar.</p>
+
+        <div class="mode-row">
+          <label class="radio-label">
+            <input type="radio" value="common" v-model="subdomainWordlistMode" @change="syncData" />
+            Comuns ({{ COMMON_SUBDOMAINS_CLIENT.length }})
+          </label>
+          <label class="radio-label">
+            <input type="radio" value="custom" v-model="subdomainWordlistMode" @change="syncData" />
+            Customizada
+          </label>
+        </div>
+
+        <div v-if="subdomainWordlistMode === 'common'">
+          <div class="quick-grid">
+            <span v-for="s in COMMON_SUBDOMAINS_CLIENT.slice(0, 40)" :key="s" class="quick-pill">{{ s }}</span>
+            <span class="quick-pill quick-pill-more">+{{ COMMON_SUBDOMAINS_CLIENT.length - 40 }}</span>
+          </div>
+        </div>
+        <div v-else class="custom-list">
+          <textarea
+            v-model="subdomainCustomWordlist"
+            class="body-editor wordlist-editor"
+            spellcheck="false"
+            placeholder="www&#10;api&#10;dev&#10;staging"
+            @input="syncData"
+          />
+          <p class="hint">Um subdomínio por linha (só o prefixo, sem o domínio). Até 2.000 entradas.</p>
+        </div>
+
         <button class="link-btn" :disabled="!canRunSingle('subdomainScan')" @click="runSingleModule('subdomainScan')">Rodar só este módulo</button>
         <div v-if="moduleRunning.subdomainScan" class="progress-bar indeterminate"><div class="progress-fill" /></div>
 
@@ -310,7 +395,36 @@
 
       <!-- Diretórios -->
       <div v-else-if="activeTab === 'dirFuzz'" class="pane">
-        <p class="hint">Fuzzer de Diretórios · configuração padrão (wordlist comum).</p>
+        <p class="hint">Fuzzer de Diretórios · padrão é a wordlist comum, mas dá pra customizar antes de rodar.</p>
+
+        <div class="mode-row">
+          <label class="radio-label">
+            <input type="radio" value="common" v-model="dirFuzzWordlistMode" @change="syncData" />
+            Comuns ({{ COMMON_PATHS_CLIENT.length }})
+          </label>
+          <label class="radio-label">
+            <input type="radio" value="custom" v-model="dirFuzzWordlistMode" @change="syncData" />
+            Customizada
+          </label>
+        </div>
+
+        <div v-if="dirFuzzWordlistMode === 'common'">
+          <div class="quick-grid">
+            <span v-for="p in COMMON_PATHS_CLIENT.slice(0, 40)" :key="p" class="quick-pill">{{ p }}</span>
+            <span class="quick-pill quick-pill-more">+{{ COMMON_PATHS_CLIENT.length - 40 }}</span>
+          </div>
+        </div>
+        <div v-else class="custom-list">
+          <textarea
+            v-model="dirFuzzCustomWordlist"
+            class="body-editor wordlist-editor"
+            spellcheck="false"
+            placeholder="admin&#10;.env&#10;api/v1&#10;backup.zip"
+            @input="syncData"
+          />
+          <p class="hint">Um path por linha (sem barra inicial). Até 5.000 entradas.</p>
+        </div>
+
         <button class="link-btn" :disabled="!canRunSingle('dirFuzz')" @click="runSingleModule('dirFuzz')">Rodar só este módulo</button>
         <div v-if="moduleRunning.dirFuzz" class="progress-bar indeterminate"><div class="progress-fill" /></div>
 
@@ -453,7 +567,6 @@ const MODULE_LABELS = {
 }
 
 const TABS = [
-  { id: 'target', label: 'Alvo' },
   { id: 'overview', label: 'Geral' },
   { id: 'dnsWhois', label: 'DNS' },
   { id: 'techFingerprint', label: 'Tech' },
@@ -466,6 +579,74 @@ const TABS = [
   { id: 'credentialTest', label: 'Creds' },
   { id: 'loadTest', label: 'Carga' }
 ]
+
+// Mesma ordem/ids de MODULE_LABELS — usado pra renderizar os badges de etapa
+// no rodapé da aba Geral. 'tab' é o id da aba correspondente (só 'vulnScan'
+// difere: a aba se chama 'checks').
+const STAGE_DEFS = [
+  { id: 'dnsWhois', label: 'DNS', tab: 'dnsWhois' },
+  { id: 'techFingerprint', label: 'Tech', tab: 'techFingerprint' },
+  { id: 'securityHeaders', label: 'Headers', tab: 'securityHeaders' },
+  { id: 'tlsCheck', label: 'TLS', tab: 'tlsCheck' },
+  { id: 'portScan', label: 'Portas', tab: 'portScan' },
+  { id: 'subdomainScan', label: 'Subdom.', tab: 'subdomainScan' },
+  { id: 'dirFuzz', label: 'Dirs', tab: 'dirFuzz' },
+  { id: 'vulnScan', label: 'Checks', tab: 'checks' },
+  { id: 'credentialTest', label: 'Creds', tab: 'credentialTest' },
+  { id: 'loadTest', label: 'Carga', tab: 'loadTest' }
+]
+
+// prévia client-side da wordlist "common" do fuzzer de diretórios (bridge/dirFuzz.js)
+// — mesmo motivo do CHECKS_CLIENT logo abaixo: mostrar a lista na aba sem ida
+// e volta ao bridge.
+const COMMON_PATHS_CLIENT = [
+  'admin', 'administrator', 'admin.php', 'administrator.php', 'admin/login', 'wp-admin', 'wp-login.php',
+  'login', 'logout', 'signin', 'signup', 'register', 'dashboard', 'panel', 'cpanel', 'console',
+  'api', 'api/v1', 'api/v2', 'graphql', 'swagger', 'swagger.json', 'swagger-ui', 'api-docs', 'openapi.json',
+  '.env', '.env.local', '.env.production', '.env.dev', '.env.bak', 'config', 'config.php', 'config.json',
+  'config.yml', 'settings.php', '.git', '.git/config', '.git/HEAD', '.git/index', '.git/logs/HEAD', '.svn', '.hg',
+  'backup', 'backups', 'backup.zip', 'backup.tar.gz', 'backup.sql', 'dump.sql', 'db.sql', 'database.sql',
+  '.htaccess', '.htpasswd', 'robots.txt', 'sitemap.xml', 'security.txt', '.well-known', '.well-known/security.txt',
+  'phpinfo.php', 'info.php', 'test.php', 'test', 'debug', 'debug.php', 'server-status', 'server-info',
+  '.aws', '.aws/credentials', '.ssh', '.ssh/id_rsa', 'id_rsa', 'id_rsa.pub', 'credentials', 'credentials.json',
+  'secret', 'secrets', 'secrets.json', 'keys', 'key.pem', 'private.key', 'certificate.pem',
+  '.npmrc', '.dockerignore', '.gitignore', 'docker-compose.yml', 'Dockerfile', 'package.json', 'composer.json',
+  'composer.lock', 'package-lock.json', 'yarn.lock', 'vendor', 'node_modules', '.DS_Store', 'Thumbs.db',
+  'uploads', 'upload', 'files', 'assets', 'static', 'media', 'images', 'tmp', 'temp', 'cache',
+  'logs', 'log', 'error_log', 'access_log', 'error.log', 'access.log', '.idea', '.vscode',
+  'install', 'install.php', 'setup', 'setup.php', 'old', 'old_site', 'backup_old', 'new', 'staging',
+  'test-api', 'health', 'healthz', 'status', 'metrics', 'actuator', 'actuator/health', 'actuator/env',
+  'auth', 'oauth', 'token', 'jwt', 'README.md', 'CHANGELOG.md', 'LICENSE',
+  'private', 'internal', 'hidden', 'admin_area', 'manage', 'management', 'webadmin', 'adminpanel'
+]
+
+// prévia client-side da wordlist "common" do scanner de subdomínios
+// (bridge/subdomainScan.js) — mesmo motivo do COMMON_PATHS_CLIENT acima.
+const COMMON_SUBDOMAINS_CLIENT = [
+  'www', 'mail', 'webmail', 'smtp', 'pop', 'imap', 'ns1', 'ns2', 'mx', 'api',
+  'dev', 'staging', 'stage', 'test', 'qa', 'uat', 'demo', 'beta', 'preprod', 'prod',
+  'vpn', 'admin', 'portal', 'app', 'mobile', 'm', 'static', 'media', 'img', 'images',
+  'cdn', 'assets', 'files', 'upload', 'uploads', 'download', 'downloads', 'secure', 'sso', 'auth',
+  'login', 'dashboard', 'panel', 'cpanel', 'whm', 'git', 'gitlab', 'github', 'jenkins', 'ci',
+  'jira', 'confluence', 'wiki', 'docs', 'help', 'support', 'status', 'monitor', 'monitoring', 'grafana',
+  'kibana', 'elastic', 'logs', 'redis', 'db', 'database', 'mysql', 'postgres', 'mongo', 'sql',
+  's3', 'old', 'new', 'backup', 'temp', 'tmp', 'internal', 'intranet', 'remote', 'ssh',
+  'ftp', 'ftps', 'sftp', 'shop', 'store', 'blog', 'news', 'forum', 'community', 'chat',
+  'video', 'stream', 'live', 'api-dev', 'api-staging', 'dev-api', 'staging-api', 'test-api', 'my', 'account',
+  'accounts', 'id', 'oauth', 'payments', 'pay', 'billing', 'crm', 'erp', 'hr', 'ns',
+  'proxy', 'lb', 'edge', 'origin', 'cache', 'search', 'kafka', 'rabbitmq', 'queue', 'worker',
+  'jobs', 'cron', 'batch', 'node', 'node1', 'node2', 'web', 'web1', 'web2', 'app1',
+  'app2', 'api1', 'api2', 'host', 'server'
+]
+
+// prévia client-side do top20 de portas (bridge/portScan.js) — mesmo motivo
+// do COMMON_PATHS_CLIENT acima.
+const TOP20_PORTS_CLIENT = [
+  [21, 'ftp'], [22, 'ssh'], [23, 'telnet'], [25, 'smtp'], [53, 'dns'],
+  [80, 'http'], [110, 'pop3'], [111, 'rpcbind'], [135, 'msrpc'], [139, 'netbios-ssn'],
+  [143, 'imap'], [443, 'https'], [445, 'microsoft-ds'], [993, 'imaps'], [995, 'pop3s'],
+  [3306, 'mysql'], [3389, 'rdp'], [5900, 'vnc'], [8080, 'http-proxy'], [9200, 'elasticsearch']
+].map(([port, service]) => ({ port, service }))
 
 // prévia client-side da checklist do bridge (bridge/vulnScan.js) — mesmo
 // motivo do COMMON_PATHS_CLIENT em DirFuzzNode.vue: mostrar a lista na aba
@@ -540,12 +721,20 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   defaultHeight: 620
 })
 
-const activeTab = ref('target')
+const activeTab = ref('overview')
+const showTargetInfo = ref(false)
 
 const url = ref(props.data.url || '')
 const timeoutMs = ref(props.data.timeoutMs ?? 6000)
 const concurrency = ref(props.data.concurrency ?? 5)
 const loadTestEnabled = ref(props.data.loadTestEnabled ?? true)
+
+const dirFuzzWordlistMode = ref(props.data.dirFuzzWordlistMode || 'common')
+const dirFuzzCustomWordlist = ref(props.data.dirFuzzCustomWordlist || '')
+const subdomainWordlistMode = ref(props.data.subdomainWordlistMode || 'common')
+const subdomainCustomWordlist = ref(props.data.subdomainCustomWordlist || '')
+const portsMode = ref(props.data.portsMode || 'top20')
+const customPorts = ref(props.data.customPorts || '')
 
 const running = ref(false)
 const showConfirm = ref(false)
@@ -553,6 +742,7 @@ const runningModule = ref(null)
 const subProgress = ref(null)
 const lastResult = ref(props.data.lastResult || null)
 const moduleRunning = reactive({})
+const completedModules = reactive(new Set())
 
 let controller = null
 let moduleController = null
@@ -569,8 +759,69 @@ function syncData() {
     timeoutMs: timeoutMs.value,
     concurrency: concurrency.value,
     loadTestEnabled: loadTestEnabled.value,
+    dirFuzzWordlistMode: dirFuzzWordlistMode.value,
+    dirFuzzCustomWordlist: dirFuzzCustomWordlist.value,
+    subdomainWordlistMode: subdomainWordlistMode.value,
+    subdomainCustomWordlist: subdomainCustomWordlist.value,
+    portsMode: portsMode.value,
+    customPorts: customPorts.value,
     lastResult: lastResult.value
   })
+}
+
+function parseCustomWordlistCount(raw, maxEntries) {
+  const seen = new Set()
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim().replace(/^\/+/, '')
+    if (!trimmed) continue
+    seen.add(trimmed)
+    if (seen.size >= maxEntries) break
+  }
+  return seen.size
+}
+
+const dirFuzzWordlistCount = computed(() =>
+  dirFuzzWordlistMode.value === 'custom' ? parseCustomWordlistCount(dirFuzzCustomWordlist.value, 5000) : COMMON_PATHS_CLIENT.length
+)
+
+const subdomainWordlistCount = computed(() =>
+  subdomainWordlistMode.value === 'custom' ? parseCustomWordlistCount(subdomainCustomWordlist.value, 2000) : COMMON_SUBDOMAINS_CLIENT.length
+)
+
+function parseCustomPortsCount() {
+  const seen = new Set()
+  for (const token of customPorts.value.split(',')) {
+    const trimmed = token.trim()
+    if (!trimmed) continue
+    const [a, b] = trimmed.split('-').map((s) => Number(s.trim()))
+    if (!Number.isInteger(a) || a < 1 || a > 65535) continue
+    if (b === undefined) {
+      seen.add(a)
+    } else if (Number.isInteger(b) && b >= a && b <= 65535) {
+      for (let p = a; p <= b && seen.size < 10000; p++) seen.add(p)
+    }
+    if (seen.size >= 10000) break
+  }
+  return seen.size
+}
+
+const portsCount = computed(() => {
+  if (portsMode.value === 'custom') return parseCustomPortsCount()
+  if (portsMode.value === 'top20') return TOP20_PORTS_CLIENT.length
+  return 100
+})
+
+const visibleStages = computed(() => STAGE_DEFS.filter((s) => s.id !== 'loadTest' || loadTestEnabled.value))
+
+function stageStatus(moduleId) {
+  if (running.value) {
+    if (moduleId === runningModule.value) return 'running'
+    if (completedModules.has(moduleId)) return 'done'
+    return 'pending'
+  }
+  if (moduleRunning[moduleId]) return 'running'
+  if (lastResult.value?.modules?.[moduleId]) return 'done'
+  return 'pending'
 }
 
 const canStart = computed(() => Boolean(url.value.trim()) && !running.value)
@@ -694,13 +945,25 @@ function startFullScan() {
   lastResult.value = null
   runningModule.value = null
   subProgress.value = null
+  completedModules.clear()
   running.value = true
   activeTab.value = 'overview'
 
   controller = runPentestSuite(
-    { url: url.value.trim(), timeoutMs: timeoutMs.value, concurrency: concurrency.value, modules: { loadTest: loadTestEnabled.value } },
+    {
+      url: url.value.trim(),
+      timeoutMs: timeoutMs.value,
+      concurrency: concurrency.value,
+      modules: { loadTest: loadTestEnabled.value },
+      portsConfig: { mode: portsMode.value, customPorts: customPorts.value },
+      subdomainWordlist: { mode: subdomainWordlistMode.value, customWordlist: subdomainCustomWordlist.value },
+      dirFuzzWordlist: { mode: dirFuzzWordlistMode.value, customWordlist: dirFuzzCustomWordlist.value }
+    },
     {
       onProgress: (msg) => {
+        if (msg.module && runningModule.value && msg.module !== runningModule.value) {
+          completedModules.add(runningModule.value)
+        }
         runningModule.value = msg.module
         subProgress.value = msg.seq && msg.total ? { seq: msg.seq, total: msg.total } : null
       },
@@ -728,15 +991,31 @@ function payloadFor(moduleId) {
       return { domain: domain.value, timeoutMs: timeoutMs.value }
     case 'techFingerprint':
     case 'securityHeaders':
-    case 'dirFuzz':
     case 'checks':
       return { url: target, timeoutMs: timeoutMs.value, concurrency: concurrency.value }
+    case 'dirFuzz':
+      return {
+        url: target,
+        timeoutMs: timeoutMs.value,
+        concurrency: concurrency.value,
+        wordlist: { mode: dirFuzzWordlistMode.value, customWordlist: dirFuzzCustomWordlist.value }
+      }
     case 'tlsCheck':
       return { host: domain.value, timeoutMs: timeoutMs.value }
     case 'portScan':
-      return { host: domain.value, ports: { mode: 'top20' }, grabBanner: true, concurrency: concurrency.value }
+      return {
+        host: domain.value,
+        ports: { mode: portsMode.value, customPorts: customPorts.value },
+        grabBanner: true,
+        concurrency: concurrency.value
+      }
     case 'subdomainScan':
-      return { domain: domain.value, timeoutMs: timeoutMs.value, concurrency: concurrency.value }
+      return {
+        domain: domain.value,
+        timeoutMs: timeoutMs.value,
+        concurrency: concurrency.value,
+        wordlist: { mode: subdomainWordlistMode.value, customWordlist: subdomainCustomWordlist.value }
+      }
     case 'loadTest':
       return { target: { url: target, method: 'GET', headers: [] }, rps: 10, durationSec: 5, rampUpSec: 2 }
     default:
@@ -765,7 +1044,11 @@ function moduleResultKey(moduleId) {
 }
 
 function canRunSingle(moduleId) {
-  return Boolean(url.value.trim()) && !running.value && !moduleRunning[moduleId]
+  if (!url.value.trim() || running.value || moduleRunning[moduleId]) return false
+  if (moduleId === 'dirFuzz' && dirFuzzWordlistCount.value === 0) return false
+  if (moduleId === 'subdomainScan' && subdomainWordlistCount.value === 0) return false
+  if (moduleId === 'portScan' && portsCount.value === 0) return false
+  return true
 }
 
 function runSingleModule(moduleId) {
@@ -947,6 +1230,10 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 8px;
   padding: 8px;
+}
+
+.overview-pane {
+  min-height: 100%;
 }
 
 .field-block {
@@ -1276,6 +1563,24 @@ onBeforeUnmount(() => {
 .finding-evidence {
   font-family: 'Menlo', Consolas, monospace;
   word-break: break-word;
+}
+
+.finding-url {
+  word-break: break-all;
+}
+
+.finding-recommendation {
+  margin: 2px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--color-text-secondary);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.finding-recommendation strong {
+  color: var(--color-text-primary);
 }
 
 .finding-row {
@@ -1723,6 +2028,183 @@ onBeforeUnmount(() => {
   font-weight: 700;
   color: var(--color-text-primary);
   font-family: 'Menlo', Consolas, monospace;
+}
+
+.target-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 10px 6px;
+}
+
+.target-hero-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.target-input {
+  width: 100%;
+  max-width: 420px;
+  height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 9px;
+  background: var(--color-bg-surface-alt);
+  color: var(--color-text-primary);
+  font-size: 15px;
+  text-align: center;
+}
+
+.target-input:focus {
+  outline: none;
+  border-color: var(--selected-color, #3b82f6);
+}
+
+.info-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.info-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.info-btn:hover {
+  background: var(--color-hover);
+  color: var(--color-text-primary);
+}
+
+.info-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: 260px;
+  padding: 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background: var(--color-bg-surface-alt);
+  box-shadow: 0 8px 24px var(--color-shadow);
+  color: var(--color-text-secondary);
+  font-size: 10.5px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.tip-fade-enter-active,
+.tip-fade-leave-active {
+  transition: opacity 0.12s ease;
+}
+
+.tip-fade-enter-from,
+.tip-fade-leave-to {
+  opacity: 0;
+}
+
+.stage-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.stage-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.stage-badge {
+  padding: 3px 8px;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-tertiary);
+  font-size: 9.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.stage-badge:hover {
+  color: var(--color-text-primary);
+}
+
+.stage-badge.running {
+  background: rgba(59, 130, 246, 0.18);
+  color: #3b82f6;
+}
+
+.stage-badge.done {
+  background: rgba(34, 197, 94, 0.16);
+  color: #16a34a;
+}
+
+.mode-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.quick-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.quick-pill-more {
+  font-weight: 600;
+}
+
+.custom-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.body-editor {
+  width: 100%;
+  height: 80px;
+  padding: 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 11.5px;
+  font-family: 'Menlo', Consolas, monospace;
+  line-height: 1.5;
+  resize: none;
+}
+
+.body-editor:focus {
+  outline: none;
+  border-color: var(--color-text-secondary);
 }
 
 .resize-handle {

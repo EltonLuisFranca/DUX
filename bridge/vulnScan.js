@@ -87,7 +87,7 @@ async function tryPaths(base, paths, matcher, ctx) {
     const r = await safeFetch(`${base}/${p}`, {}, ctx.timeoutMs, ctx.activeControllers)
     if (r?.response.ok) {
       const hit = matcher(r.text, p)
-      if (hit) return hit
+      if (hit) return { evidence: hit, path: p }
     }
   }
   return null
@@ -98,17 +98,20 @@ async function tryPaths(base, paths, matcher, ctx) {
 // mira CVEs individuais por versão), é uma checklist curada das classes de
 // vulnerabilidade mais comuns em recon de aplicação web — mesmo espírito das
 // wordlists de dir-fuzz/subdomain-scan: cobre o mais provável, não é
-// exaustiva. Todo check devolve uma string de evidência ou null.
+// exaustiva. Todo check devolve { evidence, path } (path = o path/query
+// relativo à base que confirmou o achado, pra UI montar a URL exata
+// testada) ou null.
 const CHECKS = [
   {
     id: 'git-exposed',
     name: '.git exposto',
     severity: 'critical',
     category: 'exposição de arquivo',
+    recommendation: 'Remova a pasta .git do servidor de produção (nunca faça deploy dela junto com a aplicação) ou bloqueie o acesso a caminhos que começam com ponto no servidor web/proxy.',
     run: async (ctx) => {
       const r = await safeFetch(`${ctx.base}/.git/HEAD`, {}, ctx.timeoutMs, ctx.activeControllers)
       if (r?.response.ok && /^ref:\s*refs\//.test(r.text.trim())) {
-        return `.git/HEAD acessível: "${r.text.trim().slice(0, 60)}" — repositório pode ser reconstruído com git-dumper`
+        return { evidence: `.git/HEAD acessível: "${r.text.trim().slice(0, 60)}" — repositório pode ser reconstruído com git-dumper`, path: '.git/HEAD' }
       }
       return null
     }
@@ -118,10 +121,11 @@ const CHECKS = [
     name: '.env exposto',
     severity: 'critical',
     category: 'exposição de arquivo',
+    recommendation: 'Bloqueie o acesso público a arquivos que começam com ponto no servidor web (ex: "location ~ /\\. { deny all; }" no Nginx) e rotacione qualquer segredo que possa ter vazado.',
     run: async (ctx) => {
       const r = await safeFetch(`${ctx.base}/.env`, {}, ctx.timeoutMs, ctx.activeControllers)
       if (r?.response.ok && /^[A-Z][A-Z0-9_]*\s*=/m.test(r.text) && r.text.length < 20_000) {
-        return `.env acessível com conteúdo tipo KEY=VALUE (${r.text.length} bytes)`
+        return { evidence: `.env acessível com conteúdo tipo KEY=VALUE (${r.text.length} bytes)`, path: '.env' }
       }
       return null
     }
@@ -131,9 +135,10 @@ const CHECKS = [
     name: 'Credenciais AWS expostas',
     severity: 'critical',
     category: 'exposição de arquivo',
+    recommendation: 'Remova o arquivo do servidor imediatamente e rotacione as credenciais AWS expostas — considere-as comprometidas.',
     run: async (ctx) => {
       const r = await safeFetch(`${ctx.base}/.aws/credentials`, {}, ctx.timeoutMs, ctx.activeControllers)
-      if (r?.response.ok && /aws_access_key_id/i.test(r.text)) return '.aws/credentials acessível publicamente'
+      if (r?.response.ok && /aws_access_key_id/i.test(r.text)) return { evidence: '.aws/credentials acessível publicamente', path: '.aws/credentials' }
       return null
     }
   },
@@ -142,6 +147,7 @@ const CHECKS = [
     name: 'Chave SSH privada exposta',
     severity: 'critical',
     category: 'exposição de arquivo',
+    recommendation: 'Remova a chave privada do diretório público e gere um novo par de chaves — a atual deve ser considerada comprometida.',
     run: (ctx) =>
       tryPaths(
         ctx.base,
@@ -155,6 +161,7 @@ const CHECKS = [
     name: 'Backup de banco exposto',
     severity: 'high',
     category: 'exposição de arquivo',
+    recommendation: 'Mova o backup pra fora do webroot (storage privado) e restrinja o acesso via autenticação — nunca deixe dumps de banco acessíveis publicamente.',
     run: (ctx) =>
       tryPaths(
         ctx.base,
@@ -168,6 +175,7 @@ const CHECKS = [
     name: 'Path traversal básico',
     severity: 'critical',
     category: 'injeção',
+    recommendation: 'Valide e normalize qualquer path recebido do usuário antes de acessar o filesystem; use uma allowlist de arquivos/diretórios em vez de montar o path com entrada externa.',
     run: (ctx) =>
       tryPaths(
         ctx.base,
@@ -181,10 +189,11 @@ const CHECKS = [
     name: 'Erro de SQL ao injetar aspas',
     severity: 'critical',
     category: 'injeção',
+    recommendation: 'Use queries parametrizadas/prepared statements em vez de concatenar entrada do usuário na query SQL, e desabilite mensagens de erro de banco em produção.',
     run: async (ctx) => {
       const r = await safeFetch(`${ctx.base}/?id=1'`, {}, ctx.timeoutMs, ctx.activeControllers)
       if (r && /sql syntax|mysql_fetch|ora-\d{5}|postgresql.*error|sqlite3?::|unclosed quotation mark|sqlstate\[/i.test(r.text)) {
-        return 'erro de banco de dados exposto ao injetar aspas no parâmetro "id" (possível SQL Injection)'
+        return { evidence: 'erro de banco de dados exposto ao injetar aspas no parâmetro "id" (possível SQL Injection)', path: "?id=1'" }
       }
       return null
     }
@@ -194,11 +203,14 @@ const CHECKS = [
     name: 'XSS refletido básico',
     severity: 'high',
     category: 'injeção',
+    recommendation: 'Faça encode (HTML entity) de qualquer entrada do usuário antes de refletir ela na resposta, e considere um Content-Security-Policy como camada extra.',
     run: async (ctx) => {
       const probe = '<duxscan>1</duxscan>'
       for (const param of ['q', 'search', 's', 'query']) {
         const r = await safeFetch(`${ctx.base}/?${param}=${encodeURIComponent(probe)}`, {}, ctx.timeoutMs, ctx.activeControllers)
-        if (r?.text.includes(probe)) return `payload refletido sem encoding via parâmetro "${param}" (possível XSS refletido)`
+        if (r?.text.includes(probe)) {
+          return { evidence: `payload refletido sem encoding via parâmetro "${param}" (possível XSS refletido)`, path: `?${param}=${encodeURIComponent(probe)}` }
+        }
       }
       return null
     }
@@ -208,6 +220,7 @@ const CHECKS = [
     name: 'Open redirect',
     severity: 'medium',
     category: 'lógica de negócio',
+    recommendation: 'Valide o destino do redirect contra uma allowlist de domínios/paths internos em vez de aceitar qualquer URL vinda de parâmetro.',
     run: async (ctx) => {
       const evilHost = 'evil-dux-pentest-probe.example'
       for (const param of ['next', 'url', 'redirect', 'return', 'continue', 'dest']) {
@@ -215,7 +228,7 @@ const CHECKS = [
         const status = r?.response.status || 0
         const location = r?.response.headers.get('location') || ''
         if (status >= 300 && status < 400 && location.includes(evilHost)) {
-          return `parâmetro "${param}" redireciona para domínio externo arbitrário (Location: ${location})`
+          return { evidence: `parâmetro "${param}" redireciona para domínio externo arbitrário (Location: ${location})`, path: `?${param}=https://${evilHost}` }
         }
       }
       return null
@@ -226,13 +239,17 @@ const CHECKS = [
     name: 'CORS mal configurado',
     severity: 'high',
     category: 'configuração',
+    recommendation: 'Não reflita a origem enviada — restrinja Access-Control-Allow-Origin a uma lista fixa de domínios confiáveis, especialmente com Allow-Credentials habilitado.',
     run: async (ctx) => {
       const evilOrigin = 'https://evil-dux-pentest-probe.example'
       const r = await safeFetch(`${ctx.base}/`, { headers: { Origin: evilOrigin } }, ctx.timeoutMs, ctx.activeControllers)
       const aco = r?.response.headers.get('access-control-allow-origin')
       const acc = r?.response.headers.get('access-control-allow-credentials')
       if (aco === evilOrigin) {
-        return `Access-Control-Allow-Origin reflete a origem arbitrária enviada${acc === 'true' ? ', com Allow-Credentials habilitado (crítico)' : ''}`
+        return {
+          evidence: `Access-Control-Allow-Origin reflete a origem arbitrária enviada${acc === 'true' ? ', com Allow-Credentials habilitado (crítico)' : ''}`,
+          path: ''
+        }
       }
       return null
     }
@@ -242,11 +259,12 @@ const CHECKS = [
     name: 'Métodos HTTP perigosos habilitados',
     severity: 'medium',
     category: 'configuração',
+    recommendation: 'Desabilite os métodos HTTP que a aplicação não usa (PUT, DELETE, TRACE) no servidor web/proxy.',
     run: async (ctx) => {
       const r = await safeFetch(`${ctx.base}/`, { method: 'OPTIONS' }, ctx.timeoutMs, ctx.activeControllers)
       const allow = (r?.response.headers.get('allow') || '').toUpperCase()
       const dangerous = ['PUT', 'DELETE', 'TRACE'].filter((m) => allow.includes(m))
-      if (dangerous.length) return `método(s) ${dangerous.join(', ')} habilitado(s) (Allow: ${allow})`
+      if (dangerous.length) return { evidence: `método(s) ${dangerous.join(', ')} habilitado(s) (Allow: ${allow})`, path: '' }
       return null
     }
   },
@@ -255,10 +273,11 @@ const CHECKS = [
     name: 'Host header refletido',
     severity: 'medium',
     category: 'injeção',
+    recommendation: 'Valide o header Host contra uma allowlist de domínios esperados em vez de confiar nele diretamente (ex: em links de reset de senha ou cache).',
     run: async (ctx) => {
       const probeHost = 'duxpentest-probe.example'
       const r = await requestWithHostHeader(`${ctx.base}/`, probeHost, ctx.timeoutMs)
-      if (r?.text.includes(probeHost)) return 'Host header arbitrário é refletido na resposta (possível cache/password-reset poisoning)'
+      if (r?.text.includes(probeHost)) return { evidence: 'Host header arbitrário é refletido na resposta (possível cache/password-reset poisoning)', path: '' }
       return null
     }
   },
@@ -267,9 +286,10 @@ const CHECKS = [
     name: 'Listagem de diretório habilitada',
     severity: 'medium',
     category: 'configuração',
+    recommendation: 'Desabilite a listagem de diretório no servidor web (ex: "Options -Indexes" no Apache, "autoindex off" no Nginx).',
     run: async (ctx) => {
       const r = await safeFetch(`${ctx.base}/`, {}, ctx.timeoutMs, ctx.activeControllers)
-      if (r && /<title>index of \//i.test(r.text)) return 'listagem de diretório habilitada na raiz'
+      if (r && /<title>index of \//i.test(r.text)) return { evidence: 'listagem de diretório habilitada na raiz', path: '' }
       return null
     }
   },
@@ -278,6 +298,7 @@ const CHECKS = [
     name: 'Erro verboso / stack trace exposto',
     severity: 'medium',
     category: 'exposição de informação',
+    recommendation: 'Desabilite mensagens de erro detalhadas em produção (debug=false) e use uma página de erro genérica pro usuário final.',
     run: async (ctx) => {
       const r = await safeFetch(`${ctx.base}/?duxprobe=%27%22%3C`, {}, ctx.timeoutMs, ctx.activeControllers)
       if (
@@ -286,7 +307,7 @@ const CHECKS = [
           r.text
         )
       ) {
-        return 'resposta contém stack trace ou mensagem de erro verbosa'
+        return { evidence: 'resposta contém stack trace ou mensagem de erro verbosa', path: '?duxprobe=%27%22%3C' }
       }
       return null
     }
@@ -296,6 +317,7 @@ const CHECKS = [
     name: 'phpinfo() exposto',
     severity: 'high',
     category: 'exposição de informação',
+    recommendation: 'Remova o arquivo do servidor de produção — ele expõe configuração interna útil pra um atacante mapear o ambiente.',
     run: (ctx) =>
       tryPaths(
         ctx.base,
@@ -309,10 +331,11 @@ const CHECKS = [
     name: 'Spring Boot Actuator exposto',
     severity: 'high',
     category: 'exposição de informação',
+    recommendation: 'Restrinja os endpoints do Actuator (management.endpoints.web.exposure.include) ou exija autenticação pra eles — /env nunca deveria ser público.',
     run: async (ctx) => {
       const r = await safeFetch(`${ctx.base}/actuator/env`, {}, ctx.timeoutMs, ctx.activeControllers)
       if (r?.response.ok && /"propertysources"|"activeprofiles"/i.test(r.text)) {
-        return '/actuator/env expõe variáveis de ambiente (Spring Boot Actuator sem proteção)'
+        return { evidence: '/actuator/env expõe variáveis de ambiente (Spring Boot Actuator sem proteção)', path: 'actuator/env' }
       }
       return null
     }
@@ -322,6 +345,7 @@ const CHECKS = [
     name: 'Documentação de API pública',
     severity: 'low',
     category: 'exposição de informação',
+    recommendation: 'Se a documentação não precisa ser pública, restrinja o acesso via autenticação ou remova do ambiente de produção.',
     run: (ctx) =>
       tryPaths(
         ctx.base,
@@ -335,11 +359,12 @@ const CHECKS = [
     name: 'Versão de servidor exposta',
     severity: 'low',
     category: 'exposição de informação',
+    recommendation: 'Remova ou ofusque o header Server/X-Powered-By no servidor web ou proxy reverso pra não expor a versão exata.',
     run: async (ctx) => {
       const r = await safeFetch(`${ctx.base}/`, {}, ctx.timeoutMs, ctx.activeControllers)
       const values = [r?.response.headers.get('server'), r?.response.headers.get('x-powered-by')].filter(Boolean)
       const withVersion = values.find((v) => /\d+\.\d+/.test(v))
-      if (withVersion) return `versão explícita exposta: "${withVersion}" — pesquise CVEs conhecidas para essa versão`
+      if (withVersion) return { evidence: `versão explícita exposta: "${withVersion}" — pesquise CVEs conhecidas para essa versão`, path: '' }
       return null
     }
   }
@@ -373,17 +398,20 @@ function createRunner({ url, timeoutMs, concurrency }, { onProgress, onDone }) {
       const index = nextIndex++
       if (index >= total) return
       const check = CHECKS[index]
-      let evidence = null
+      let hit = null
       try {
-        evidence = await check.run({ base, timeoutMs: timeout, activeControllers })
+        hit = await check.run({ base, timeoutMs: timeout, activeControllers })
       } catch {
-        evidence = null
+        hit = null
       }
       completed += 1
 
-      if (evidence) {
-        findings.push({ id: check.id, name: check.name, severity: check.severity, category: check.category, evidence })
-        onProgress({ seq: completed, total, id: check.id, name: check.name, found: true, severity: check.severity, evidence })
+      if (hit) {
+        const { evidence, path } = typeof hit === 'string' ? { evidence: hit, path: '' } : hit
+        const url = path ? `${base}/${String(path).replace(/^\/+/, '')}` : base
+        const entry = { id: check.id, name: check.name, severity: check.severity, category: check.category, evidence, url, recommendation: check.recommendation || null }
+        findings.push(entry)
+        onProgress({ seq: completed, total, id: check.id, name: check.name, found: true, severity: check.severity, evidence, url })
       } else {
         onProgress({ seq: completed, total, id: check.id, name: check.name, found: false })
       }
