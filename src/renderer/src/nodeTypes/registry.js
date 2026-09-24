@@ -70,6 +70,21 @@ const SECURITY_HEADERS_ICON =
 const TLS_CHECK_ICON =
   '<rect x="4" y="9" width="12" height="8" rx="1.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M6.5 9V6.5a3.5 3.5 0 0 1 7 0V9" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="10" cy="13" r="1.2" fill="currentColor"/>'
 
+// chip com pinos: identifica a "pilha de tecnologia" (CMS/framework/servidor)
+// por trás de uma URL — mesmo estilo stroke=currentColor dos outros ícones
+const TECH_FINGERPRINT_ICON =
+  '<rect x="6" y="6" width="8" height="8" rx="1.3" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M8.5 6V3M11.5 6V3M8.5 17v-3M11.5 17v-3M6 8.5H3M6 11.5H3M17 8.5h-3M17 11.5h-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>'
+
+// inseto: checklist de vulnerabilidades comuns — mesmo estilo
+// stroke=currentColor dos outros ícones
+const VULN_SCAN_ICON =
+  '<ellipse cx="10" cy="11" rx="3.5" ry="4.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M10 6.5V4M8 5L6.7 3.7M12 5l1.3-1.3M6.5 9H3M6.5 12H3M13.5 9h3.5M13.5 12h3.5M7.3 15.5L5 17.5M12.7 15.5l2.3 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>'
+
+// globo com meridianos: consulta de DNS/WHOIS de um domínio — mesmo estilo
+// stroke=currentColor dos outros ícones
+const DNS_WHOIS_ICON =
+  '<circle cx="10" cy="10" r="7.2" stroke="currentColor" stroke-width="1.3" fill="none"/><ellipse cx="10" cy="10" rx="3.2" ry="7.2" stroke="currentColor" stroke-width="1.1" fill="none"/><path d="M2.8 10h14.4M3.6 6.2h12.8M3.6 13.8h12.8" stroke="currentColor" stroke-width="1.1" fill="none"/>'
+
 // registro de tipos de node: cada tipo novo entra aqui com seu próprio
 // formulário de configurações (sidebar) e, opcionalmente, um formulário de
 // criação (quando precisa de input do usuário antes de existir, ex: um caminho)
@@ -255,6 +270,27 @@ export const nodeTypeRegistry = {
     category: 'tools',
     createData: () => ({ name: 'Verificador SSL/TLS' }),
     icon: TLS_CHECK_ICON
+  },
+  'tech-fingerprint': {
+    label: 'Detector de Tecnologias',
+    description: 'Identifica CMS, framework, linguagem, bibliotecas JS, servidor web e CDN/WAF de uma URL analisando headers, cookies e HTML — sem depender de Wappalyzer instalado.',
+    category: 'tools',
+    createData: () => ({ name: 'Detector de Tecnologias' }),
+    icon: TECH_FINGERPRINT_ICON
+  },
+  'vuln-scan': {
+    label: 'Scanner de Vulnerabilidades',
+    description: 'Roda uma checklist curada de vulnerabilidades comuns (arquivos sensíveis expostos, SQLi, XSS, CORS, path traversal, métodos perigosos...) contra uma URL — sem depender de nuclei/nikto instalado.',
+    category: 'tools',
+    createData: () => ({ name: 'Scanner de Vulnerabilidades' }),
+    icon: VULN_SCAN_ICON
+  },
+  'dns-whois': {
+    label: 'DNS / WHOIS',
+    description: 'Consulta registros DNS completos (A/AAAA/MX/TXT/NS/CNAME/SOA/CAA), SPF/DMARC/DKIM e dados de registro WHOIS de um domínio — sem depender de cliente whois instalado.',
+    category: 'tools',
+    createData: () => ({ name: 'DNS / WHOIS' }),
+    icon: DNS_WHOIS_ICON
   },
   image: {
     label: 'Imagem',

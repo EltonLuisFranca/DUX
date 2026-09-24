@@ -106,6 +106,15 @@
     <template #node-tls-check="nodeProps">
       <TlsCheckNode v-bind="nodeProps" />
     </template>
+    <template #node-tech-fingerprint="nodeProps">
+      <TechFingerprintNode v-bind="nodeProps" />
+    </template>
+    <template #node-vuln-scan="nodeProps">
+      <VulnScanNode v-bind="nodeProps" />
+    </template>
+    <template #node-dns-whois="nodeProps">
+      <DnsWhoisNode v-bind="nodeProps" />
+    </template>
     <template #node-pomodoro="nodeProps">
       <PomodoroNode v-bind="nodeProps" />
     </template>
@@ -172,6 +181,9 @@ import SubdomainScanNode from './SubdomainScanNode.vue'
 import DirFuzzNode from './DirFuzzNode.vue'
 import SecurityHeadersNode from './SecurityHeadersNode.vue'
 import TlsCheckNode from './TlsCheckNode.vue'
+import TechFingerprintNode from './TechFingerprintNode.vue'
+import VulnScanNode from './VulnScanNode.vue'
+import DnsWhoisNode from './DnsWhoisNode.vue'
 import PomodoroNode from './PomodoroNode.vue'
 import DuxBanNode from './DuxBanNode.vue'
 import { theme, canvasVariant, edgeStyle, snapEnabled, SNAP_GRID_SIZE } from '../store/themeStore'

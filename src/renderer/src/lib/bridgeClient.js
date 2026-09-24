@@ -703,3 +703,114 @@ export function runTlsCheck(payload, { onProgress, onResult, onConnectionError }
     }
   }
 }
+
+// Mesmo padrão de runSecurityHeadersCheck: uma única requisição, não uma
+// varredura — mas mantém conexão viva + Start/Progress/Result/Stop pra
+// encaixar sem mudanças no wsHandlers.js (bridge/techFingerprint.js).
+export function runTechFingerprint(payload, { onProgress, onResult, onConnectionError }) {
+  const ws = new WebSocket(BRIDGE_URL)
+  const requestId = crypto.randomUUID()
+  let done = false
+
+  const finish = (result) => {
+    if (done) return
+    done = true
+    onResult(result)
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close()
+  }
+
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'techFingerprintStart', requestId, ...payload }))
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data)
+    if (msg.requestId !== requestId) return
+    if (msg.type === 'techFingerprintProgress') onProgress?.(msg)
+    else if (msg.type === 'techFingerprintResult') finish(msg)
+  }
+
+  ws.onerror = () => {
+    onConnectionError?.()
+    finish({ requestId, cancelled: false, error: 'connection' })
+  }
+
+  return {
+    requestId,
+    stop() {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'techFingerprintStop', requestId }))
+    }
+  }
+}
+
+// Mesmo padrão de streaming dos demais varredores por lista (runPortScan/
+// runSubdomainScan/runDirFuzz) — aqui a lista é a checklist de vulnerabilidades
+// do bridge (bridge/vulnScan.js), não uma wordlist.
+export function runVulnScan(payload, { onProgress, onResult, onConnectionError }) {
+  const ws = new WebSocket(BRIDGE_URL)
+  const requestId = crypto.randomUUID()
+  let done = false
+
+  const finish = (result) => {
+    if (done) return
+    done = true
+    onResult(result)
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close()
+  }
+
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'vulnScanStart', requestId, ...payload }))
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data)
+    if (msg.requestId !== requestId) return
+    if (msg.type === 'vulnScanProgress') onProgress(msg)
+    else if (msg.type === 'vulnScanResult') finish(msg)
+  }
+
+  ws.onerror = () => {
+    onConnectionError?.()
+    finish({ requestId, cancelled: false, error: 'connection', totalChecks: 0, findings: [] })
+  }
+
+  return {
+    requestId,
+    stop() {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'vulnScanStop', requestId }))
+    }
+  }
+}
+
+// Mesmo padrão de runSubdomainScan, mas uma única checagem com dois estágios
+// (DNS depois WHOIS, ver onProgress({stage}) em bridge/dnsWhois.js) em vez de
+// uma varredura por wordlist.
+export function runDnsWhois(payload, { onProgress, onResult, onConnectionError }) {
+  const ws = new WebSocket(BRIDGE_URL)
+  const requestId = crypto.randomUUID()
+  let done = false
+
+  const finish = (result) => {
+    if (done) return
+    done = true
+    onResult(result)
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close()
+  }
+
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'dnsWhoisStart', requestId, ...payload }))
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data)
+    if (msg.requestId !== requestId) return
+    if (msg.type === 'dnsWhoisProgress') onProgress?.(msg)
+    else if (msg.type === 'dnsWhoisResult') finish(msg)
+  }
+
+  ws.onerror = () => {
+    onConnectionError?.()
+    finish({ requestId, cancelled: false, error: 'connection' })
+  }
+
+  return {
+    requestId,
+    stop() {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'dnsWhoisStop', requestId }))
+    }
+  }
+}

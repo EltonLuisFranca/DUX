@@ -18,6 +18,9 @@ const { createRunner: createSubdomainScanRunner } = require('./subdomainScan')
 const { createRunner: createDirFuzzRunner } = require('./dirFuzz')
 const { createRunner: createSecurityHeadersRunner } = require('./securityHeaders')
 const { createRunner: createTlsCheckRunner } = require('./tlsCheck')
+const { createRunner: createTechFingerprintRunner } = require('./techFingerprint')
+const { createRunner: createVulnScanRunner } = require('./vulnScan')
+const { createRunner: createDnsWhoisRunner } = require('./dnsWhois')
 const { startWatchingNote, stopWatchingNote, stopAllNoteWatches, readNoteFile } = require('./noteWatch')
 const { detectTerminalAvailability } = require('./terminalAvailability')
 
@@ -86,6 +89,12 @@ function createConnectionHandler({ agentPort }) {
     const activeSecurityHeaderChecks = new Map()
     // mesmo cuidado, agora pro verificador de SSL/TLS (tlsCheckStop / ws.close())
     const activeTlsChecks = new Map()
+    // mesmo cuidado, agora pro detector de tecnologias (techFingerprintStop / ws.close())
+    const activeTechFingerprints = new Map()
+    // mesmo cuidado, agora pro scanner de vulnerabilidades (vulnScanStop / ws.close())
+    const activeVulnScans = new Map()
+    // mesmo cuidado, agora pro DNS/WHOIS (dnsWhoisStop / ws.close())
+    const activeDnsWhois = new Map()
 
     ws.on('message', (raw) => {
       let msg
@@ -463,6 +472,75 @@ function createConnectionHandler({ agentPort }) {
         activeTlsChecks.set(requestId, runner)
       } else if (msg.type === 'tlsCheckStop') {
         activeTlsChecks.get(msg.requestId)?.stop()
+      } else if (msg.type === 'techFingerprintStart') {
+        const requestId = msg.requestId
+        if (!requestId || activeTechFingerprints.has(requestId)) return
+        if (!/^https?:\/\//i.test(msg.url || '')) {
+          ws.send(JSON.stringify({ type: 'techFingerprintResult', requestId, error: 'URL inválida (precisa começar com http:// ou https://)' }))
+          return
+        }
+        const runner = createTechFingerprintRunner(msg, {
+          onProgress: (progress) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'techFingerprintProgress', requestId, ...progress }))
+            }
+          },
+          onDone: (summary) => {
+            activeTechFingerprints.delete(requestId)
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'techFingerprintResult', requestId, ...summary }))
+            }
+          }
+        })
+        activeTechFingerprints.set(requestId, runner)
+      } else if (msg.type === 'techFingerprintStop') {
+        activeTechFingerprints.get(msg.requestId)?.stop()
+      } else if (msg.type === 'vulnScanStart') {
+        const requestId = msg.requestId
+        if (!requestId || activeVulnScans.has(requestId)) return
+        if (!/^https?:\/\//i.test(msg.url || '')) {
+          ws.send(JSON.stringify({ type: 'vulnScanResult', requestId, error: 'URL inválida (precisa começar com http:// ou https://)' }))
+          return
+        }
+        const runner = createVulnScanRunner(msg, {
+          onProgress: (progress) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'vulnScanProgress', requestId, ...progress }))
+            }
+          },
+          onDone: (summary) => {
+            activeVulnScans.delete(requestId)
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'vulnScanResult', requestId, ...summary }))
+            }
+          }
+        })
+        activeVulnScans.set(requestId, runner)
+      } else if (msg.type === 'vulnScanStop') {
+        activeVulnScans.get(msg.requestId)?.stop()
+      } else if (msg.type === 'dnsWhoisStart') {
+        const requestId = msg.requestId
+        if (!requestId || activeDnsWhois.has(requestId)) return
+        if (!String(msg.domain || '').trim()) {
+          ws.send(JSON.stringify({ type: 'dnsWhoisResult', requestId, error: 'Domínio alvo não informado' }))
+          return
+        }
+        const runner = createDnsWhoisRunner(msg, {
+          onProgress: (progress) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'dnsWhoisProgress', requestId, ...progress }))
+            }
+          },
+          onDone: (summary) => {
+            activeDnsWhois.delete(requestId)
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'dnsWhoisResult', requestId, ...summary }))
+            }
+          }
+        })
+        activeDnsWhois.set(requestId, runner)
+      } else if (msg.type === 'dnsWhoisStop') {
+        activeDnsWhois.get(msg.requestId)?.stop()
       } else if (msg.type === 'link') {
         agentLink.linkSessions(msg.sessionA, msg.sessionB)
       } else if (msg.type === 'unlink') {
@@ -614,6 +692,12 @@ function createConnectionHandler({ agentPort }) {
       activeSecurityHeaderChecks.clear()
       for (const runner of activeTlsChecks.values()) runner.stop()
       activeTlsChecks.clear()
+      for (const runner of activeTechFingerprints.values()) runner.stop()
+      activeTechFingerprints.clear()
+      for (const runner of activeVulnScans.values()) runner.stop()
+      activeVulnScans.clear()
+      for (const runner of activeDnsWhois.values()) runner.stop()
+      activeDnsWhois.clear()
       ptyProcess?.kill()
       ptyProcess = null
       if (sessionId) {
