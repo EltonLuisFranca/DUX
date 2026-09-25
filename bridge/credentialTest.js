@@ -1,5 +1,14 @@
+const { requestRenderLogin } = require('./renderBridgeClient')
+
 const DEFAULT_TIMEOUT_MS = 10_000
 const MAX_CONCURRENCY = 10
+// Piso mínimo pro fallback de renderização real (ver detectLoginForm) — o
+// timeoutMs configurado no card é pensado pra uma requisição HTTP individual
+// (segundos), não pro ciclo completo de abrir um Chromium de verdade,
+// esperar a SPA hidratar e capturar a requisição de rede (que sozinho já
+// come ~1-2s por candidato). Sem esse piso, um timeoutMs baixo do usuário
+// mataria o fallback antes dele ter qualquer chance de terminar.
+const RENDER_FALLBACK_MIN_MS = 15_000
 
 // Lista curta de credenciais clássicas pra "quick check" — não é rockyou
 // inteira de propósito (card pediu só o essencial: defaults de admin, contas
@@ -164,6 +173,8 @@ function buildHeaderMap(target) {
 const LOGIN_CANDIDATE_PATHS = [
   '/login',
   '/signin',
+  '/entrar',
+  '/acessar',
   '/wp-login.php',
   '/administrator',
   '/admin',
@@ -173,6 +184,11 @@ const LOGIN_CANDIDATE_PATHS = [
   '/auth/login',
   ''
 ]
+
+// Subconjunto curto pro fallback de renderização real (src/main/renderBridge.js)
+// — cada candidato ali custa um page-load + hidratação de verdade (segundos),
+// então a lista completa acima seria caro/lento demais pra tentar inteira.
+const RENDER_CANDIDATE_PATHS = ['/login', '', '/entrar', '/signin']
 
 function extractForms(html) {
   const forms = []
@@ -291,7 +307,20 @@ async function detectLoginForm({ url, timeoutMs }) {
     }
   }
 
-  return { found: false }
+  // Nada encontrado no HTML cru — cobre o caso de SPA (React/Vue/etc.) que só
+  // desenha o form via JS depois do bundle rodar, o que o loop acima (fetch
+  // sem execução de JS) nunca vê. Pede pro processo main (único com um
+  // Chromium de verdade) renderizar e testar de fato — ver
+  // src/main/renderBridge.js e bridge/renderBridgeClient.js. Se o main não
+  // responder a tempo (versão antiga sem esse canal, crash, timeout real),
+  // requestRenderLogin já resolve com found:false sozinho.
+  const rendered = await requestRenderLogin({
+    url: base,
+    timeoutMs: Math.max(RENDER_FALLBACK_MIN_MS, timeout),
+    paths: RENDER_CANDIDATE_PATHS
+  }).catch(() => ({ found: false }))
+
+  return rendered?.found ? rendered : { found: false }
 }
 
 // Cria e já inicia (fire-and-forget, acompanhado via callbacks) uma corrida

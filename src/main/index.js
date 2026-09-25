@@ -8,6 +8,7 @@ import { registerHttpNodeIpc } from './ipc/httpNode'
 import { registerVoiceIpc } from './ipc/voice'
 import { registerBrowserNodeIpc } from './ipc/browserNode'
 import { registerImageNodeIpc } from './ipc/imageNode'
+import { attachRenderBridge } from './renderBridge'
 
 const WSL_DISTRO = 'Debian'
 // bridge/ está listado em asarUnpack (precisa rodar como processo real, não
@@ -156,6 +157,10 @@ function startBridge() {
   // exceção não tratada que o Electron engole silenciosamente, sem log
   // nenhum indicando por que o bridge nunca subiu.
   bridgeProcess.on('error', (err) => console.error('[bridge] failed to spawn', err))
+  // Ver src/main/renderBridge.js — deixa credentialTest.js pedir pra este
+  // processo (o único com um Chromium de verdade) renderizar login de SPAs
+  // via os mesmos pipes stdin/stdout do spawn acima, sem porta de rede nova.
+  attachRenderBridge(bridgeProcess)
 }
 
 function stopBridge() {

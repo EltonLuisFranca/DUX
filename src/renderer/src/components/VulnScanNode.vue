@@ -70,6 +70,57 @@
           <p v-if="domain" class="hint mono-hint">Domínio derivado para DNS/WHOIS, Subdomínios e TLS: {{ domain }}</p>
         </div>
 
+        <div v-if="lastResult" class="acc-section footprint-section">
+          <button type="button" class="acc-header" @click="toggleModule('footprint')">
+            <svg class="acc-chevron" :class="{ collapsed: !openModules.has('footprint') }" viewBox="0 0 16 16" width="10" height="10">
+              <path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span class="acc-title">Footprinting</span>
+            <span class="acc-status">{{ footprint.pointsCount }} ponto(s) coletado(s)</span>
+          </button>
+          <div v-show="openModules.has('footprint')" class="acc-body">
+            <div v-if="!footprint.pointsCount" class="banner ok">Nenhuma informação de footprinting coletada ainda.</div>
+            <template v-else>
+              <div v-if="footprint.ips.length" class="section-block">
+                <span class="section-label">IP(s) resolvido(s)</span>
+                <div class="pill-row">
+                  <span v-for="ip in footprint.ips" :key="ip" class="tech-pill">{{ ip }}</span>
+                </div>
+              </div>
+              <div v-if="footprint.registrar || footprint.expiresAt" class="section-block">
+                <span class="section-label">Domínio</span>
+                <div class="whois-fields">
+                  <div v-if="footprint.registrar" class="whois-field">
+                    <span class="hint">Registrador</span><span>{{ footprint.registrar }}</span>
+                  </div>
+                  <div v-if="footprint.expiresAt" class="whois-field">
+                    <span class="hint">Expira em</span><span>{{ footprint.expiresAt }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-if="footprint.technologies.length" class="section-block">
+                <span class="section-label">Tecnologias detectadas</span>
+                <div class="tech-pills">
+                  <span v-for="t in footprint.technologies" :key="t" class="tech-pill">{{ t }}</span>
+                </div>
+              </div>
+              <div v-if="footprint.openPorts.length" class="section-block">
+                <span class="section-label">Portas abertas</span>
+                <div class="pill-row">
+                  <span v-for="p in footprint.openPorts" :key="p.port" class="tech-pill">{{ p.port }} ({{ p.service }})</span>
+                </div>
+              </div>
+              <div v-if="footprint.subdomains.length" class="section-block">
+                <span class="section-label">Subdomínios encontrados ({{ footprint.subdomains.length }})</span>
+                <div class="pill-row">
+                  <span v-for="s in footprint.subdomains.slice(0, 20)" :key="s" class="tech-pill">{{ s }}</span>
+                  <span v-if="footprint.subdomains.length > 20" class="tech-pill">+{{ footprint.subdomains.length - 20 }}</span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
         <div class="field-row">
           <label class="exec-field">
             Timeout por checagem (ms)
@@ -117,6 +168,12 @@
           </div>
         </div>
 
+        <div v-if="findingsBySeverity.length" class="findings-toolbar">
+          <span class="section-label">Achados ({{ lastResult.findings.length }})</span>
+          <button class="link-btn" @click="copyFindingsReport">
+            {{ findingsCopied ? 'Copiado!' : 'Copiar achados para IA' }}
+          </button>
+        </div>
         <div v-if="findingsBySeverity.length" class="acc-list">
           <div v-for="group in findingsBySeverity" :key="group.severity" class="acc-section" :class="severityClass(group.severity)">
             <button type="button" class="acc-header" @click="toggleSeverity(group.severity)">
@@ -341,9 +398,20 @@
             <div v-show="openModules.has('dirFuzz')" class="acc-body">
               <template v-if="!dfResult.error">
                 <div v-if="dfResult.found.length" class="findings-list">
-                  <div v-for="f in dfResult.found" :key="f.path" class="finding-row">
+                  <p v-if="dirFuzzCatchAllSignatures.size" class="banner warn">
+                    Detectado catch-all: alguns paths inexistentes respondem com o mesmo status/tamanho de página (ex.: SPA
+                    sem 404 real ou redirect genérico). Achados marcados abaixo são prováveis falsos positivos e não
+                    entram nos findings da aba Geral.
+                  </p>
+                  <div
+                    v-for="f in dfResult.found"
+                    :key="f.path"
+                    class="finding-row"
+                    :class="{ 'finding-row-catchall': isDirCatchAll(f) }"
+                  >
                     <span class="status-badge" :class="dirStatusClass(f.status)">{{ f.status }}</span>
                     /{{ f.path }} <span class="finding-status">{{ formatSize(f.size) }}</span>
+                    <span v-if="isDirCatchAll(f)" class="catchall-tag">catch-all</span>
                   </div>
                 </div>
                 <div v-else class="banner ok">Nenhum path encontrado em {{ dfResult.totalPaths }} testados.</div>
@@ -509,7 +577,7 @@
           </label>
           <label class="radio-label">
             <input type="radio" value="top100" v-model="portsMode" @change="syncData" />
-            Estendida (top 100)
+            Estendida (185)
           </label>
           <label class="radio-label">
             <input type="radio" value="custom" v-model="portsMode" @change="syncData" />
@@ -523,7 +591,10 @@
           </div>
         </div>
         <div v-else-if="portsMode === 'top100'">
-          <p class="hint">{{ TOP20_PORTS_CLIENT.length }} portas comuns + ~80 adicionais (bancos de dados, filas, containers, k8s, ferramentas de dev...).</p>
+          <p class="hint">
+            {{ TOP20_PORTS_CLIENT.length }} portas comuns + 165 adicionais (bancos de dados, filas, containers, k8s,
+            painéis de hospedagem, r-services legados, observabilidade, ferramentas de dev...).
+          </p>
         </div>
         <div v-else class="custom-list">
           <textarea
@@ -602,6 +673,15 @@
           </div>
         </div>
         <div v-else class="custom-list">
+          <input
+            ref="dirFuzzFileInputEl"
+            type="file"
+            accept=".txt,text/plain"
+            class="file-input-hidden"
+            @change="onDirFuzzWordlistFileSelected"
+          />
+          <button class="link-btn" @click="dirFuzzFileInputEl?.click()">Carregar wordlist (.txt)</button>
+          <p v-if="dirFuzzFileError" class="hint hint-error">{{ dirFuzzFileError }}</p>
           <textarea
             v-model="dirFuzzCustomWordlist"
             class="body-editor wordlist-editor"
@@ -609,7 +689,7 @@
             placeholder="admin&#10;.env&#10;api/v1&#10;backup.zip"
             @input="syncData"
           />
-          <p class="hint">Um path por linha (sem barra inicial). Até 5.000 entradas.</p>
+          <p class="hint">Um path por linha (sem barra inicial). Até 50.000 entradas.</p>
         </div>
 
         <button class="link-btn" :disabled="!canRunSingle('dirFuzz')" @click="runSingleModule('dirFuzz')">Rodar só este módulo</button>
@@ -807,7 +887,20 @@ const CHECKS_CLIENT = [
   { id: 'directory-listing', name: 'Listagem de diretório habilitada', severity: 'medium' },
   { id: 'verbose-error', name: 'Erro verboso / stack trace exposto', severity: 'medium' },
   { id: 'swagger-exposed', name: 'Documentação de API pública', severity: 'low' },
-  { id: 'server-version-exposed', name: 'Versão de servidor exposta', severity: 'low' }
+  { id: 'server-version-exposed', name: 'Versão de servidor exposta', severity: 'low' },
+  { id: 'wp-config-backup-exposed', name: 'Backup de wp-config.php exposto', severity: 'critical' },
+  { id: 'wp-debug-log-exposed', name: 'Log de debug do WordPress exposto', severity: 'high' },
+  { id: 'wp-xmlrpc-enabled', name: 'WordPress XML-RPC habilitado', severity: 'medium' },
+  { id: 'wp-rest-user-enumeration', name: 'WordPress expõe usuários via REST API', severity: 'medium' },
+  { id: 'wp-author-scan', name: 'WordPress permite enumerar usuário via ?author=', severity: 'low' },
+  { id: 'wp-uploads-listing', name: 'Directory listing em wp-content/uploads', severity: 'low' },
+  { id: 'wp-version-exposed', name: 'Versão do WordPress exposta', severity: 'low' },
+  { id: 'ai-provider-key-exposed', name: 'Chave de API (IA/pagamento/cloud) hardcoded no front-end', severity: 'critical' },
+  { id: 'jwt-privileged-role-exposed', name: 'Token JWT com papel privilegiado exposto no front-end', severity: 'critical' },
+  { id: 'debug-env-endpoint-exposed', name: 'Endpoint de debug expõe variáveis de ambiente', severity: 'critical' },
+  { id: 'firebase-rtdb-public', name: 'Firebase Realtime Database público', severity: 'high' },
+  { id: 'source-map-exposed', name: 'Source map de produção exposto', severity: 'medium' },
+  { id: 'graphql-introspection-enabled', name: 'Introspecção do GraphQL habilitada em produção', severity: 'medium' }
 ]
 
 const CATEGORY_LABELS = {
@@ -869,6 +962,8 @@ const loadTestEnabled = ref(props.data.loadTestEnabled ?? true)
 
 const dirFuzzWordlistMode = ref(props.data.dirFuzzWordlistMode || 'common')
 const dirFuzzCustomWordlist = ref(props.data.dirFuzzCustomWordlist || '')
+const dirFuzzFileInputEl = ref(null)
+const dirFuzzFileError = ref('')
 const subdomainWordlistMode = ref(props.data.subdomainWordlistMode || 'common')
 const subdomainCustomWordlist = ref(props.data.subdomainCustomWordlist || '')
 const portsMode = ref(props.data.portsMode || 'top20')
@@ -886,7 +981,7 @@ const completedModules = reactive(new Set())
 // detalhes brutos por módulo começam fechados — só os achados "que
 // importam" (críticos pra baixo) ficam visíveis de cara.
 const closedSeverities = ref(new Set())
-const openModules = ref(new Set())
+const openModules = ref(new Set(['footprint']))
 
 let controller = null
 let moduleController = null
@@ -924,9 +1019,31 @@ function parseCustomWordlistCount(raw, maxEntries) {
   return seen.size
 }
 
+const DIR_FUZZ_MAX_ENTRIES = 50000
+
 const dirFuzzWordlistCount = computed(() =>
-  dirFuzzWordlistMode.value === 'custom' ? parseCustomWordlistCount(dirFuzzCustomWordlist.value, 5000) : COMMON_PATHS_CLIENT.length
+  dirFuzzWordlistMode.value === 'custom'
+    ? parseCustomWordlistCount(dirFuzzCustomWordlist.value, DIR_FUZZ_MAX_ENTRIES)
+    : COMMON_PATHS_CLIENT.length
 )
+
+async function onDirFuzzWordlistFileSelected(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+  dirFuzzFileError.value = ''
+  if (!/\.txt$/i.test(file.name)) {
+    dirFuzzFileError.value = 'Formato inválido: envie um arquivo .txt.'
+    return
+  }
+  try {
+    const text = await file.text()
+    dirFuzzCustomWordlist.value = text
+    syncData()
+  } catch {
+    dirFuzzFileError.value = 'Não foi possível ler o arquivo.'
+  }
+}
 
 const subdomainWordlistCount = computed(() =>
   subdomainWordlistMode.value === 'custom' ? parseCustomWordlistCount(subdomainCustomWordlist.value, 2000) : COMMON_SUBDOMAINS_CLIENT.length
@@ -997,6 +1114,26 @@ const tlsResult = computed(() => lastResult.value?.modules?.tlsCheck)
 const psResult = computed(() => lastResult.value?.modules?.portScan)
 const ssResult = computed(() => lastResult.value?.modules?.subdomainScan)
 const dfResult = computed(() => lastResult.value?.modules?.dirFuzz)
+
+// Mesma heurística de catch-all/SPA usada em pentestSuite.js pra excluir
+// esses achados dos findings de severidade: aqui sinaliza os mesmos paths
+// no painel bruto, já que "status 200" sem esse aviso lê como achado real.
+const dirFuzzCatchAllSignatures = computed(() => {
+  const found = dfResult.value?.found || []
+  if (found.length === 0) return new Set()
+  const counts = new Map()
+  for (const p of found) {
+    const sig = `${p.status}:${p.size}`
+    counts.set(sig, (counts.get(sig) || 0) + 1)
+  }
+  return new Set(
+    [...counts.entries()].filter(([, count]) => count >= 5 && count / found.length >= 0.4).map(([sig]) => sig)
+  )
+})
+
+function isDirCatchAll(f) {
+  return dirFuzzCatchAllSignatures.value.has(`${f.status}:${f.size}`)
+}
 const vsResult = computed(() => lastResult.value?.modules?.vulnScan)
 const ctResult = computed(() => lastResult.value?.modules?.credentialTest)
 const ltResult = computed(() => lastResult.value?.modules?.loadTest)
@@ -1010,6 +1147,24 @@ const groupedDetected = computed(() => {
   const detected = techResult.value?.detected || []
   const categories = [...new Set(detected.map((t) => t.category))]
   return categories.map((category) => ({ category, items: detected.filter((t) => t.category === category) }))
+})
+
+// Consolida os módulos de recon puro (DNS/WHOIS, Tecnologias, Portas,
+// Subdomínios) num resumo único de "coleta de informações" — os mesmos
+// dados já aparecem detalhados nos accordions de módulo abaixo, isso é só
+// uma visão rápida sem precisar abrir um por um.
+const footprint = computed(() => {
+  const ips = dnsResult.value && !dnsResult.value.error
+    ? [...(dnsResult.value.records?.A || []), ...(dnsResult.value.records?.AAAA || [])]
+    : []
+  const registrar = dnsResult.value?.whois?.parsed?.registrar || null
+  const expiresAt = dnsResult.value?.whois?.parsed?.expiresAt || null
+  const technologies = techResult.value && !techResult.value.error ? techResult.value.detected.map((t) => t.name) : []
+  const openPorts = psResult.value && !psResult.value.error ? psResult.value.openPorts : []
+  const subdomains = ssResult.value && !ssResult.value.error ? ssResult.value.found.map((s) => s.hostname || s.subdomain) : []
+
+  const pointsCount = ips.length + (registrar ? 1 : 0) + technologies.length + openPorts.length + subdomains.length
+  return { ips, registrar, expiresAt, technologies, openPorts, subdomains, pointsCount }
 })
 
 function severityClass(severity) {
@@ -1032,6 +1187,43 @@ function toggleSeverity(severity) {
   if (next.has(severity)) next.delete(severity)
   else next.add(severity)
   closedSeverities.value = next
+}
+
+// Texto plano (não JSON) pensado pra colar direto num chat de IA e pedir
+// "corrige isso" — por severidade, na mesma ordem da UI, com os mesmos
+// campos que já aparecem no finding-card (evidência, onde foi testado,
+// recomendação).
+const findingsReportText = computed(() => {
+  const groups = findingsBySeverity.value
+  if (!groups.length) return ''
+  const lines = [`# Relatório de vulnerabilidades — ${domain.value || url.value}`, `Gerado em ${new Date().toLocaleString('pt-BR')}`, '']
+  for (const group of groups) {
+    lines.push(`## ${severityLabel(group.severity)} (${group.items.length})`)
+    for (const f of group.items) {
+      lines.push(`- **${f.title}** [${MODULE_LABELS[f.moduleId] || f.moduleId}]`)
+      if (f.evidence) lines.push(`  - Evidência: ${f.evidence}`)
+      if (f.url) lines.push(`  - Testado em: ${f.url}`)
+      if (f.recommendation) lines.push(`  - Como corrigir: ${f.recommendation}`)
+    }
+    lines.push('')
+  }
+  return lines.join('\n').trim()
+})
+
+const findingsCopied = ref(false)
+let findingsCopiedTimeout = null
+
+async function copyFindingsReport() {
+  try {
+    await navigator.clipboard.writeText(findingsReportText.value)
+    findingsCopied.value = true
+    clearTimeout(findingsCopiedTimeout)
+    findingsCopiedTimeout = setTimeout(() => {
+      findingsCopied.value = false
+    }, 1500)
+  } catch (err) {
+    console.error('[vuln-scan-node] copy findings failed', err)
+  }
 }
 
 function toggleModule(moduleId) {
@@ -1424,6 +1616,14 @@ onBeforeUnmount(() => {
   color: var(--color-text-tertiary);
 }
 
+.hint-error {
+  color: #ef4444;
+}
+
+.file-input-hidden {
+  display: none;
+}
+
 .hint code {
   padding: 0 3px;
   border-radius: 3px;
@@ -1754,6 +1954,21 @@ onBeforeUnmount(() => {
   padding: 4px 0;
 }
 
+.finding-row-catchall {
+  opacity: 0.55;
+}
+
+.catchall-tag {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(234, 179, 8, 0.15);
+  color: #b45309;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
 .finding-status {
   font-weight: 400;
   opacity: 0.8;
@@ -1889,6 +2104,13 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.findings-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .module-results {

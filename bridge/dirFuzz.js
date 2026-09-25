@@ -1,6 +1,6 @@
 const DEFAULT_TIMEOUT_MS = 5000
 const MAX_CONCURRENCY = 100
-const MAX_PATHS = 5000
+const MAX_PATHS = 50000
 
 // Wordlist curta de recon inicial — mesmo espírito da TOP_PORTS do
 // port-scan.js e da COMMON_SUBDOMAINS do subdomain-scan.js: cobre os paths

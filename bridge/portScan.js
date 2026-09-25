@@ -10,7 +10,8 @@ const MAX_PORTS = 10_000
 // serviços de rede/infra — não é a nmap-services inteira (milhares de
 // entradas) de propósito: o card pede reconhecimento inicial, não um scan
 // exaustivo. "Comuns" (preset top20) é o prefixo desta lista; "Estendida"
-// (preset top100) é a lista toda.
+// (mode 'top100', nome histórico — a lista já passou dos 100) é a lista
+// toda, hoje 185 portas.
 const TOP_PORTS = [
   [21, 'ftp'], [22, 'ssh'], [23, 'telnet'], [25, 'smtp'], [53, 'dns'],
   [80, 'http'], [110, 'pop3'], [111, 'rpcbind'], [135, 'msrpc'], [139, 'netbios-ssn'],
@@ -34,7 +35,39 @@ const TOP_PORTS = [
   [8009, 'ajp13'], [8069, 'odoo'], [8086, 'influxdb'], [8161, 'activemq'], [8200, 'vault'],
   [8443, 'https-alt'], [8500, 'consul'], [8888, 'http-alt'], [8983, 'solr'], [9000, 'http-alt'],
   [9042, 'cassandra'], [9090, 'prometheus'], [9092, 'kafka'], [9300, 'elasticsearch-node'], [9418, 'git'],
-  [10000, 'webmin'], [10250, 'kubelet'], [11211, 'memcached'], [15672, 'rabbitmq-mgmt'], [27017, 'mongodb']
+  [10000, 'webmin'], [10250, 'kubelet'], [11211, 'memcached'], [15672, 'rabbitmq-mgmt'], [27017, 'mongodb'],
+
+  // Serviços r-* legados e afins (raros hoje, mas ainda vistos em appliance/rede interna antiga)
+  [43, 'whois'], [70, 'gopher'], [79, 'finger'], [464, 'kpasswd'], [512, 'exec'], [513, 'login'],
+  [514, 'shell'], [515, 'printer'], [517, 'talk'], [518, 'ntalk'], [520, 'route'], [543, 'klogin'], [544, 'kshell'],
+
+  // Windows/AD adicional, acesso remoto e VPN
+  [1701, 'l2tp'], [3269, 'ldaps-gc'], [4500, 'ipsec-nat-t'], [5555, 'android-adb'],
+  [5985, 'winrm-http'], [5986, 'winrm-https'], [9389, 'adws'], [51820, 'wireguard'],
+
+  // Painéis de hospedagem (cPanel/WHM) e admin web adicional
+  [2082, 'cpanel'], [2083, 'cpanel-ssl'], [2086, 'whm'], [2087, 'whm-ssl'],
+  [2095, 'cpanel-webmail'], [2096, 'cpanel-webmail-ssl'], [8880, 'cpanel-alt'], [20000, 'usermin'],
+
+  // X11 e displays VNC além do :0 (5900) já coberto no top20
+  [6000, 'x11'], [6001, 'x11-1'], [5901, 'vnc-1'], [5902, 'vnc-2'], [5903, 'vnc-3'], [5904, 'vnc-4'], [5905, 'vnc-5'],
+
+  // Bancos de dados e clusters adicionais
+  [1099, 'java-rmi'], [1434, 'mssql-browser'], [3050, 'firebird'], [3260, 'iscsi'], [5433, 'postgresql-alt'],
+  [6380, 'redis-tls'], [7000, 'cassandra-alt'], [8087, 'riak'], [8091, 'couchbase'], [8098, 'riak-alt'],
+  [9160, 'cassandra-thrift'], [26257, 'cockroachdb-sql'], [27018, 'mongodb-shard'], [27019, 'mongodb-config'],
+  [28015, 'rethinkdb'], [50000, 'db2'],
+
+  // Filas/streaming e orquestração de containers adicionais
+  [1883, 'mqtt'], [2377, 'docker-swarm'], [4222, 'nats'], [4369, 'epmd-erlang'], [4505, 'salt-master-pub'],
+  [4506, 'salt-master-ret'], [4789, 'vxlan'], [6444, 'k3s-api-alt'], [8472, 'flannel-vxlan'],
+  [10255, 'kubelet-readonly'], [10256, 'kube-proxy'], [55553, 'metasploit-rpc'], [61613, 'stomp'], [61616, 'activemq-openwire'],
+
+  // Observabilidade/scanners expostos e http-alt adicional
+  [1900, 'upnp-ssdp'], [8081, 'http-alt2'], [8082, 'http-alt3'], [8090, 'http-alt4'], [8181, 'http-alt5'],
+  [8222, 'http-alt6'], [8834, 'nessus'], [9080, 'websphere'], [9100, 'node-exporter'], [9115, 'blackbox-exporter'],
+  [9187, 'postgres-exporter'], [9216, 'mongodb-exporter'], [9392, 'openvas-gsad'], [9443, 'https-alt2'],
+  [9600, 'logstash-monitor'], [10443, 'https-alt3'], [14268, 'jaeger-collector'], [16686, 'jaeger-ui'], [18080, 'http-alt7']
 ]
 
 const SERVICE_BY_PORT = new Map(TOP_PORTS.map(([port, name]) => [port, name]))

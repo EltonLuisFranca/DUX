@@ -1,10 +1,19 @@
 const http = require('http')
 const https = require('https')
+const { requestXssCheck } = require('./renderBridgeClient')
 
 const DEFAULT_TIMEOUT_MS = 6000
 const MAX_BODY_BYTES = 200_000
 const DEFAULT_CONCURRENCY = 5
 const MAX_CONCURRENCY = 10
+// Piso mínimo pro fallback de renderização real (mesmo raciocínio do
+// RENDER_FALLBACK_MIN_MS em credentialTest.js): timeoutMs do card é pensado
+// pra uma requisição HTTP individual, não pro ciclo completo de abrir um
+// Chromium de verdade e testar vários parâmetros.
+const RENDER_FALLBACK_MIN_MS = 15_000
+// Nomes de parâmetro mais comuns em busca/formulário/paginação — não é
+// exaustivo (mesmo espírito do resto do arquivo), cobre o mais provável.
+const XSS_PARAMS = ['q', 'search', 's', 'query', 'keyword', 'term', 'name', 'message', 'comment', 'page']
 
 const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }
 
@@ -92,6 +101,56 @@ async function tryPaths(base, paths, matcher, ctx) {
   }
   return null
 }
+
+// Busca o HTML da home + até maxAssets bundles JS same-origin referenciados
+// nela (mesma origem só, pra não puxar CDN de terceiro tipo Google
+// Fonts/analytics) — usado pelos checks de "segredo hardcoded no front-end"
+// abaixo, que precisam olhar dentro do bundle, não só do HTML. MAX_BODY_BYTES
+// (via safeFetch) cobre só os primeiros ~200KB de cada asset — bundle grande
+// pode ter segredo fora dessa janela; é o mesmo trade-off "curado, não
+// exaustivo" do resto do arquivo, não uma varredura garantida de 100%.
+async function fetchAssetCorpus(ctx, maxAssets = 4) {
+  const home = await safeFetch(`${ctx.base}/`, {}, ctx.timeoutMs, ctx.activeControllers)
+  if (!home) return ''
+  let origin
+  try {
+    origin = new URL(ctx.base).origin
+  } catch {
+    return home.text
+  }
+
+  const scriptSrcs = [...home.text.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) => m[1])
+  let corpus = home.text
+  let fetched = 0
+  for (const src of scriptSrcs) {
+    if (fetched >= maxAssets) break
+    let assetUrl
+    try {
+      assetUrl = new URL(src, `${ctx.base}/`)
+    } catch {
+      continue
+    }
+    if (assetUrl.origin !== origin) continue
+    const r = await safeFetch(assetUrl.toString(), {}, ctx.timeoutMs, ctx.activeControllers)
+    if (r?.response.ok) {
+      corpus += '\n' + r.text
+      fetched += 1
+    }
+  }
+  return corpus
+}
+
+// Padrões de chave de API com formato reconhecível o bastante pra não dar
+// falso positivo em texto aleatório — cada um é o prefixo/formato fixo que o
+// provedor usa (sk- da OpenAI, AIza do Google, etc.), não uma heurística de
+// "parece uma chave".
+const AI_KEY_PATTERNS = [
+  { name: 'OpenAI', re: /\bsk-[A-Za-z0-9]{20,}\b/ },
+  { name: 'Anthropic', re: /\bsk-ant-[A-Za-z0-9_-]{20,}\b/ },
+  { name: 'Google (Gemini/Maps/Firebase)', re: /\bAIza[A-Za-z0-9_-]{35}\b/ },
+  { name: 'Stripe (chave secreta)', re: /\bsk_live_[A-Za-z0-9]{20,}\b/ },
+  { name: 'AWS Access Key', re: /\bAKIA[A-Z0-9]{16}\b/ }
+]
 
 // Cada checagem sonda um sintoma bem específico via HTTP puro — sem
 // dependência de nuclei/nikto/sqlmap. Não é uma engine de templates (não
@@ -206,13 +265,38 @@ const CHECKS = [
     recommendation: 'Faça encode (HTML entity) de qualquer entrada do usuário antes de refletir ela na resposta, e considere um Content-Security-Policy como camada extra.',
     run: async (ctx) => {
       const probe = '<duxscan>1</duxscan>'
-      for (const param of ['q', 'search', 's', 'query']) {
-        const r = await safeFetch(`${ctx.base}/?${param}=${encodeURIComponent(probe)}`, {}, ctx.timeoutMs, ctx.activeControllers)
-        if (r?.text.includes(probe)) {
-          return { evidence: `payload refletido sem encoding via parâmetro "${param}" (possível XSS refletido)`, path: `?${param}=${encodeURIComponent(probe)}` }
+      // GET primeiro (mais barato, cobre busca/listagem/paginação), POST
+      // depois pro mesmo nome (cobre forms de busca/contato que só aceitam
+      // POST e nunca são tocados pelo loop GET).
+      for (const param of XSS_PARAMS) {
+        const getR = await safeFetch(`${ctx.base}/?${param}=${encodeURIComponent(probe)}`, {}, ctx.timeoutMs, ctx.activeControllers)
+        if (getR?.text.includes(probe)) {
+          return { evidence: `payload refletido sem encoding via parâmetro GET "${param}" (possível XSS refletido)`, path: `?${param}=${encodeURIComponent(probe)}` }
+        }
+
+        const postR = await safeFetch(
+          ctx.base,
+          { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: `${param}=${encodeURIComponent(probe)}` },
+          ctx.timeoutMs,
+          ctx.activeControllers
+        )
+        if (postR?.text.includes(probe)) {
+          return { evidence: `payload refletido sem encoding via parâmetro POST "${param}" (possível XSS refletido)`, path: '' }
         }
       }
-      return null
+
+      // Nada no HTML cru — cobre o caso de SPA que só joga o parâmetro no DOM
+      // via JS (o que fetch sem execução nunca vê, mesmo problema do
+      // credentialTest.js) e também serve de segunda confirmação mais
+      // confiável: em vez de "o texto do payload apareceu na resposta"
+      // (pode ser falso positivo se aparecer dentro de comentário/atributo/
+      // string JS sem nunca ser interpretado como markup), navega de verdade
+      // e confere se ele EXECUTOU — ver renderCheckXssExecution em
+      // src/main/renderBridge.js.
+      const rendered = await requestXssCheck({ url: ctx.base, timeoutMs: Math.max(RENDER_FALLBACK_MIN_MS, ctx.timeoutMs), params: XSS_PARAMS }).catch(
+        () => ({ found: false })
+      )
+      return rendered?.found ? { evidence: rendered.evidence, path: rendered.path } : null
     }
   },
   {
@@ -365,6 +449,257 @@ const CHECKS = [
       const values = [r?.response.headers.get('server'), r?.response.headers.get('x-powered-by')].filter(Boolean)
       const withVersion = values.find((v) => /\d+\.\d+/.test(v))
       if (withVersion) return { evidence: `versão explícita exposta: "${withVersion}" — pesquise CVEs conhecidas para essa versão`, path: '' }
+      return null
+    }
+  },
+
+  // Checks específicos de WordPress — todos são sondas de paths/endpoints
+  // conhecidos do core (não miram plugin/tema individual, isso exigiria uma
+  // base de CVEs por versão que este arquivo não tem), então rodam sem custo
+  // extra contra qualquer alvo: em sites que não são WordPress, cada um só
+  // recebe 404/resposta genérica e devolve null, igual aos checks de
+  // Spring/phpinfo acima.
+  {
+    id: 'wp-xmlrpc-enabled',
+    name: 'WordPress XML-RPC habilitado',
+    severity: 'medium',
+    category: 'wordpress',
+    recommendation: 'Desabilite o XML-RPC (bloqueie /xmlrpc.php no servidor web, ou use um plugin como "Disable XML-RPC") se você não depende dele pra apps móveis/Jetpack — é o vetor clássico de brute-force amplificado (system.multicall) e de pingback DDoS.',
+    run: async (ctx) => {
+      const body = '<?xml version="1.0"?><methodCall><methodName>system.listMethods</methodName><params></params></methodCall>'
+      const r = await safeFetch(`${ctx.base}/xmlrpc.php`, { method: 'POST', headers: { 'Content-Type': 'text/xml' }, body }, ctx.timeoutMs, ctx.activeControllers)
+      if (r?.response.ok && /<methodresponse/i.test(r.text) && /pingback\.ping/i.test(r.text)) {
+        return { evidence: 'xmlrpc.php responde a system.listMethods e expõe pingback.ping', path: 'xmlrpc.php' }
+      }
+      return null
+    }
+  },
+  {
+    id: 'wp-rest-user-enumeration',
+    name: 'WordPress expõe usuários via REST API',
+    severity: 'medium',
+    category: 'wordpress',
+    recommendation: 'Restrinja /wp-json/wp/v2/users (plugin como "Disable REST API", ou regra no servidor/proxy) — nomes de usuário reais facilitam ataques de força bruta direcionados.',
+    run: async (ctx) => {
+      const r = await safeFetch(`${ctx.base}/wp-json/wp/v2/users`, {}, ctx.timeoutMs, ctx.activeControllers)
+      if (!r?.response.ok) return null
+      let users
+      try {
+        users = JSON.parse(r.text)
+      } catch {
+        return null
+      }
+      if (Array.isArray(users) && users.length && users[0]?.slug) {
+        const names = users.slice(0, 5).map((u) => u.slug).join(', ')
+        return { evidence: `API REST expõe ${users.length} usuário(s): ${names}${users.length > 5 ? '...' : ''}`, path: 'wp-json/wp/v2/users' }
+      }
+      return null
+    }
+  },
+  {
+    id: 'wp-author-scan',
+    name: 'WordPress permite enumerar usuário via ?author=',
+    severity: 'low',
+    category: 'wordpress',
+    recommendation: 'Bloqueie o parâmetro ?author= no servidor/CDN, ou use um plugin que impeça esse redirect revelar o slug do usuário.',
+    run: async (ctx) => {
+      const r = await safeFetch(`${ctx.base}/?author=1`, { redirect: 'manual' }, ctx.timeoutMs, ctx.activeControllers)
+      const status = r?.response.status || 0
+      const location = r?.response.headers.get('location') || ''
+      if (status >= 300 && status < 400 && /\/author\/[^/]+\/?$/i.test(location)) {
+        return { evidence: `?author=1 redireciona revelando o slug do usuário (Location: ${location})`, path: '?author=1' }
+      }
+      return null
+    }
+  },
+  {
+    id: 'wp-config-backup-exposed',
+    name: 'Backup de wp-config.php exposto',
+    severity: 'critical',
+    category: 'wordpress',
+    recommendation: 'Remova qualquer backup/cópia de wp-config.php do diretório público — ele guarda credenciais de banco de dados e chaves secretas em texto puro.',
+    run: async (ctx) =>
+      tryPaths(
+        ctx.base,
+        ['wp-config.php.bak', 'wp-config.php~', 'wp-config.php.save', 'wp-config.php.swp', 'wp-config.php.old', 'wp-config.txt', 'wp-config.php.orig'],
+        (text) => (/DB_PASSWORD|AUTH_KEY|define\(\s*['"]DB_/i.test(text) ? 'backup de wp-config.php expõe credenciais de banco/chaves secretas em texto puro' : null),
+        ctx
+      )
+  },
+  {
+    id: 'wp-debug-log-exposed',
+    name: 'Log de debug do WordPress exposto',
+    severity: 'high',
+    category: 'wordpress',
+    recommendation: 'Desative WP_DEBUG_LOG em produção ou mova o log pra fora do diretório público — ele costuma vazar paths do servidor, queries SQL e stack traces de plugin/tema.',
+    run: async (ctx) => {
+      const r = await safeFetch(`${ctx.base}/wp-content/debug.log`, {}, ctx.timeoutMs, ctx.activeControllers)
+      if (r?.response.ok && r.text.trim().length > 0 && /\[\d{2}-\w{3}-\d{4}|PHP (Warning|Notice|Fatal error|Deprecated)/i.test(r.text)) {
+        return { evidence: 'wp-content/debug.log acessível publicamente e contém saída de log real', path: 'wp-content/debug.log' }
+      }
+      return null
+    }
+  },
+  {
+    id: 'wp-uploads-listing',
+    name: 'Directory listing em wp-content/uploads',
+    severity: 'low',
+    category: 'wordpress',
+    recommendation: 'Desative directory listing (Options -Indexes no Apache, autoindex off no Nginx) no diretório de uploads.',
+    run: async (ctx) => {
+      const r = await safeFetch(`${ctx.base}/wp-content/uploads/`, {}, ctx.timeoutMs, ctx.activeControllers)
+      if (r?.response.ok && /index of \/wp-content\/uploads/i.test(r.text)) {
+        return { evidence: 'wp-content/uploads/ lista arquivos publicamente (directory listing habilitado)', path: 'wp-content/uploads/' }
+      }
+      return null
+    }
+  },
+  {
+    id: 'wp-version-exposed',
+    name: 'Versão do WordPress exposta',
+    severity: 'low',
+    category: 'wordpress',
+    recommendation: 'Remova/bloqueie o acesso a readme.html — atacantes usam a versão exata do core pra mirar CVEs conhecidas dessa release.',
+    run: async (ctx) => {
+      const r = await safeFetch(`${ctx.base}/readme.html`, {}, ctx.timeoutMs, ctx.activeControllers)
+      if (r?.response.ok) {
+        const m = /version (\d+\.\d+(\.\d+)?)/i.exec(r.text)
+        if (m) return { evidence: `readme.html expõe a versão do WordPress: ${m[1]}`, path: 'readme.html' }
+      }
+      return null
+    }
+  },
+
+  // Falhas clássicas de app "vibe-coded" (protótipo feito rápido com
+  // IA/low-code, sem revisão de segurança): segredo/chave hardcoded direto
+  // no front-end (porque é mais rápido que subir um backend proxy), token
+  // privilegiado que vazou do backend pro cliente, source map de produção
+  // esquecido ligado, rota de debug que ecoa env var, e serviços gerenciados
+  // (Firebase/GraphQL) deixados na config padrão "aberta pra facilitar o
+  // dev". Evidência trunca o segredo em si — o achado precisa ser útil pra
+  // corrigir sem virar ele mesmo um vazamento (esse relatório pode ser
+  // colado numa IA externa).
+  {
+    id: 'ai-provider-key-exposed',
+    name: 'Chave de API (IA/pagamento/cloud) hardcoded no front-end',
+    severity: 'critical',
+    category: 'segredo exposto',
+    recommendation: 'Nunca chame provedores de IA/pagamento/cloud direto do front-end com a chave secreta embutida no bundle — mova a chamada pra um endpoint de backend seu que guarda a chave numa variável de ambiente do servidor.',
+    run: async (ctx) => {
+      const corpus = await fetchAssetCorpus(ctx)
+      for (const { name, re } of AI_KEY_PATTERNS) {
+        const m = re.exec(corpus)
+        if (m) {
+          return { evidence: `chave de API da ${name} encontrada hardcoded no HTML/JS servido ao navegador (início: ${m[0].slice(0, 8)}...)`, path: '' }
+        }
+      }
+      return null
+    }
+  },
+  {
+    id: 'jwt-privileged-role-exposed',
+    name: 'Token JWT com papel privilegiado exposto no front-end',
+    severity: 'critical',
+    category: 'segredo exposto',
+    recommendation: 'Nunca envie pro front-end um JWT com papel de serviço/admin (ex: service_role do Supabase) — esse token ignora Row Level Security e dá acesso total ao banco. No cliente só a chave pública (anon/publishable) deveria aparecer.',
+    run: async (ctx) => {
+      const corpus = await fetchAssetCorpus(ctx)
+      const jwtRe = /eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
+      let m
+      while ((m = jwtRe.exec(corpus))) {
+        try {
+          const payload = JSON.parse(Buffer.from(m[0].split('.')[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'))
+          const role = payload.role || payload.aud
+          if (role && /service_role|admin|superuser/i.test(String(role))) {
+            return { evidence: `JWT com papel "${role}" encontrado no HTML/JS servido ao navegador`, path: '' }
+          }
+        } catch {
+          // não decodificou como JSON válido — não é o token que procuramos, segue tentando o próximo
+        }
+      }
+      return null
+    }
+  },
+  {
+    id: 'source-map-exposed',
+    name: 'Source map de produção exposto',
+    severity: 'medium',
+    category: 'exposição de informação',
+    recommendation: 'Desative a geração de source maps em produção (ex: productionBrowserSourceMaps: false no Next.js, sourcemap: false no Vite/webpack) ou sirva-os só internamente — eles reconstroem o código-fonte original, incluindo comentários e lógica que deveriam ficar privados.',
+    run: async (ctx) => {
+      const home = await safeFetch(`${ctx.base}/`, {}, ctx.timeoutMs, ctx.activeControllers)
+      if (!home) return null
+      let origin
+      try {
+        origin = new URL(ctx.base).origin
+      } catch {
+        return null
+      }
+      const scriptSrcs = [...home.text.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) => m[1])
+      for (const src of scriptSrcs.slice(0, 6)) {
+        let assetUrl
+        try {
+          assetUrl = new URL(src, `${ctx.base}/`)
+        } catch {
+          continue
+        }
+        if (assetUrl.origin !== origin) continue
+        const r = await safeFetch(`${assetUrl}.map`, {}, ctx.timeoutMs, ctx.activeControllers)
+        if (r?.response.ok && /"sources"\s*:|"version"\s*:\s*3/.test(r.text)) {
+          return { evidence: `source map público em ${assetUrl}.map reconstrói o código-fonte original`, path: '' }
+        }
+      }
+      return null
+    }
+  },
+  {
+    id: 'debug-env-endpoint-exposed',
+    name: 'Endpoint de debug expõe variáveis de ambiente',
+    severity: 'critical',
+    category: 'exposição de informação',
+    recommendation: 'Remova qualquer rota de debug que devolva process.env (ou similar) antes de ir pra produção — costuma acabar publicado sem querer quando o deploy é feito sem revisão.',
+    run: async (ctx) => {
+      const candidates = ['api/debug', 'api/env', 'api/config', '_debug', 'debug/env', '.well-known/env']
+      for (const p of candidates) {
+        const r = await safeFetch(`${ctx.base}/${p}`, {}, ctx.timeoutMs, ctx.activeControllers)
+        if (r?.response.ok && /API_KEY|SECRET|DATABASE_URL|PASSWORD|PRIVATE_KEY|ACCESS_TOKEN/i.test(r.text)) {
+          return { evidence: `${p} responde 200 e o corpo contém nomes de variável típicos de segredo (API_KEY/SECRET/DATABASE_URL/...)`, path: p }
+        }
+      }
+      return null
+    }
+  },
+  {
+    id: 'firebase-rtdb-public',
+    name: 'Firebase Realtime Database público',
+    severity: 'high',
+    category: 'configuração insegura',
+    recommendation: 'Configure as Security Rules do Realtime Database (nunca deixe ".read": true/".write": true no nó raiz) — é o erro de configuração mais comum em protótipos feitos com Firebase.',
+    run: async (ctx) => {
+      const corpus = await fetchAssetCorpus(ctx)
+      const m = /([a-z0-9-]+)\.firebaseio\.com/i.exec(corpus)
+      if (!m) return null
+      const r = await safeFetch(`https://${m[1]}.firebaseio.com/.json?shallow=true`, {}, ctx.timeoutMs, ctx.activeControllers)
+      if (r?.response.ok && r.text.trim() !== 'null' && r.text.trim().length > 2) {
+        return { evidence: `Realtime Database "${m[1]}" responde com dados reais sem autenticação (regras públicas)`, path: '' }
+      }
+      return null
+    }
+  },
+  {
+    id: 'graphql-introspection-enabled',
+    name: 'Introspecção do GraphQL habilitada em produção',
+    severity: 'medium',
+    category: 'exposição de informação',
+    recommendation: 'Desabilite a introspecção do schema GraphQL em produção (na maioria das libs é uma flag: introspection: false) — ela expõe toda a estrutura da API, incluindo mutations sensíveis.',
+    run: async (ctx) => {
+      const body = JSON.stringify({ query: '{__schema{queryType{name}}}' })
+      for (const p of ['graphql', 'api/graphql']) {
+        const r = await safeFetch(`${ctx.base}/${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }, ctx.timeoutMs, ctx.activeControllers)
+        if (r?.response.ok && /"__schema"/.test(r.text) && /"queryType"/.test(r.text)) {
+          return { evidence: `${p} responde à query de introspecção (__schema) — schema completo da API acessível`, path: p }
+        }
+      }
       return null
     }
   }

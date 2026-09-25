@@ -82,7 +82,7 @@
           </label>
           <label class="radio-label">
             <input type="radio" value="top100" v-model="portsMode" @change="syncData" />
-            Estendida (top 100)
+            Estendida (185)
           </label>
           <label class="radio-label">
             <input type="radio" value="custom" v-model="portsMode" @change="syncData" />
@@ -99,8 +99,8 @@
 
         <div v-else-if="portsMode === 'top100'">
           <p class="hint">
-            {{ TOP20_PORTS_CLIENT.length }} portas comuns + ~80 adicionais (bancos de dados, filas, containers,
-            k8s, ferramentas de dev...).
+            {{ TOP20_PORTS_CLIENT.length }} portas comuns + 165 adicionais (bancos de dados, filas, containers, k8s,
+            painéis de hospedagem, r-services legados, observabilidade, ferramentas de dev...).
           </p>
         </div>
 
