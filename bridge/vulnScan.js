@@ -4,6 +4,12 @@ const { requestXssCheck } = require('./renderBridgeClient')
 
 const DEFAULT_TIMEOUT_MS = 6000
 const MAX_BODY_BYTES = 200_000
+// Teto bem mais alto usado só pelos checks de segredo hardcoded no bundle
+// (fetchAssetCorpus com override) — bundle real de SPA costuma ter 1-5MB, e o
+// teto genérico de MAX_BODY_BYTES (200KB) deixava segredo fora dessa janela
+// passar batido. Ainda é um corte, não leitura ilimitada, pra não estourar
+// memória/tempo num bundle anormalmente grande.
+const SECRET_SCAN_MAX_ASSET_BYTES = 5_000_000
 const DEFAULT_CONCURRENCY = 5
 const MAX_CONCURRENCY = 10
 // Piso mínimo pro fallback de renderização real (mesmo raciocínio do
@@ -44,13 +50,13 @@ async function readBodyCapped(response, maxBytes) {
 // Mesmo padrão de fetch com AbortController+timeout registrado num set
 // compartilhado (activeControllers) usado em subdomainScan.js/dirFuzz.js —
 // permite ao stop() do runner abortar todas as requisições em voo na hora.
-async function safeFetch(url, opts, timeoutMs, activeControllers) {
+async function safeFetch(url, opts, timeoutMs, activeControllers, maxBytes = MAX_BODY_BYTES) {
   const controller = new AbortController()
   activeControllers?.add(controller)
   const timer = setTimeout(() => controller.abort('timeout'), timeoutMs)
   try {
     const response = await fetch(url, { redirect: 'follow', ...opts, signal: controller.signal })
-    const text = opts?.method === 'HEAD' ? '' : await readBodyCapped(response, MAX_BODY_BYTES)
+    const text = opts?.method === 'HEAD' ? '' : await readBodyCapped(response, maxBytes)
     return { response, text }
   } catch {
     return null
@@ -105,12 +111,13 @@ async function tryPaths(base, paths, matcher, ctx) {
 // Busca o HTML da home + até maxAssets bundles JS same-origin referenciados
 // nela (mesma origem só, pra não puxar CDN de terceiro tipo Google
 // Fonts/analytics) — usado pelos checks de "segredo hardcoded no front-end"
-// abaixo, que precisam olhar dentro do bundle, não só do HTML. MAX_BODY_BYTES
-// (via safeFetch) cobre só os primeiros ~200KB de cada asset — bundle grande
-// pode ter segredo fora dessa janela; é o mesmo trade-off "curado, não
-// exaustivo" do resto do arquivo, não uma varredura garantida de 100%.
-async function fetchAssetCorpus(ctx, maxAssets = 4) {
-  const home = await safeFetch(`${ctx.base}/`, {}, ctx.timeoutMs, ctx.activeControllers)
+// abaixo, que precisam olhar dentro do bundle, não só do HTML. Por padrão usa
+// o teto genérico MAX_BODY_BYTES (~200KB por asset), mas quem chama pode
+// passar maxBytesPerAsset maior (ex: SECRET_SCAN_MAX_ASSET_BYTES) pros checks
+// que precisam varrer o bundle inteiro — os demais checks que usam esta
+// função sem passar o parâmetro continuam com o comportamento atual.
+async function fetchAssetCorpus(ctx, maxAssets = 4, maxBytesPerAsset = MAX_BODY_BYTES) {
+  const home = await safeFetch(`${ctx.base}/`, {}, ctx.timeoutMs, ctx.activeControllers, maxBytesPerAsset)
   if (!home) return ''
   let origin
   try {
@@ -131,7 +138,7 @@ async function fetchAssetCorpus(ctx, maxAssets = 4) {
       continue
     }
     if (assetUrl.origin !== origin) continue
-    const r = await safeFetch(assetUrl.toString(), {}, ctx.timeoutMs, ctx.activeControllers)
+    const r = await safeFetch(assetUrl.toString(), {}, ctx.timeoutMs, ctx.activeControllers, maxBytesPerAsset)
     if (r?.response.ok) {
       corpus += '\n' + r.text
       fetched += 1
@@ -586,7 +593,7 @@ const CHECKS = [
     category: 'segredo exposto',
     recommendation: 'Nunca chame provedores de IA/pagamento/cloud direto do front-end com a chave secreta embutida no bundle — mova a chamada pra um endpoint de backend seu que guarda a chave numa variável de ambiente do servidor.',
     run: async (ctx) => {
-      const corpus = await fetchAssetCorpus(ctx)
+      const corpus = await fetchAssetCorpus(ctx, 4, SECRET_SCAN_MAX_ASSET_BYTES)
       for (const { name, re } of AI_KEY_PATTERNS) {
         const m = re.exec(corpus)
         if (m) {
@@ -603,7 +610,7 @@ const CHECKS = [
     category: 'segredo exposto',
     recommendation: 'Nunca envie pro front-end um JWT com papel de serviço/admin (ex: service_role do Supabase) — esse token ignora Row Level Security e dá acesso total ao banco. No cliente só a chave pública (anon/publishable) deveria aparecer.',
     run: async (ctx) => {
-      const corpus = await fetchAssetCorpus(ctx)
+      const corpus = await fetchAssetCorpus(ctx, 4, SECRET_SCAN_MAX_ASSET_BYTES)
       const jwtRe = /eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
       let m
       while ((m = jwtRe.exec(corpus))) {
