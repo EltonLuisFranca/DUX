@@ -8,6 +8,7 @@ import { registerHttpNodeIpc } from './ipc/httpNode'
 import { registerVoiceIpc } from './ipc/voice'
 import { registerBrowserNodeIpc } from './ipc/browserNode'
 import { registerImageNodeIpc } from './ipc/imageNode'
+import { registerVulnReportIpc } from './ipc/vulnReport'
 import { attachRenderBridge } from './renderBridge'
 
 const WSL_DISTRO = 'Debian'
@@ -51,6 +52,7 @@ registerHttpNodeIpc()
 registerVoiceIpc()
 registerBrowserNodeIpc()
 registerImageNodeIpc()
+registerVulnReportIpc()
 
 let mainWindowRef = null
 

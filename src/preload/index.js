@@ -51,3 +51,8 @@ contextBridge.exposeInMainWorld('imageNodeAPI', {
 contextBridge.exposeInMainWorld('httpNodeAPI', {
   request: (options) => ipcRenderer.invoke('http-node:request', options)
 })
+
+contextBridge.exposeInMainWorld('vulnReportAPI', {
+  saveHtml: (html, defaultName) => ipcRenderer.invoke('vuln-report:save-html', { html, defaultName }),
+  savePdf: (html, defaultName) => ipcRenderer.invoke('vuln-report:save-pdf', { html, defaultName })
+})

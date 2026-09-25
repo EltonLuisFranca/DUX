@@ -170,9 +170,17 @@
 
         <div v-if="findingsBySeverity.length" class="findings-toolbar">
           <span class="section-label">Achados ({{ lastResult.findings.length }})</span>
-          <button class="link-btn" @click="copyFindingsReport">
-            {{ findingsCopied ? 'Copiado!' : 'Copiar achados para IA' }}
-          </button>
+          <div class="findings-toolbar-actions">
+            <button class="link-btn" @click="copyFindingsReport">
+              {{ findingsCopied ? 'Copiado!' : 'Copiar achados para IA' }}
+            </button>
+            <button class="link-btn" :disabled="reportSaving === 'html'" @click="downloadReportHtml">
+              {{ reportSaving === 'html' ? 'Salvando...' : 'Baixar HTML' }}
+            </button>
+            <button class="link-btn" :disabled="reportSaving === 'pdf'" @click="downloadReportPdf">
+              {{ reportSaving === 'pdf' ? 'Salvando...' : 'Baixar PDF' }}
+            </button>
+          </div>
         </div>
         <div v-if="findingsBySeverity.length" class="acc-list">
           <div v-for="group in findingsBySeverity" :key="group.severity" class="acc-section" :class="severityClass(group.severity)">
@@ -1226,6 +1234,172 @@ async function copyFindingsReport() {
   }
 }
 
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+}
+
+const SEVERITY_COLORS = {
+  critical: '#dc2626',
+  high: '#ea580c',
+  medium: '#d97706',
+  low: '#2563eb',
+  info: '#64748b'
+}
+
+const severityCounts = computed(() => {
+  const counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
+  for (const f of lastResult.value?.findings || []) {
+    if (counts[f.severity] !== undefined) counts[f.severity]++
+  }
+  return counts
+})
+
+// Parágrafo curto pro sumário executivo, gerado a partir das contagens —
+// evita depender de texto redigido à mão pra cada relatório.
+const executiveSummaryText = computed(() => {
+  const c = severityCounts.value
+  const total = c.critical + c.high + c.medium + c.low + c.info
+  const target = domain.value || url.value
+  if (!total) return `A varredura em ${target} não identificou achados nos critérios avaliados.`
+  const parts = []
+  if (c.critical) parts.push(`${c.critical} crítico(s)`)
+  if (c.high) parts.push(`${c.high} alto(s)`)
+  if (c.medium) parts.push(`${c.medium} médio(s)`)
+  if (c.low) parts.push(`${c.low} baixo(s)`)
+  if (c.info) parts.push(`${c.info} informativo(s)`)
+  const urgency = c.critical || c.high
+    ? ' Recomenda-se priorizar a correção dos achados críticos e altos antes de qualquer outra ação.'
+    : ' Nenhum achado crítico ou alto foi identificado, mas os itens listados ainda merecem atenção.'
+  return `A varredura em ${target} identificou ${total} achado(s): ${parts.join(', ')}.${urgency}`
+})
+
+// Gera um HTML standalone (sem dependências externas) pronto pra virar o
+// relatório entregável ao cliente — reaproveita os mesmos dados já usados na
+// UI (findingsBySeverity, footprint), só que num template com cara
+// profissional em vez da lista Markdown crua do "Copiar achados para IA".
+function generateReportHtml() {
+  const target = escapeHtml(domain.value || url.value)
+  const generatedAt = new Date().toLocaleString('pt-BR')
+  const c = severityCounts.value
+  const total = c.critical + c.high + c.medium + c.low + c.info
+  const fp = footprint.value
+
+  const summaryCards = Object.keys(SEVERITY_ORDER)
+    .map((sev) => `
+      <div class="sum-card" style="border-top-color:${SEVERITY_COLORS[sev]}">
+        <span class="sum-count">${c[sev]}</span>
+        <span class="sum-label">${severityLabel(sev)}</span>
+      </div>`)
+    .join('')
+
+  const findingsHtml = findingsBySeverity.value.map((group) => `
+    <section class="sev-group">
+      <h3 style="color:${SEVERITY_COLORS[group.severity]}">${severityLabel(group.severity)} (${group.items.length})</h3>
+      ${group.items.map((f) => `
+        <article class="finding" style="border-left-color:${SEVERITY_COLORS[group.severity]}">
+          <div class="finding-title-row">
+            <strong>${escapeHtml(f.title)}</strong>
+            <span class="finding-module">${escapeHtml(MODULE_LABELS[f.moduleId] || f.moduleId)}</span>
+          </div>
+          ${f.evidence ? `<p class="finding-evidence">${escapeHtml(f.evidence)}</p>` : ''}
+          ${f.url ? `<p class="finding-meta">Testado em: <code>${escapeHtml(f.url)}</code></p>` : ''}
+          ${f.recommendation ? `<p class="finding-reco"><strong>Como corrigir:</strong> ${escapeHtml(f.recommendation)}</p>` : ''}
+        </article>`).join('')}
+    </section>`).join('') || '<p class="ok-msg">Nenhum achado nos critérios avaliados.</p>'
+
+  const footprintHtml = fp.pointsCount ? `
+    <section class="block">
+      ${fp.ips.length ? `<p><strong>Endereços IP:</strong> ${fp.ips.map(escapeHtml).join(', ')}</p>` : ''}
+      ${fp.registrar ? `<p><strong>Registrador:</strong> ${escapeHtml(fp.registrar)}${fp.expiresAt ? ` (expira em ${escapeHtml(fp.expiresAt)})` : ''}</p>` : ''}
+      ${fp.technologies.length ? `<p><strong>Tecnologias detectadas:</strong> ${fp.technologies.map(escapeHtml).join(', ')}</p>` : ''}
+      ${fp.openPorts.length ? `<p><strong>Portas abertas:</strong> ${fp.openPorts.map((p) => `${p.port} (${escapeHtml(p.service)})`).join(', ')}</p>` : ''}
+      ${fp.subdomains.length ? `<p><strong>Subdomínios encontrados:</strong> ${fp.subdomains.map(escapeHtml).join(', ')}</p>` : ''}
+    </section>` : '<p class="ok-msg">Nenhuma informação de footprinting coletada.</p>'
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Relatório de Segurança — ${target}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; margin: 0; color: #1e293b; background: #fff; }
+  .page { max-width: 860px; margin: 0 auto; padding: 48px 32px; }
+  .cover { text-align: center; padding: 64px 0 48px; border-bottom: 3px solid #0f172a; margin-bottom: 32px; }
+  .cover h1 { font-size: 28px; margin: 0 0 8px; }
+  .cover .target { font-size: 20px; color: #334155; margin: 0 0 24px; }
+  .cover .meta { color: #64748b; font-size: 13px; }
+  h2 { font-size: 18px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin: 40px 0 16px; }
+  .summary-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  .sum-card { flex: 1 1 100px; border-top: 4px solid #64748b; background: #f8fafc; border-radius: 6px; padding: 14px; text-align: center; }
+  .sum-count { display: block; font-size: 26px; font-weight: 700; }
+  .sum-label { display: block; font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; }
+  .exec-summary { background: #f8fafc; border-radius: 6px; padding: 16px 20px; line-height: 1.6; }
+  .sev-group { margin-bottom: 24px; }
+  .sev-group h3 { font-size: 15px; margin: 0 0 10px; }
+  .finding { border-left: 4px solid #64748b; background: #f8fafc; border-radius: 4px; padding: 12px 16px; margin-bottom: 10px; }
+  .finding-title-row { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+  .finding-module { font-size: 11px; color: #64748b; white-space: nowrap; }
+  .finding-evidence, .finding-meta, .finding-reco { margin: 4px 0; font-size: 13px; line-height: 1.5; }
+  .finding-meta code { font-size: 12px; background: #eef2f7; padding: 1px 4px; border-radius: 3px; }
+  .ok-msg { color: #16a34a; }
+  .block p { margin: 6px 0; font-size: 13px; }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center; }
+  @media print { .page { padding: 0 8px; } .cover { padding-top: 24px; } }
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="cover">
+      <h1>Relatório de Segurança</h1>
+      <p class="target">${target}</p>
+      <p class="meta">Gerado em ${escapeHtml(generatedAt)} · ${total} achado(s) identificado(s)</p>
+    </div>
+
+    <h2>Sumário executivo</h2>
+    <div class="summary-grid">${summaryCards}</div>
+    <p class="exec-summary">${escapeHtml(executiveSummaryText.value)}</p>
+
+    <h2>Achados</h2>
+    ${findingsHtml}
+
+    <h2>Footprinting</h2>
+    ${footprintHtml}
+
+    <footer>Relatório gerado automaticamente pelo Scanner de Vulnerabilidade do DUX. Os achados refletem testes automatizados e devem ser validados manualmente antes de priorização de correção.</footer>
+  </div>
+</body>
+</html>`
+}
+
+const reportSaving = ref(null)
+
+async function downloadReportHtml() {
+  if (!window.vulnReportAPI) return
+  reportSaving.value = 'html'
+  try {
+    const defaultName = `relatorio-${domain.value || 'scan'}.html`
+    await window.vulnReportAPI.saveHtml(generateReportHtml(), defaultName)
+  } catch (err) {
+    console.error('[vuln-scan-node] save html report failed', err)
+  } finally {
+    reportSaving.value = null
+  }
+}
+
+async function downloadReportPdf() {
+  if (!window.vulnReportAPI) return
+  reportSaving.value = 'pdf'
+  try {
+    const defaultName = `relatorio-${domain.value || 'scan'}.pdf`
+    await window.vulnReportAPI.savePdf(generateReportHtml(), defaultName)
+  } catch (err) {
+    console.error('[vuln-scan-node] save pdf report failed', err)
+  } finally {
+    reportSaving.value = null
+  }
+}
+
 function toggleModule(moduleId) {
   const next = new Set(openModules.value)
   if (next.has(moduleId)) next.delete(moduleId)
@@ -2111,6 +2285,14 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.findings-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .module-results {
