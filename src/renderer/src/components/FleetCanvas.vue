@@ -1,6 +1,7 @@
 <template>
   <VueFlow
     class="fleet-canvas"
+    :style="canvasBgColor ? { background: canvasBgColor } : undefined"
     v-model:nodes="workspace.nodes"
     v-model:edges="workspace.edges"
     :default-viewport="{ x: 0, y: 0, zoom: 1 }"
@@ -22,7 +23,52 @@
     @edges-change="handleEdgesChange"
     @mousemove="handlePaneMouseMove"
   >
-    <Background v-if="canvasVariant !== 'none'" :gap="16" :color="dotColor" :variant="canvasVariant" />
+    <Background v-if="canvasVariant !== 'none'" :gap="backgroundTileGap">
+      <template #pattern>
+        <svg width="100%" height="100%" :viewBox="`0 0 ${backgroundTileGap} ${backgroundTileGap}`" preserveAspectRatio="none">
+          <circle
+            v-if="canvasVariant === 'dots'"
+            :cx="canvasGap / 2"
+            :cy="canvasGap / 2"
+            :r="canvasPatternSize / 2"
+            :fill="dotColor"
+          />
+          <path
+            v-else-if="canvasVariant === 'lines'"
+            :d="`M${canvasGap / 2} 0 V${canvasGap} M0 ${canvasGap / 2} H${canvasGap}`"
+            :stroke="dotColor"
+            :stroke-width="canvasPatternSize"
+          />
+          <path
+            v-else-if="canvasVariant === 'cross'"
+            :d="crossPath"
+            :stroke="dotColor"
+            :stroke-width="canvasPatternSize"
+            stroke-linecap="round"
+          />
+          <rect
+            v-else-if="canvasVariant === 'grid'"
+            x="0"
+            y="0"
+            :width="canvasGap"
+            :height="canvasGap"
+            fill="none"
+            :stroke="dotColor"
+            :stroke-width="canvasPatternSize"
+          />
+          <path
+            v-else-if="canvasVariant === 'diagonal'"
+            :d="`M0 0 L${canvasGap} ${canvasGap}`"
+            :stroke="dotColor"
+            :stroke-width="canvasPatternSize"
+          />
+          <template v-else-if="canvasVariant === 'checkerboard'">
+            <rect x="0" y="0" :width="canvasGap" :height="canvasGap" :fill="dotColor" fill-opacity="0.18" />
+            <rect :x="canvasGap" :y="canvasGap" :width="canvasGap" :height="canvasGap" :fill="dotColor" fill-opacity="0.18" />
+          </template>
+        </svg>
+      </template>
+    </Background>
     <Panel v-if="workspace.nodes.length === 0" position="top-left" class="empty-state-panel">
       <button class="empty-state" @click="openAddNodeModal">
         <svg viewBox="0 0 20 20" width="20" height="20">
@@ -33,9 +79,6 @@
     </Panel>
     <Panel position="bottom-center" class="bottom-toolbar-stack">
       <ZoomControls />
-    </Panel>
-    <Panel position="top-right" class="usage-dock-panel">
-      <ClaudeUsageDock />
     </Panel>
 
     <DuxSearch v-if="isActiveWorkspace" :workspace="workspace" />
@@ -216,7 +259,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, watch } from 'vue'
 import { VueFlow, Panel, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import ZoomControls from './ZoomControls.vue'
-import ClaudeUsageDock from './ClaudeUsageDock.vue'
 import CustomEdge from './CustomEdge.vue'
 import RemoteCursor from './RemoteCursor.vue'
 import WslClaudeTerminalNode from './WslClaudeTerminalNode.vue'
@@ -241,7 +283,16 @@ import DnsWhoisNode from './DnsWhoisNode.vue'
 import PomodoroNode from './PomodoroNode.vue'
 import DuxBanNode from './DuxBanNode.vue'
 import NodeModalWrapper from './NodeModalWrapper.vue'
-import { theme, canvasVariant, edgeStyle, snapEnabled, SNAP_GRID_SIZE } from '../store/themeStore'
+import {
+  canvasVariant,
+  canvasBgColor,
+  resolvedCanvasPatternColor,
+  canvasGap,
+  canvasPatternSize,
+  edgeStyle,
+  snapEnabled,
+  SNAP_GRID_SIZE
+} from '../store/themeStore'
 import {
   onNodeClicked,
   addNode,
@@ -304,7 +355,22 @@ function nodeTitle(nodeProps) {
   return nodeTypeRegistry[nodeProps.type]?.label || nodeProps.type
 }
 
-const dotColor = computed(() => (theme.value === 'light' ? '#c4c4cc' : '#55555e'))
+const dotColor = resolvedCanvasPatternColor
+
+// xadrez precisa de um tile 2x maior que o gap base (duas células, uma
+// preenchida em cada canto oposto) pra alternância funcionar ao repetir —
+// os outros padrões usam o gap normal como tile.
+const backgroundTileGap = computed(() => (canvasVariant.value === 'checkerboard' ? canvasGap.value * 2 : canvasGap.value))
+
+// braço da cruz proporcional ao gap, com limites pra não sumir (gap pequeno)
+// nem virar quase uma linha cheia (gap grande)
+const crossPath = computed(() => {
+  const g = canvasGap.value
+  const half = Math.min(Math.max(g * 0.22, 3), 10)
+  const cx = g / 2
+  const cy = g / 2
+  return `M${cx - half} ${cy} H${cx + half} M${cx} ${cy - half} V${cy + half}`
+})
 
 const isActiveWorkspace = computed(() => props.workspace.id === activeWorkspaceId.value)
 
@@ -536,13 +602,6 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   gap: 10px;
-}
-
-:deep(.vue-flow__panel.right.usage-dock-panel) {
-  top: 50%;
-  right: 0;
-  margin: 0;
-  transform: translateY(-50%);
 }
 
 :deep(.vue-flow__panel.bottom.bottom-toolbar-stack) {

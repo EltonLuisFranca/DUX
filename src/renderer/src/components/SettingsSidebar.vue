@@ -69,30 +69,139 @@
 
             <div class="setting-row">
               <span class="setting-label">Fundo do canvas</span>
-              <div class="segmented">
+              <div class="bg-variant-grid">
                 <button
-                  class="segmented-btn"
-                  :class="{ active: canvasVariant === 'dots' }"
-                  @click="setCanvasVariant('dots')"
+                  v-for="v in CANVAS_VARIANTS"
+                  :key="v.value"
+                  class="bg-variant-btn"
+                  :class="{ active: canvasVariant === v.value }"
+                  @click="setCanvasVariant(v.value)"
                 >
-                  Pontos
-                </button>
-                <button
-                  class="segmented-btn"
-                  :class="{ active: canvasVariant === 'lines' }"
-                  @click="setCanvasVariant('lines')"
-                >
-                  Linhas
-                </button>
-                <button
-                  class="segmented-btn"
-                  :class="{ active: canvasVariant === 'none' }"
-                  @click="setCanvasVariant('none')"
-                >
-                  Nenhum
+                  <svg class="bg-variant-preview" viewBox="0 0 48 48" width="44" height="44">
+                    <rect x="0" y="0" width="48" height="48" rx="6" :fill="v.value === 'none' ? 'none' : 'currentColor'" fill-opacity="0.06" />
+                    <template v-if="v.value === 'dots'">
+                      <circle v-for="p in DOT_PREVIEW_POINTS" :key="p.join(',')" :cx="p[0]" :cy="p[1]" r="2" fill="currentColor" />
+                    </template>
+                    <path
+                      v-else-if="v.value === 'lines'"
+                      d="M12 0V48M36 0V48M0 12H48M0 36H48"
+                      stroke="currentColor"
+                      stroke-width="1.2"
+                      fill="none"
+                    />
+                    <template v-else-if="v.value === 'cross'">
+                      <path
+                        v-for="p in DOT_PREVIEW_POINTS"
+                        :key="p.join(',')"
+                        :d="`M${p[0] - 3} ${p[1]} H${p[0] + 3} M${p[0]} ${p[1] - 3} V${p[1] + 3}`"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                      />
+                    </template>
+                    <path
+                      v-else-if="v.value === 'grid'"
+                      d="M0 0H48V48H0V0ZM16 0V48M32 0V48M0 16H48M0 32H48"
+                      stroke="currentColor"
+                      stroke-width="1.2"
+                      fill="none"
+                    />
+                    <path
+                      v-else-if="v.value === 'diagonal'"
+                      d="M-8 8L8 -8M-8 24L24 -8M-8 40L40 -8M8 56L56 8M24 56L56 24M40 56L56 40"
+                      stroke="currentColor"
+                      stroke-width="1.4"
+                    />
+                    <template v-else-if="v.value === 'checkerboard'">
+                      <rect x="0" y="0" width="16" height="16" fill="currentColor" fill-opacity="0.35" />
+                      <rect x="16" y="16" width="16" height="16" fill="currentColor" fill-opacity="0.35" />
+                      <rect x="32" y="0" width="16" height="16" fill="currentColor" fill-opacity="0.35" />
+                      <rect x="0" y="32" width="16" height="16" fill="currentColor" fill-opacity="0.35" />
+                      <rect x="32" y="32" width="16" height="16" fill="currentColor" fill-opacity="0.35" />
+                    </template>
+                    <path
+                      v-else
+                      d="M12 12L36 36M36 12L12 36"
+                      stroke="currentColor"
+                      stroke-width="1.4"
+                      stroke-linecap="round"
+                      opacity="0.5"
+                    />
+                  </svg>
+                  <span class="bg-variant-label">{{ v.label }}</span>
                 </button>
               </div>
             </div>
+
+            <div class="setting-row">
+              <span class="setting-label">Cor de fundo do canvas</span>
+              <div class="color-row">
+                <AppTooltip label="Cor de fundo">
+                  <label class="color-swatch" :style="{ background: canvasBgColor || 'var(--color-bg-app)' }">
+                    <input
+                      type="color"
+                      class="color-input"
+                      :value="canvasBgColor || '#1e1e22'"
+                      @input="setCanvasBgColor($event.target.value)"
+                    />
+                  </label>
+                </AppTooltip>
+                <button class="action-btn reset-color-btn" :disabled="!canvasBgColor" @click="setCanvasBgColor(null)">
+                  Automático (tema)
+                </button>
+              </div>
+            </div>
+
+            <template v-if="canvasVariant !== 'none'">
+              <div class="setting-row">
+                <span class="setting-label">Cor do padrão</span>
+                <div class="color-row">
+                  <AppTooltip label="Cor do padrão">
+                    <label class="color-swatch" :style="{ background: resolvedCanvasPatternColor }">
+                      <input
+                        type="color"
+                        class="color-input"
+                        :value="resolvedCanvasPatternColor"
+                        @input="setCanvasPatternColor($event.target.value)"
+                      />
+                    </label>
+                  </AppTooltip>
+                  <button
+                    class="action-btn reset-color-btn"
+                    :disabled="!canvasPatternColor"
+                    @click="setCanvasPatternColor(null)"
+                  >
+                    Automático (tema)
+                  </button>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <span class="setting-label">Espaçamento ({{ canvasGap }}px)</span>
+                <input
+                  type="range"
+                  class="range-input"
+                  min="8"
+                  max="80"
+                  step="2"
+                  :value="canvasGap"
+                  @input="setCanvasGap(Number($event.target.value))"
+                />
+              </div>
+
+              <div v-if="canvasVariant !== 'checkerboard'" class="setting-row">
+                <span class="setting-label">Tamanho {{ canvasVariant === 'dots' ? 'do ponto' : 'da linha' }} ({{ canvasPatternSize }}px)</span>
+                <input
+                  type="range"
+                  class="range-input"
+                  min="1"
+                  :max="canvasVariant === 'dots' ? 10 : 4"
+                  step="1"
+                  :value="canvasPatternSize"
+                  @input="setCanvasPatternSize(Number($event.target.value))"
+                />
+              </div>
+            </template>
 
             <div class="setting-row">
               <span class="setting-label">Encaixe magnético</span>
@@ -255,6 +364,16 @@ import {
   setNodeStyleVariant,
   canvasVariant,
   setCanvasVariant,
+  CANVAS_VARIANTS,
+  canvasBgColor,
+  setCanvasBgColor,
+  canvasPatternColor,
+  setCanvasPatternColor,
+  resolvedCanvasPatternColor,
+  canvasGap,
+  setCanvasGap,
+  canvasPatternSize,
+  setCanvasPatternSize,
   edgeStyle,
   setEdgeStyle,
   EDGE_STYLES,
@@ -264,6 +383,7 @@ import {
   closeSettings
 } from '../store/themeStore'
 import { isAuthenticated, user, login, logout } from '../store/authStore'
+import AppTooltip from './AppTooltip.vue'
 import { ttsEnabled, selectedVoiceId, AVAILABLE_VOICES, isSpeaking, isDownloadingVoice, lastError, speak } from '../store/ttsStore'
 import {
   notificationSoundEnabled,
@@ -331,6 +451,20 @@ function testVoice() {
 function testNotificationSound() {
   playNotificationSound({ force: true })
 }
+
+// pontos de exemplo (grid 3x3) reaproveitados nos previews de "Pontos" e
+// "Cruzes" — só muda o que é desenhado em cada ponto (círculo vs. +)
+const DOT_PREVIEW_POINTS = [
+  [12, 12],
+  [24, 12],
+  [36, 12],
+  [12, 24],
+  [24, 24],
+  [36, 24],
+  [12, 36],
+  [24, 36],
+  [36, 36]
+]
 
 const EDGE_PREVIEW_PATHS = {
   default: 'M6 8 C 30 8, 34 24, 58 24',
@@ -588,6 +722,53 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-swatch {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: 1px solid var(--color-border-strong);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.color-input {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.reset-color-btn {
+  width: auto;
+  flex: 1;
+  height: 28px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.reset-color-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.range-input {
+  width: 100%;
+  accent-color: #3b82f6;
+}
+
 .action-btn:hover:not(:disabled) {
   background: var(--color-hover);
 }
@@ -659,6 +840,50 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+
+.bg-variant-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.bg-variant-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.bg-variant-btn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-hover);
+}
+
+.bg-variant-btn.active {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background: rgb(59 130 246 / 0.08);
+}
+
+.bg-variant-preview {
+  color: inherit;
+}
+
+.bg-variant-label {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.bg-variant-btn.active .bg-variant-label {
+  color: #3b82f6;
 }
 
 .edge-style-btn {

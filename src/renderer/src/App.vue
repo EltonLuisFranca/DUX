@@ -28,6 +28,7 @@
           <UserBadge />
           <RoomPresenceBadge />
         </div>
+        <ClaudeUsageDock />
       </div>
       <SettingsSidebar />
     </div>
@@ -49,6 +50,7 @@ import ConfirmDeleteWorkspaceModal from './components/ConfirmDeleteWorkspaceModa
 import SettingsSidebar from './components/SettingsSidebar.vue'
 import UserBadge from './components/UserBadge.vue'
 import RoomPresenceBadge from './components/RoomPresenceBadge.vue'
+import ClaudeUsageDock from './components/ClaudeUsageDock.vue'
 import RoomInviteModal from './components/RoomInviteModal.vue'
 import { workspaces, activeWorkspaceId, switchWorkspace, flushPersist } from './store/flowStore'
 import { toggleSettings } from './store/themeStore'

@@ -177,7 +177,15 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .usage-dock {
-  position: relative;
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  /* precisa ficar acima do modal fullscreen de node (NodeModalWrapper,
+     z-index: 500, Teleport pro <body>) — por isso mora fora da árvore
+     do vue-flow (App.vue), que tem seu próprio stacking context
+     (z-index:0 no .vue-flow) e prenderia qualquer z-index daqui dentro */
+  z-index: 1000;
   display: flex;
   flex-direction: column;
   align-items: center;

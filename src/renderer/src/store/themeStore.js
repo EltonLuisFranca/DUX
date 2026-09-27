@@ -1,4 +1,4 @@
-import { ref, watchEffect } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 
 const STORAGE_KEY = 'dux-theme'
 const CANVAS_VARIANT_STORAGE_KEY = 'dux-canvas-variant'
@@ -29,7 +29,16 @@ export function setTheme(value) {
   theme.value = value
 }
 
-const CANVAS_VARIANT_VALUES = ['dots', 'lines', 'none']
+export const CANVAS_VARIANTS = [
+  { value: 'dots', label: 'Pontos' },
+  { value: 'lines', label: 'Linhas' },
+  { value: 'cross', label: 'Cruzes' },
+  { value: 'grid', label: 'Grade' },
+  { value: 'diagonal', label: 'Diagonal' },
+  { value: 'checkerboard', label: 'Xadrez' },
+  { value: 'none', label: 'Nenhum' }
+]
+const CANVAS_VARIANT_VALUES = CANVAS_VARIANTS.map((v) => v.value)
 const storedCanvasVariant = localStorage.getItem(CANVAS_VARIANT_STORAGE_KEY)
 
 export const canvasVariant = ref(
@@ -42,6 +51,71 @@ watchEffect(() => {
 
 export function setCanvasVariant(variant) {
   canvasVariant.value = variant
+}
+
+// Cor do padrão (pontos/linhas) e do fundo do canvas — null significa
+// "automático" (padrão derivado do tema claro/escuro, ver dotColor em
+// FleetCanvas.vue), string hex sobrescreve.
+const CANVAS_PATTERN_COLOR_STORAGE_KEY = 'dux-canvas-pattern-color'
+const CANVAS_BG_COLOR_STORAGE_KEY = 'dux-canvas-bg-color'
+const CANVAS_GAP_STORAGE_KEY = 'dux-canvas-gap'
+const CANVAS_PATTERN_SIZE_STORAGE_KEY = 'dux-canvas-pattern-size'
+
+export const canvasPatternColor = ref(localStorage.getItem(CANVAS_PATTERN_COLOR_STORAGE_KEY) || null)
+
+watchEffect(() => {
+  if (canvasPatternColor.value) localStorage.setItem(CANVAS_PATTERN_COLOR_STORAGE_KEY, canvasPatternColor.value)
+  else localStorage.removeItem(CANVAS_PATTERN_COLOR_STORAGE_KEY)
+})
+
+export function setCanvasPatternColor(value) {
+  canvasPatternColor.value = value
+}
+
+// Cor do padrão quando canvasPatternColor é null ("automático") — deriva do
+// tema, igual sempre foi antes de existir a opção de customizar. Exportado
+// pra FleetCanvas.vue e SettingsSidebar.vue usarem o mesmo valor (preview do
+// swatch e botão "resetar" precisam bater com o que realmente é desenhado).
+export const defaultCanvasPatternColor = computed(() => (theme.value === 'light' ? '#c4c4cc' : '#55555e'))
+
+export const resolvedCanvasPatternColor = computed(() => canvasPatternColor.value || defaultCanvasPatternColor.value)
+
+export const canvasBgColor = ref(localStorage.getItem(CANVAS_BG_COLOR_STORAGE_KEY) || null)
+
+watchEffect(() => {
+  if (canvasBgColor.value) localStorage.setItem(CANVAS_BG_COLOR_STORAGE_KEY, canvasBgColor.value)
+  else localStorage.removeItem(CANVAS_BG_COLOR_STORAGE_KEY)
+})
+
+export function setCanvasBgColor(value) {
+  canvasBgColor.value = value
+}
+
+const storedCanvasGap = Number(localStorage.getItem(CANVAS_GAP_STORAGE_KEY))
+export const canvasGap = ref(Number.isFinite(storedCanvasGap) && storedCanvasGap > 0 ? storedCanvasGap : 16)
+
+watchEffect(() => {
+  localStorage.setItem(CANVAS_GAP_STORAGE_KEY, String(canvasGap.value))
+})
+
+export function setCanvasGap(value) {
+  canvasGap.value = value
+}
+
+// Diâmetro do ponto (variant 'dots') ou espessura da linha (variant 'lines')
+// — mesmo valor serve pros dois props do vue-flow/background (size/lineWidth),
+// só um se aplica por vez dependendo do canvasVariant ativo.
+const storedCanvasPatternSize = Number(localStorage.getItem(CANVAS_PATTERN_SIZE_STORAGE_KEY))
+export const canvasPatternSize = ref(
+  Number.isFinite(storedCanvasPatternSize) && storedCanvasPatternSize > 0 ? storedCanvasPatternSize : 1
+)
+
+watchEffect(() => {
+  localStorage.setItem(CANVAS_PATTERN_SIZE_STORAGE_KEY, String(canvasPatternSize.value))
+})
+
+export function setCanvasPatternSize(value) {
+  canvasPatternSize.value = value
 }
 
 const validEdgeStyleValues = EDGE_STYLES.map((s) => s.value)
