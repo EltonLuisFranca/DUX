@@ -5,7 +5,6 @@
     :selected="selected"
     :resize="{ minWidth: 320, minHeight: 220, defaultWidth: 480, defaultHeight: 344 }"
     :title="data.name"
-    :meta="data.cwd"
     :status="statusColor"
   >
     <template #icon>

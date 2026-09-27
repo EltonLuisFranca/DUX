@@ -240,23 +240,23 @@ onBeforeUnmount(() => {
   height: 100%;
   border-radius: 50%;
   background: #000;
-  color: var(--color-text-tertiary);
-  font-size: 9px;
-  font-weight: 600;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
 .usage-ring-inner.warn {
-  color: #d97706;
+  color: #f59e0b;
 }
 
 .usage-ring-inner.danger {
-  color: #ef4444;
+  color: #f87171;
 }
 
 .usage-ring-label {
-  font-size: 11px;
-  color: var(--color-text-quaternary);
+  font-size: 9px;
+  color: var(--color-text-tertiary);
 }
 
 .usage-menu {

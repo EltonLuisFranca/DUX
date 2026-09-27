@@ -50,9 +50,6 @@
         <span class="shell-title">{{ title }}</span>
         <span v-if="meta" class="shell-meta">{{ meta }}</span>
         <slot name="headerActions" />
-        <button class="shell-settings-btn nodrag" title="Configurações" @click="toggleNodeSettings(id)">
-          <GearIcon />
-        </button>
       </div>
 
       <slot />
@@ -70,12 +67,10 @@
 
 <script setup>
 import { Handle, Position } from '@vue-flow/core'
-import { toggleNodeSettings } from '../store/flowStore'
 import { nodeStyleVariant } from '../store/themeStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
 import { useNodeResize } from '../lib/useNodeResize'
 import NodeToolbar from './NodeToolbar.vue'
-import GearIcon from './icons/GearIcon.vue'
 import ResizeGripIcon from './icons/ResizeGripIcon.vue'
 
 const props = defineProps({
@@ -202,22 +197,6 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, props.resize
   flex-shrink: 1;
 }
 
-.shell-settings-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-
-.shell-settings-btn:hover {
-  background: var(--color-hover);
-  color: var(--color-text-primary);
-}
-
 .resize-handle {
   position: absolute;
   bottom: 0;
@@ -266,13 +245,6 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, props.resize
   font-size: 10.5px;
 }
 
-.variant-structured .shell-settings-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  background: var(--color-bg-surface-raised);
-}
-
 .variant-structured .shell-footer {
   flex-shrink: 0;
   display: flex;
@@ -307,12 +279,6 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, props.resize
 
 .variant-compact .shell-meta {
   font-size: 9px;
-}
-
-.variant-compact .shell-settings-btn {
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
 }
 
 .variant-compact .shell-footer {

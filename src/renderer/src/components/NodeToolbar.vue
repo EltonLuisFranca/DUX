@@ -1,6 +1,13 @@
 <template>
   <Transition name="toolbar-fade">
     <div v-if="selected" class="node-toolbar nodrag nowheel">
+      <AppTooltip label="Configurações">
+        <button class="tool-btn" @click="toggleNodeSettings(id)">
+          <GearIcon />
+        </button>
+      </AppTooltip>
+
+      <span class="tool-divider" />
       <AppTooltip label="Cor do header">
         <label class="color-swatch" :style="{ background: data.headerColor || '#1e1e22' }">
           <input
@@ -88,9 +95,11 @@ import {
   fullscreenNodeId,
   toggleFullscreen,
   modalFullscreenNodeId,
-  toggleNodeModal
+  toggleNodeModal,
+  toggleNodeSettings
 } from '../store/flowStore'
 import AppTooltip from './AppTooltip.vue'
+import GearIcon from './icons/GearIcon.vue'
 
 const props = defineProps({
   id: { type: String, required: true },

@@ -108,9 +108,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   display: flex;
 }
 
+/* a maioria dos nodes (NodeShell.vue) fixa width/height via inline style em
+   px (resize manual no canvas) — no eixo principal do flex (largura) o
+   flex-grow já ignora isso, mas no eixo cruzado (altura) o align-items:
+   stretch padrão respeita qualquer altura explícita, então sem !important
+   aqui o node fica esticado só na largura */
 .node-modal-content.is-modal > :deep(*) {
   flex: 1;
-  width: 100%;
+  width: 100% !important;
+  height: 100% !important;
   min-height: 0;
 }
 </style>
