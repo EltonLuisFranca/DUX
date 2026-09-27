@@ -157,13 +157,11 @@
       </div>
     </template>
     <div v-if="isColDropTarget(columns.length)" class="drop-indicator-col" />
-
-    <button class="add-column-btn" @click="addColumn">+ Coluna</button>
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import DuxBanColumnIcon from './DuxBanColumnIcon.vue'
 import { useConfirmDelete } from '../../lib/useConfirmDelete'
 import {
@@ -177,7 +175,6 @@ import {
 import {
   removeCard,
   moveCard,
-  addColumn as addColumnOp,
   removeColumn as removeColumnOp,
   moveColumn as moveColumnOp,
   renameColumn as renameColumnOp,
@@ -228,15 +225,6 @@ function onRemoveCard(cardId) {
 }
 
 const titleRefs = {}
-
-function addColumn() {
-  const col = addColumnOp(props.data, 'Nova coluna')
-  nextTick(() => {
-    const el = titleRefs[col.id]
-    el?.focus()
-    el?.select()
-  })
-}
 
 function removeColumn(colId) {
   removeColumnOp(props.data, colId)
@@ -714,25 +702,6 @@ function onColumnDropForReorder() {
   color: var(--priority-color);
   font-size: 9.5px;
   font-weight: 700;
-}
-
-.add-column-btn {
-  flex-shrink: 0;
-  align-self: flex-start;
-  height: 28px;
-  padding: 0 12px;
-  border: 1px dashed var(--color-border-strong);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.add-column-btn:hover {
-  background: var(--color-hover);
-  color: var(--color-text-primary);
 }
 
 .board::-webkit-scrollbar,

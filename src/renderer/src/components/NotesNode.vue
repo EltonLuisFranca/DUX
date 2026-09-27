@@ -116,6 +116,18 @@
             </svg>
           </button>
         </AppTooltip>
+        <AppTooltip :label="`Opacidade da cor (${colorOpacity}%)`">
+          <input
+            type="range"
+            class="fmt-opacity-input"
+            min="0"
+            max="100"
+            step="5"
+            :disabled="data.transparent || !data.headerColor"
+            :value="colorOpacity"
+            @input="setColorOpacity(Number($event.target.value))"
+          />
+        </AppTooltip>
         <AppTooltip label="Transparente (sem cor, sem borda)">
           <button class="fmt-btn" :class="{ active: data.transparent }" @click="toggleTransparent">
             <svg viewBox="0 0 16 16" width="14" height="14">
@@ -357,10 +369,16 @@ function hexToRgba(hex, opacityPercent) {
   return `rgba(${r}, ${g}, ${b}, ${opacityPercent / 100})`
 }
 
+const colorOpacity = computed(() =>
+  props.data.colorOpacity === undefined || props.data.colorOpacity === null
+    ? NOTE_COLOR_OPACITY
+    : props.data.colorOpacity
+)
+
 const backgroundStyle = computed(() => {
   if (props.data.transparent) return 'transparent'
   if (!props.data.headerColor) return undefined
-  return hexToRgba(props.data.headerColor, NOTE_COLOR_OPACITY)
+  return hexToRgba(props.data.headerColor, colorOpacity.value)
 })
 
 const restBorderColor = computed(() => {
@@ -574,6 +592,10 @@ watch(() => props.data.path, loadAndWatch)
 
 function setColor(color) {
   updateNodeData(props.id, { headerColor: color, transparent: false })
+}
+
+function setColorOpacity(value) {
+  updateNodeData(props.id, { colorOpacity: value })
 }
 
 function toggleTransparent() {
@@ -1029,6 +1051,18 @@ onBeforeUnmount(() => {
 
 .reset-swatch svg {
   color: var(--color-text-secondary);
+}
+
+.fmt-opacity-input {
+  width: 56px;
+  height: 4px;
+  accent-color: #3b82f6;
+  cursor: pointer;
+}
+
+.fmt-opacity-input:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .reset-swatch:hover svg {
