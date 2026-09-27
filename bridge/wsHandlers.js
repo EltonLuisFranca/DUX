@@ -639,6 +639,38 @@ function createConnectionHandler({ agentPort }) {
         }
 
         ws.send(JSON.stringify({ type: 'noteCreated', path: resolved, name: path.basename(resolved) }))
+      } else if (msg.type === 'noteSaveImage') {
+        // pasta de assets ao lado do .md, nomeada por convenção a partir do
+        // nome do arquivo da nota (sem extensão) — path.join/path.dirname
+        // garantem separador correto no Windows, diferente de montar a
+        // string à mão no lado do renderer
+        const resolvedNotePath = resolveCwd(msg.notePath)
+        const noteBaseName = path.basename(resolvedNotePath, path.extname(resolvedNotePath))
+        const assetsDir = path.join(path.dirname(resolvedNotePath), `${noteBaseName}.assets`)
+        const ext = (msg.ext || 'png').replace(/[^a-z0-9]/gi, '') || 'png'
+
+        try {
+          fs.mkdirSync(assetsDir, { recursive: true })
+        } catch (err) {
+          ws.send(JSON.stringify({ type: 'noteImageSaved', ok: false, error: err.message }))
+          return
+        }
+
+        let resolved = path.join(assetsDir, `img-${Date.now()}.${ext}`)
+        let suffix = 1
+        while (isFile(resolved)) {
+          resolved = path.join(assetsDir, `img-${Date.now()}-${suffix}.${ext}`)
+          suffix += 1
+        }
+
+        try {
+          fs.writeFileSync(resolved, Buffer.from(msg.base64 || '', 'base64'))
+        } catch (err) {
+          ws.send(JSON.stringify({ type: 'noteImageSaved', ok: false, error: err.message }))
+          return
+        }
+
+        ws.send(JSON.stringify({ type: 'noteImageSaved', ok: true, path: resolved }))
       } else if (msg.type === 'noteWatch') {
         startWatchingNote(ws, resolveCwd(msg.path))
       } else if (msg.type === 'noteUnwatch') {

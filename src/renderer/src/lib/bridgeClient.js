@@ -256,6 +256,34 @@ export function writeNote(path, content) {
   })
 }
 
+// Timeout maior que as demais chamadas deste módulo (4000ms): o payload
+// base64 de uma imagem colada pode ser bem maior que uma mensagem de texto.
+export function saveNoteImage(notePath, base64, ext) {
+  return new Promise((resolve) => {
+    let settled = false
+    const ws = new WebSocket(BRIDGE_URL)
+
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      resolve(result)
+      ws.close()
+    }
+
+    const timeout = setTimeout(() => finish({ ok: false, error: 'timeout' }), 8000)
+
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'noteSaveImage', notePath, base64, ext }))
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data)
+      if (msg.type === 'noteImageSaved') finish(msg)
+    }
+
+    ws.onerror = () => finish({ ok: false, error: 'connection' })
+  })
+}
+
 export function createDefaultNote() {
   return new Promise((resolve) => {
     let settled = false

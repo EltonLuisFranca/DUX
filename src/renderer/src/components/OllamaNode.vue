@@ -149,7 +149,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
-import { Handle, Position } from '@vue-flow/core'
+import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import GearIcon from './icons/GearIcon.vue'
 import ResizeGripIcon from './icons/ResizeGripIcon.vue'
 import CopyIcon from './icons/CopyIcon.vue'
@@ -158,7 +158,7 @@ import NewChatIcon from './icons/NewChatIcon.vue'
 import NodeToolbar from './NodeToolbar.vue'
 import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
 import { streamChat } from '../lib/ollamaClient'
-import { FILE_TOOLS, executeTool } from '../lib/ollamaTools'
+import { FILE_TOOLS, buildNoteTools, executeTool } from '../lib/ollamaTools'
 import { useHandleConnection } from '../lib/useHandleConnection'
 import { useNodeResize } from '../lib/useNodeResize'
 
@@ -166,11 +166,14 @@ const MAX_TOOL_ITERATIONS = 4
 
 function formatToolArgs(args) {
   if (!args || Object.keys(args).length === 0) return ''
-  // read_file/write_file/list_files têm todos um `path` — mostra só ele por
-  // padrão (o que importa pra reconhecer de relance o que a tool tocou);
-  // demais argumentos (ex: content de write_file) ficam só no resultado
-  // expandido, não fazem sentido na linha de resumo
-  return args.path ? `(${args.path})` : `(${JSON.stringify(args)})`
+  // read_file/write_file/list_files têm todos um `path`, read_note/write_note
+  // têm um `note` — mostra só esse campo por padrão (o que importa pra
+  // reconhecer de relance o que a tool tocou); demais argumentos (ex:
+  // content de write_file/write_note) ficam só no resultado expandido, não
+  // fazem sentido na linha de resumo
+  if (args.path) return `(${args.path})`
+  if (args.note) return `(${args.note})`
+  return `(${JSON.stringify(args)})`
 }
 
 // mensagens exibidas (data.messages, guardadas no formato normalizado
@@ -229,6 +232,23 @@ const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
 const isBottomConnected = isHandleConnected('bottom')
+
+// notas ligadas por edge a este node — vira tool estruturada (read_note/
+// write_note, ver ollamaTools.js) em vez do aviso em texto que o terminal de
+// agente usa (bridge/noteLink.js): aqui o DUX já controla o loop de
+// tool-calling, então dá pra expor acesso de verdade em vez de só avisar.
+const { getConnectedEdges, findNode } = useVueFlow()
+const connectedNotes = computed(() => {
+  const notes = []
+  for (const edge of getConnectedEdges(props.id)) {
+    const otherId = edge.source === props.id ? edge.target : edge.source
+    const otherNode = findNode(otherId)
+    if (otherNode?.type === 'notes' && otherNode.data?.path) {
+      notes.push({ name: otherNode.data.name || otherId, path: otherNode.data.path })
+    }
+  }
+  return notes
+})
 
 const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   minWidth: 360,
@@ -339,7 +359,7 @@ async function send() {
         model: props.data.model,
         messages: toApiMessages(messages, props.data.api),
         api: props.data.api,
-        tools: toolsUnsupported ? undefined : FILE_TOOLS,
+        tools: toolsUnsupported ? undefined : [...FILE_TOOLS, ...buildNoteTools(connectedNotes.value)],
         signal: abortController.signal,
         onToken: (chunk) => {
           fullText += chunk
@@ -369,7 +389,7 @@ async function send() {
       messages = [...messages, { role: 'assistant', content: fullText, tool_calls: toolCalls }]
 
       for (const call of toolCalls) {
-        const resultText = await executeTool(call.name, call.arguments || {})
+        const resultText = await executeTool(call.name, call.arguments || {}, { connectedNotes: connectedNotes.value })
         messages = [
           ...messages,
           { role: 'tool', name: call.name, args: call.arguments, content: resultText, toolCallId: call.id }
