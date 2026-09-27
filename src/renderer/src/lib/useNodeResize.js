@@ -1,10 +1,13 @@
 import { onBeforeUnmount, ref } from 'vue'
 import { useVueFlow } from '@vue-flow/core'
 import { updateNodeData } from '../store/flowStore'
+import { snapEnabled, SNAP_GRID_SIZE } from '../store/themeStore'
 
 // Resize por arraste do canto inferior direito, compartilhado por todos os
 // node types: mede o delta do mouse já corrigido pelo zoom do canvas, aplica
-// nos refs width/height (com piso mínimo por tipo) e persiste no fim do drag.
+// nos refs width/height (com piso mínimo por tipo, encaixado na grade
+// quando "Encaixe magnético" está ativo — mesma grade do arraste de
+// posição) e persiste no fim do drag.
 export function useNodeResize(props, { minWidth, minHeight, defaultWidth, defaultHeight }) {
   const { viewport } = useVueFlow()
 
@@ -16,12 +19,17 @@ export function useNodeResize(props, { minWidth, minHeight, defaultWidth, defaul
   let resizeStartW = 0
   let resizeStartH = 0
 
+  function snapValue(value) {
+    if (!snapEnabled.value) return Math.round(value)
+    return Math.round(value / SNAP_GRID_SIZE) * SNAP_GRID_SIZE
+  }
+
   function onResizeMove(event) {
     const zoom = viewport.value.zoom || 1
     const dx = (event.clientX - resizeStartX) / zoom
     const dy = (event.clientY - resizeStartY) / zoom
-    nodeWidth.value = Math.max(minWidth, Math.round(resizeStartW + dx))
-    nodeHeight.value = Math.max(minHeight, Math.round(resizeStartH + dy))
+    nodeWidth.value = Math.max(minWidth, snapValue(resizeStartW + dx))
+    nodeHeight.value = Math.max(minHeight, snapValue(resizeStartH + dy))
   }
 
   function stopResize() {

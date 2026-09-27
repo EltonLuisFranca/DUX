@@ -25,48 +25,49 @@
   >
     <Background v-if="canvasVariant !== 'none'" :gap="backgroundTileGap">
       <template #pattern>
-        <svg width="100%" height="100%" :viewBox="`0 0 ${backgroundTileGap} ${backgroundTileGap}`" preserveAspectRatio="none">
-          <circle
-            v-if="canvasVariant === 'dots'"
-            :cx="canvasGap / 2"
-            :cy="canvasGap / 2"
-            :r="canvasPatternSize / 2"
-            :fill="dotColor"
-          />
-          <path
-            v-else-if="canvasVariant === 'lines'"
-            :d="`M${canvasGap / 2} 0 V${canvasGap} M0 ${canvasGap / 2} H${canvasGap}`"
-            :stroke="dotColor"
-            :stroke-width="canvasPatternSize"
-          />
-          <path
-            v-else-if="canvasVariant === 'cross'"
-            :d="crossPath"
-            :stroke="dotColor"
-            :stroke-width="canvasPatternSize"
-            stroke-linecap="round"
-          />
-          <rect
-            v-else-if="canvasVariant === 'grid'"
-            x="0"
-            y="0"
-            :width="canvasGap"
-            :height="canvasGap"
-            fill="none"
-            :stroke="dotColor"
-            :stroke-width="canvasPatternSize"
-          />
-          <path
-            v-else-if="canvasVariant === 'diagonal'"
-            :d="`M0 0 L${canvasGap} ${canvasGap}`"
-            :stroke="dotColor"
-            :stroke-width="canvasPatternSize"
-          />
-          <template v-else-if="canvasVariant === 'checkerboard'">
-            <rect x="0" y="0" :width="canvasGap" :height="canvasGap" :fill="dotColor" fill-opacity="0.18" />
-            <rect :x="canvasGap" :y="canvasGap" :width="canvasGap" :height="canvasGap" :fill="dotColor" fill-opacity="0.18" />
-          </template>
-        </svg>
+        <circle
+          v-if="canvasVariant === 'dots'"
+          :cx="scaledGap / 2"
+          :cy="scaledGap / 2"
+          :r="scaledPatternSize / 2"
+          :fill="dotColor"
+        />
+        <path
+          v-else-if="canvasVariant === 'lines'"
+          :d="`M${scaledGap / 2} 0 V${scaledGap} M0 ${scaledGap / 2} H${scaledGap}`"
+          :stroke="dotColor"
+          :stroke-width="scaledPatternSize"
+          fill="none"
+        />
+        <path
+          v-else-if="canvasVariant === 'cross'"
+          :d="crossPath"
+          :stroke="dotColor"
+          :stroke-width="scaledPatternSize"
+          stroke-linecap="round"
+          fill="none"
+        />
+        <rect
+          v-else-if="canvasVariant === 'grid'"
+          x="0"
+          y="0"
+          :width="scaledGap"
+          :height="scaledGap"
+          fill="none"
+          :stroke="dotColor"
+          :stroke-width="scaledPatternSize"
+        />
+        <path
+          v-else-if="canvasVariant === 'diagonal'"
+          :d="`M0 0 L${scaledGap} ${scaledGap}`"
+          :stroke="dotColor"
+          :stroke-width="scaledPatternSize"
+          fill="none"
+        />
+        <template v-else-if="canvasVariant === 'checkerboard'">
+          <rect x="0" y="0" :width="scaledGap" :height="scaledGap" :fill="dotColor" fill-opacity="0.18" />
+          <rect :x="scaledGap" :y="scaledGap" :width="scaledGap" :height="scaledGap" :fill="dotColor" fill-opacity="0.18" />
+        </template>
       </template>
     </Background>
     <Panel v-if="workspace.nodes.length === 0" position="top-left" class="empty-state-panel">
@@ -362,10 +363,19 @@ const dotColor = resolvedCanvasPatternColor
 // os outros padrões usam o gap normal como tile.
 const backgroundTileGap = computed(() => (canvasVariant.value === 'checkerboard' ? canvasGap.value * 2 : canvasGap.value))
 
-// braço da cruz proporcional ao gap, com limites pra não sumir (gap pequeno)
-// nem virar quase uma linha cheia (gap grande)
+// o <Background> da lib escala gap/size internamente por viewport.zoom pra
+// desenhar o próprio padrão dots/lines (ver node_modules/@vue-flow/background) —
+// como a gente substitui o conteúdo via slot #pattern, precisa repetir esse
+// mesmo cálculo aqui, senão o desenho custom fica com o tamanho da versão
+// *não* escalada (correto só por coincidência em 100% de zoom, errado em
+// qualquer outro nível — foi o bug reportado com o padrão "Diagonal").
+const scaledGap = computed(() => canvasGap.value * (viewport.value.zoom || 1))
+const scaledPatternSize = computed(() => canvasPatternSize.value * (viewport.value.zoom || 1))
+
+// braço da cruz proporcional ao gap (já escalado), com limites pra não sumir
+// (gap pequeno) nem virar quase uma linha cheia (gap grande)
 const crossPath = computed(() => {
-  const g = canvasGap.value
+  const g = scaledGap.value
   const half = Math.min(Math.max(g * 0.22, 3), 10)
   const cx = g / 2
   const cy = g / 2
