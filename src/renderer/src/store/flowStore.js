@@ -92,6 +92,19 @@ export function exitFullscreen() {
   fullscreenNodeId.value = null
 }
 
+// Node atualmente aberto em modal de tela cheia de verdade (Teleport pro
+// <body>, cobrindo a janela inteira do DUX) — diferente do fullscreenNodeId
+// acima (que só dá zoom no canvas). Também não persistido.
+export const modalFullscreenNodeId = ref(null)
+
+export function toggleNodeModal(id) {
+  modalFullscreenNodeId.value = modalFullscreenNodeId.value === id ? null : id
+}
+
+export function closeNodeModal() {
+  modalFullscreenNodeId.value = null
+}
+
 export function setActiveTerminal(id) {
   activeTerminalId.value = id
 }
@@ -267,6 +280,7 @@ export function removeNode(id) {
 
   if (activeSettingsNodeId.value === id) activeSettingsNodeId.value = null
   if (fullscreenNodeId.value === id) fullscreenNodeId.value = null
+  if (modalFullscreenNodeId.value === id) modalFullscreenNodeId.value = null
 }
 
 export const nodePendingDeleteId = ref(null)

@@ -52,6 +52,16 @@
       </AppTooltip>
 
       <span class="tool-divider" />
+      <AppTooltip :label="isModal ? 'Fechar modal' : 'Abrir em modal (tela cheia)'">
+        <button class="tool-btn" @click="toggleNodeModal(id)">
+          <svg viewBox="0 0 16 16" width="12" height="12">
+            <rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3" fill="none" />
+            <path d="M2 6h12" stroke="currentColor" stroke-width="1.3" />
+          </svg>
+        </button>
+      </AppTooltip>
+
+      <span class="tool-divider" />
       <AppTooltip label="Excluir">
         <button class="tool-btn tool-danger" @click="requestDeleteNode(id)">
           <svg viewBox="0 0 16 16" width="18" height="18">
@@ -72,7 +82,14 @@
 
 <script setup>
 import { computed } from 'vue'
-import { requestDeleteNode, updateNodeData, fullscreenNodeId, toggleFullscreen } from '../store/flowStore'
+import {
+  requestDeleteNode,
+  updateNodeData,
+  fullscreenNodeId,
+  toggleFullscreen,
+  modalFullscreenNodeId,
+  toggleNodeModal
+} from '../store/flowStore'
 import AppTooltip from './AppTooltip.vue'
 
 const props = defineProps({
@@ -82,6 +99,7 @@ const props = defineProps({
 })
 
 const isFullscreen = computed(() => fullscreenNodeId.value === props.id)
+const isModal = computed(() => modalFullscreenNodeId.value === props.id)
 
 function setColor(color) {
   updateNodeData(props.id, { headerColor: color })

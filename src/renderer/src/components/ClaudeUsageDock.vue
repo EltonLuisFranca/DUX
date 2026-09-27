@@ -11,10 +11,10 @@
     >
       <button class="usage-ring">
         <span class="usage-ring-track" :style="ringStyle(item.data.percent)">
-          <span class="usage-ring-inner">{{ item.short }}</span>
+          <span class="usage-ring-inner" :class="severity(item.data.percent)">{{ item.data.percent }}%</span>
         </span>
       </button>
-      <span class="usage-ring-percent" :class="severity(item.data.percent)">{{ item.data.percent }}%</span>
+      <span class="usage-ring-label">{{ item.short }}</span>
 
       <div v-if="openKey === item.key" class="usage-menu">
         <div class="usage-row-head">
@@ -181,9 +181,9 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
-  width: 64px;
-  padding: 24px 8px;
+  gap: 14px;
+  width: 56px;
+  padding: 18px 8px;
 }
 
 /* top/bottom vêm de dockMaskStyle (derivados de FILLET_SPAN, no script) —
@@ -204,12 +204,12 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .usage-ring {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   border: none;
   background: transparent;
@@ -228,7 +228,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 100%;
   height: 100%;
-  padding: 4px;
+  padding: 3px;
   border-radius: 50%;
 }
 
@@ -241,22 +241,22 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: #000;
   color: var(--color-text-tertiary);
-  font-size: 12px;
+  font-size: 9px;
   font-weight: 600;
-}
-
-.usage-ring-percent {
-  font-size: 13px;
   font-variant-numeric: tabular-nums;
-  color: var(--color-text-quaternary);
 }
 
-.usage-ring-percent.warn {
+.usage-ring-inner.warn {
   color: #d97706;
 }
 
-.usage-ring-percent.danger {
+.usage-ring-inner.danger {
   color: #ef4444;
+}
+
+.usage-ring-label {
+  font-size: 11px;
+  color: var(--color-text-quaternary);
 }
 
 .usage-menu {

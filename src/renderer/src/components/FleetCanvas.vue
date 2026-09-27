@@ -41,85 +41,139 @@
     <DuxSearch v-if="isActiveWorkspace" :workspace="workspace" />
 
     <template #node-wsl-claude-terminal="nodeProps">
-      <WslClaudeTerminalNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <WslClaudeTerminalNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-claude-terminal="nodeProps">
-      <WslClaudeTerminalNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <WslClaudeTerminalNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-codex-terminal="nodeProps">
-      <WslClaudeTerminalNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <WslClaudeTerminalNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-shell-terminal="nodeProps">
-      <WslClaudeTerminalNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <WslClaudeTerminalNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-wsl-terminal="nodeProps">
-      <WslClaudeTerminalNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <WslClaudeTerminalNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-powershell-terminal="nodeProps">
-      <WslClaudeTerminalNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <WslClaudeTerminalNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-cmd-terminal="nodeProps">
-      <WslClaudeTerminalNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <WslClaudeTerminalNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-notes="nodeProps">
-      <NotesNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <NotesNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-browser="nodeProps">
-      <BrowserNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <BrowserNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-ollama="nodeProps">
-      <OllamaNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <OllamaNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-merlin="nodeProps">
-      <MerlinNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <MerlinNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-git="nodeProps">
-      <GitNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <GitNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-image="nodeProps">
-      <ImageNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <ImageNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-http="nodeProps">
-      <HttpNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <HttpNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-docker="nodeProps">
-      <DockerNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <DockerNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-credential-test="nodeProps">
-      <CredentialTestNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <CredentialTestNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-port-scan="nodeProps">
-      <PortScanNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <PortScanNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-load-test="nodeProps">
-      <LoadTestNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <LoadTestNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-subdomain-scan="nodeProps">
-      <SubdomainScanNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <SubdomainScanNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-dir-fuzz="nodeProps">
-      <DirFuzzNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <DirFuzzNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-security-headers="nodeProps">
-      <SecurityHeadersNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <SecurityHeadersNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-tls-check="nodeProps">
-      <TlsCheckNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <TlsCheckNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-tech-fingerprint="nodeProps">
-      <TechFingerprintNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <TechFingerprintNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-vuln-scan="nodeProps">
-      <VulnScanNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <VulnScanNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-dns-whois="nodeProps">
-      <DnsWhoisNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <DnsWhoisNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-pomodoro="nodeProps">
-      <PomodoroNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <PomodoroNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
     <template #node-duxban="nodeProps">
-      <DuxBanNode v-bind="nodeProps" />
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <DuxBanNode v-bind="nodeProps" />
+      </NodeModalWrapper>
     </template>
 
     <template #edge-default="edgeProps">
@@ -186,6 +240,7 @@ import VulnScanNode from './VulnScanNode.vue'
 import DnsWhoisNode from './DnsWhoisNode.vue'
 import PomodoroNode from './PomodoroNode.vue'
 import DuxBanNode from './DuxBanNode.vue'
+import NodeModalWrapper from './NodeModalWrapper.vue'
 import { theme, canvasVariant, edgeStyle, snapEnabled, SNAP_GRID_SIZE } from '../store/themeStore'
 import {
   onNodeClicked,
@@ -244,6 +299,10 @@ watch(fullscreenNodeId, (id, prevId) => {
     savedViewport = null
   }
 })
+
+function nodeTitle(nodeProps) {
+  return nodeTypeRegistry[nodeProps.type]?.label || nodeProps.type
+}
 
 const dotColor = computed(() => (theme.value === 'light' ? '#c4c4cc' : '#55555e'))
 
