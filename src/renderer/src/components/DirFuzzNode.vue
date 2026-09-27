@@ -1,44 +1,23 @@
 <template>
-  <div
-    class="df-node"
-    :class="{ selected }"
-    :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
+  <NodeShell
+    :id="id"
+    :data="data"
+    :selected="selected"
+    :resize="{ minWidth: 380, minHeight: 420, defaultWidth: 460, defaultHeight: 480 }"
+    :title="data.name"
+    :status="statusColor"
+    :status-pulse="statusDotClass === 'pending'"
   >
-    <NodeToolbar :id="id" :data="data" :selected="selected" />
-    <Handle
-      id="left"
-      type="target"
-      :position="Position.Left"
-      class="df-handle"
-      :class="{ connected: isLeftConnected }"
-    />
-    <Handle
-      id="right"
-      type="source"
-      :position="Position.Right"
-      class="df-handle"
-      :class="{ connected: isRightConnected }"
-    />
-    <Handle
-      id="bottom"
-      type="source"
-      :position="Position.Bottom"
-      class="df-handle"
-      :class="{ connected: isBottomConnected }"
-    />
-
-    <div class="df-header" :style="{ background: data.headerColor || undefined }">
-      <span class="status-dot" :class="statusDotClass" />
-      <span class="df-title">{{ data.name }}</span>
+    <template #icon>
+      <svg viewBox="0 0 20 20" width="12" height="12" v-html="DIR_FUZZ_ICON"></svg>
+    </template>
+    <template #headerActions>
       <button class="header-btn nodrag" title="Log completo da varredura" @click="showLogModal = true">
         <svg viewBox="0 0 16 16" width="13" height="13">
           <path d="M3 4h10M3 8h10M3 12h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
         </svg>
       </button>
-      <button class="header-btn nodrag" title="Configurações" @click="toggleNodeSettings(id)">
-        <GearIcon />
-      </button>
-    </div>
+    </template>
 
     <div class="tabs-row nodrag">
       <button class="tab-btn" :class="{ active: activeTab === 'target' }" @click="activeTab = 'target'">Alvo</button>
@@ -155,9 +134,6 @@
       </div>
     </div>
 
-    <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
-      <ResizeGripIcon />
-    </div>
 
     <Teleport to="body">
       <Transition name="modal-fade">
@@ -210,18 +186,14 @@
         </div>
       </Transition>
     </Teleport>
-  </div>
+  </NodeShell>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Handle, Position } from '@vue-flow/core'
-import GearIcon from './icons/GearIcon.vue'
-import ResizeGripIcon from './icons/ResizeGripIcon.vue'
-import NodeToolbar from './NodeToolbar.vue'
-import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
-import { useHandleConnection } from '../lib/useHandleConnection'
-import { useNodeResize } from '../lib/useNodeResize'
+import NodeShell from './NodeShell.vue'
+import { DIR_FUZZ_ICON } from '../nodeTypes/nodeIcons'
+import { updateNodeData } from '../store/flowStore'
 import { runDirFuzz } from '../lib/bridgeClient'
 
 // prévia client-side da wordlist "common" do bridge (bridge/dirFuzz.js) —
@@ -252,18 +224,6 @@ const props = defineProps({
   id: { type: String, required: true },
   data: { type: Object, required: true },
   selected: { type: Boolean, default: false }
-})
-
-const { isHandleConnected } = useHandleConnection(props.id)
-const isLeftConnected = isHandleConnected('left')
-const isRightConnected = isHandleConnected('right')
-const isBottomConnected = isHandleConnected('bottom')
-
-const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
-  minWidth: 380,
-  minHeight: 420,
-  defaultWidth: 460,
-  defaultHeight: 480
 })
 
 const activeTab = ref('target')
@@ -324,6 +284,9 @@ const statusDotClass = computed(() => {
   if (lastResult.value.found?.length) return 'warn'
   return 'online'
 })
+
+const STATUS_DOT_COLORS = { pending: '#eab308', online: '#22c55e', warn: '#eab308' }
+const statusColor = computed(() => STATUS_DOT_COLORS[statusDotClass.value] || null)
 
 const progressPct = computed(() => (progressTotal.value ? Math.round((progressCount.value / progressTotal.value) * 100) : 0))
 
@@ -450,94 +413,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.df-node {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px var(--color-shadow);
-}
-
-.df-node.selected {
-  border-color: var(--selected-color);
-}
-
-.df-handle {
-  width: 8px;
-  height: 8px;
-  background: var(--color-border-strong);
-  border: 2px solid var(--color-bg-surface);
-  transition: background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.df-handle.connected {
-  background: #3b82f6;
-  box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
-}
-
-.df-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  height: 34px;
-  padding: 0 10px;
-  background: var(--color-bg-surface-alt);
-  border-bottom: 1px solid var(--color-border);
-  border-radius: 9px 9px 0 0;
+:deep(.shell-header) {
   cursor: grab;
 }
 
-.df-header:active {
+:deep(.shell-header:active) {
   cursor: grabbing;
-}
-
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-text-tertiary);
-  flex-shrink: 0;
-}
-
-.status-dot.online {
-  background: #22c55e;
-}
-
-.status-dot.warn {
-  background: #eab308;
-}
-
-.status-dot.danger {
-  background: #ef4444;
-}
-
-.status-dot.pending {
-  background: #eab308;
-  animation: pulse 1.1s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
-}
-
-.df-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .header-btn {
@@ -592,7 +473,6 @@ onBeforeUnmount(() => {
   min-height: 0;
   background: var(--color-bg-app);
   overflow-y: auto;
-  border-radius: 0 0 9px 9px;
 }
 
 .pane {
@@ -915,26 +795,6 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
-.resize-handle {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 3px;
-  box-sizing: border-box;
-  color: var(--color-text-tertiary);
-  cursor: nwse-resize;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.df-node:hover .resize-handle {
-  opacity: 1;
-}
 
 .logs-modal-backdrop {
   position: fixed;

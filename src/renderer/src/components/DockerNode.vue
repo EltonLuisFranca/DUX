@@ -1,36 +1,17 @@
 <template>
-  <div
-    class="docker-node"
-    :class="{ selected }"
-    :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
+  <NodeShell
+    :id="id"
+    :data="data"
+    :selected="selected"
+    :resize="{ minWidth: 320, minHeight: 220, defaultWidth: 420, defaultHeight: 320 }"
+    :title="data.name"
+    :meta="!errorMessage && containers.length ? String(containers.length) : ''"
+    :status="statusColor"
   >
-    <NodeToolbar :id="id" :data="data" :selected="selected" />
-    <Handle
-      id="left"
-      type="target"
-      :position="Position.Left"
-      class="docker-handle"
-      :class="{ connected: isLeftConnected }"
-    />
-    <Handle
-      id="right"
-      type="source"
-      :position="Position.Right"
-      class="docker-handle"
-      :class="{ connected: isRightConnected }"
-    />
-    <Handle
-      id="bottom"
-      type="source"
-      :position="Position.Bottom"
-      class="docker-handle"
-      :class="{ connected: isBottomConnected }"
-    />
-
-    <div class="docker-header" :style="{ background: data.headerColor || undefined }">
-      <span class="status-dot" :class="status" />
-      <span class="docker-title">{{ data.name }}</span>
-      <span class="docker-count" v-if="!errorMessage && containers.length">{{ containers.length }}</span>
+    <template #icon>
+      <svg viewBox="0 0 20 20" width="12" height="12" v-html="DOCKER_ICON"></svg>
+    </template>
+    <template #headerActions>
       <button class="header-btn nodrag" title="Atualizar" @click="refresh">
         <svg viewBox="0 0 16 16" width="13" height="13" :class="{ spinning: loading }">
           <path
@@ -43,10 +24,7 @@
           />
         </svg>
       </button>
-      <button class="header-btn nodrag" title="Configurações" @click="toggleNodeSettings(id)">
-        <GearIcon />
-      </button>
-    </div>
+    </template>
 
     <div class="docker-body nodrag nowheel nopan">
       <div v-if="errorMessage" class="docker-empty">{{ errorMessage }}</div>
@@ -135,10 +113,6 @@
           </ul>
         </div>
       </div>
-    </div>
-
-    <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
-      <ResizeGripIcon />
     </div>
 
     <Teleport to="body">
@@ -231,24 +205,19 @@
         </div>
       </Transition>
     </Teleport>
-  </div>
+  </NodeShell>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Handle, Position } from '@vue-flow/core'
-import GearIcon from './icons/GearIcon.vue'
-import ResizeGripIcon from './icons/ResizeGripIcon.vue'
+import NodeShell from './NodeShell.vue'
+import { DOCKER_ICON } from '../nodeTypes/nodeIcons'
 import PlayIcon from './icons/PlayIcon.vue'
 import StopIcon from './icons/StopIcon.vue'
 import RestartIcon from './icons/RestartIcon.vue'
 import CopyIcon from './icons/CopyIcon.vue'
 import CheckIcon from './icons/CheckIcon.vue'
-import NodeToolbar from './NodeToolbar.vue'
-import { toggleNodeSettings } from '../store/flowStore'
 import { fetchDockerContainers, runDockerAction, fetchDockerLogs } from '../lib/bridgeClient'
-import { useHandleConnection } from '../lib/useHandleConnection'
-import { useNodeResize } from '../lib/useNodeResize'
 
 const POLL_INTERVAL_MS = 15_000
 
@@ -258,19 +227,9 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
-const { isHandleConnected } = useHandleConnection(props.id)
-const isLeftConnected = isHandleConnected('left')
-const isRightConnected = isHandleConnected('right')
-const isBottomConnected = isHandleConnected('bottom')
-
-const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
-  minWidth: 320,
-  minHeight: 220,
-  defaultWidth: 420,
-  defaultHeight: 320
-})
-
 const status = ref('connecting')
+const STATUS_COLORS = { online: '#22c55e', offline: '#ef4444' }
+const statusColor = computed(() => STATUS_COLORS[status.value] || 'var(--color-text-tertiary)')
 const containers = ref([])
 const errorMessage = ref('')
 const loading = ref(false)
@@ -485,83 +444,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.docker-node {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px var(--color-shadow);
-}
-
-.docker-node.selected {
-  border-color: var(--selected-color);
-}
-
-.docker-handle {
-  width: 8px;
-  height: 8px;
-  background: var(--color-border-strong);
-  border: 2px solid var(--color-bg-surface);
-  transition: background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.docker-handle.connected {
-  background: #3b82f6;
-  box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
-}
-
-.docker-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  height: 34px;
-  padding: 0 10px;
-  background: var(--color-bg-surface-alt);
-  border-bottom: 1px solid var(--color-border);
-  border-radius: 9px 9px 0 0;
+:deep(.shell-header) {
   cursor: grab;
 }
 
-.docker-header:active {
+:deep(.shell-header:active) {
   cursor: grabbing;
-}
-
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-text-tertiary);
-  flex-shrink: 0;
-}
-
-.status-dot.online {
-  background: #22c55e;
-}
-
-.status-dot.offline {
-  background: #ef4444;
-}
-
-.docker-title {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.docker-count {
-  flex: 1;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-tertiary);
-  font-size: 10.5px;
-  font-family: 'Menlo', Consolas, monospace;
 }
 
 .header-btn {
@@ -599,7 +487,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  border-radius: 0 0 9px 9px;
 }
 
 .docker-empty {
@@ -928,24 +815,4 @@ onBeforeUnmount(() => {
   transform: scale(0.96) translateY(6px);
 }
 
-.resize-handle {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 3px;
-  box-sizing: border-box;
-  color: var(--color-text-tertiary);
-  cursor: nwse-resize;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.docker-node:hover .resize-handle {
-  opacity: 1;
-}
 </style>

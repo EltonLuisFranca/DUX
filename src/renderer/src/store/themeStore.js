@@ -57,6 +57,27 @@ export function setEdgeStyle(value) {
   edgeStyle.value = value
 }
 
+const NODE_STYLE_VARIANT_STORAGE_KEY = 'dux-node-style-variant'
+const NODE_STYLE_VARIANT_VALUES = ['structured', 'compact']
+
+// estilo visual compartilhado de todo node (exceto Notas, que tem o dele
+// próprio) — ver NodeShell.vue. 'structured' = cards com header/corpo/rodapé
+// separados por divisor; 'compact' = header baixo, texto truncado, rodapé só
+// no hover (pra caber mais nodes na tela).
+const storedNodeStyleVariant = localStorage.getItem(NODE_STYLE_VARIANT_STORAGE_KEY)
+
+export const nodeStyleVariant = ref(
+  NODE_STYLE_VARIANT_VALUES.includes(storedNodeStyleVariant) ? storedNodeStyleVariant : 'structured'
+)
+
+watchEffect(() => {
+  localStorage.setItem(NODE_STYLE_VARIANT_STORAGE_KEY, nodeStyleVariant.value)
+})
+
+export function setNodeStyleVariant(value) {
+  nodeStyleVariant.value = value
+}
+
 export const snapEnabled = ref(localStorage.getItem(SNAP_ENABLED_STORAGE_KEY) === 'true')
 
 watchEffect(() => {

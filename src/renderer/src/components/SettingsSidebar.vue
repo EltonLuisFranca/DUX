@@ -48,6 +48,26 @@
             </div>
 
             <div class="setting-row">
+              <span class="setting-label">Estilo dos nodes</span>
+              <div class="segmented">
+                <button
+                  class="segmented-btn"
+                  :class="{ active: nodeStyleVariant === 'structured' }"
+                  @click="setNodeStyleVariant('structured')"
+                >
+                  Estruturado
+                </button>
+                <button
+                  class="segmented-btn"
+                  :class="{ active: nodeStyleVariant === 'compact' }"
+                  @click="setNodeStyleVariant('compact')"
+                >
+                  Compacto
+                </button>
+              </div>
+            </div>
+
+            <div class="setting-row">
               <span class="setting-label">Fundo do canvas</span>
               <div class="segmented">
                 <button
@@ -231,6 +251,8 @@ import { computed, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   theme,
   setTheme,
+  nodeStyleVariant,
+  setNodeStyleVariant,
   canvasVariant,
   setCanvasVariant,
   edgeStyle,

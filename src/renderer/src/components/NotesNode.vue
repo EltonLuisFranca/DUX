@@ -82,6 +82,9 @@
         <AppTooltip label="Checklist">
           <button class="fmt-btn" @mousedown.prevent="insertChecklist">☑</button>
         </AppTooltip>
+        <AppTooltip label="Título de seção (separa assuntos na mesma nota)">
+          <button class="fmt-btn fmt-heading" @mousedown.prevent="insertSectionHeading">H</button>
+        </AppTooltip>
         <span class="fmt-divider" />
         <AppTooltip label="Nova aba">
           <button class="fmt-btn" @mousedown.prevent="addTab">
@@ -177,6 +180,26 @@
       <span class="grip-dots"><span></span><span></span><span></span></span>
     </div>
 
+    <div class="notes-status nodrag nowheel">
+      <AppTooltip v-if="connectedAgentNames.length" :label="`Ligada a: ${connectedAgentNames.join(', ')}`">
+        <span class="status-pill status-link">
+          <svg viewBox="0 0 16 16" width="10" height="10">
+            <path
+              d="M6.5 9.5l3-3M6 5L4.5 6.5a2.5 2.5 0 0 0 3.5 3.5L9.5 8.5M10 11l1.5-1.5a2.5 2.5 0 0 0-3.5-3.5L6.5 7.5"
+              stroke="currentColor"
+              stroke-width="1.3"
+              stroke-linecap="round"
+              fill="none"
+            />
+          </svg>
+          {{ connectedAgentNames.length }}
+        </span>
+      </AppTooltip>
+      <AppTooltip :label="syncStatusLabel">
+        <span class="status-dot" :class="`status-${syncStatus}`" />
+      </AppTooltip>
+    </div>
+
     <div v-if="searchOpen" class="notes-search nodrag nowheel">
       <input
         ref="searchInputEl"
@@ -242,8 +265,8 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Handle, Position } from '@vue-flow/core'
-import { updateNodeData, requestDeleteNode, fullscreenNodeId, toggleFullscreen } from '../store/flowStore'
+import { Handle, Position, useVueFlow } from '@vue-flow/core'
+import { updateNodeData, requestDeleteNode, fullscreenNodeId, toggleFullscreen, TERMINAL_TYPES } from '../store/flowStore'
 import { readNote, writeNote, watchNote, saveNoteImage } from '../lib/bridgeClient'
 import { syncNoteContent } from '../lib/noteSync'
 import { htmlToMarkdown, markdownToHtml, splitTabs, joinTabs } from '../lib/noteMarkdown'
@@ -279,6 +302,23 @@ const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
 const isRightConnected = isHandleConnected('right')
 const isBottomConnected = isHandleConnected('bottom')
+
+// nomes dos agentes (terminal ou Ollama) ligados a esta nota por edge —
+// indicador passivo de "esta nota está compartilhando contexto com alguém",
+// sem precisar abrir o node ou lembrar de olhar o canvas inteiro
+const { getConnectedEdges, findNode } = useVueFlow()
+const connectedAgentNames = computed(() => {
+  const names = []
+  for (const edge of getConnectedEdges(props.id)) {
+    const otherId = edge.source === props.id ? edge.target : edge.source
+    const otherNode = findNode(otherId)
+    if (!otherNode) continue
+    if (TERMINAL_TYPES.includes(otherNode.type) || otherNode.type === 'ollama') {
+      names.push(otherNode.data?.name || otherId)
+    }
+  }
+  return names
+})
 
 const editorEl = ref(null)
 const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
@@ -434,7 +474,23 @@ let lastWrittenMarkdown = null
 let saveTimer = null
 let unwatch = null
 
-function saveNow() {
+// indicador passivo de sincronização (badge no canto do node) — 'idle' fora
+// de qualquer gravação, 'saving' enquanto a escrita no bridge está em voo,
+// 'saved' por um instante depois de confirmada, 'error' se o bridge
+// reportar falha (ex: disco cheio, path apagado por fora) e ficar parado
+// até a próxima tentativa bem-sucedida
+const syncStatus = ref('idle')
+let syncStatusResetTimer = null
+
+const SYNC_STATUS_LABELS = {
+  idle: 'Sincronizada',
+  saving: 'Salvando...',
+  saved: 'Salvo',
+  error: 'Falha ao salvar — tentativa seguinte pode corrigir'
+}
+const syncStatusLabel = computed(() => SYNC_STATUS_LABELS[syncStatus.value])
+
+async function saveNow() {
   if (!editorEl.value || !props.data.path) return
   if (tabs.value[activeTabIndex.value]) {
     tabs.value[activeTabIndex.value].markdown = htmlToMarkdown(editorEl.value.innerHTML)
@@ -442,8 +498,18 @@ function saveNow() {
   const markdown = joinTabs(tabs.value)
   if (markdown === lastWrittenMarkdown) return
   lastWrittenMarkdown = markdown
-  writeNote(props.data.path, markdown)
+  syncStatus.value = 'saving'
+  const result = await writeNote(props.data.path, markdown)
   syncNoteContent({ nodeId: props.id, path: props.data.path, content: markdown })
+  clearTimeout(syncStatusResetTimer)
+  if (result.ok) {
+    syncStatus.value = 'saved'
+    syncStatusResetTimer = setTimeout(() => {
+      syncStatus.value = 'idle'
+    }, 1500)
+  } else {
+    syncStatus.value = 'error'
+  }
 }
 
 function handleInput() {
@@ -629,6 +695,18 @@ function insertChecklist() {
   handleInput()
 }
 
+// ---- Título de seção ----
+// formatBlock em vez de insertHTML: converte o bloco atual (onde o cursor
+// está) num <h2> — turndown já converte qualquer <h1>-<h6> pra "#"..."######"
+// (headingStyle: 'atx', ver noteMarkdown.js), sem precisar de regra nova.
+function insertSectionHeading() {
+  editorEl.value?.focus()
+  restoreSelection()
+  document.execCommand('formatBlock', false, '<h2>')
+  saveSelection()
+  handleInput()
+}
+
 // ---- Busca local (Ctrl+F) ----
 // usa a CSS Custom Highlight API em vez de inserir <mark> no DOM — evitar
 // contaminar o HTML que seria serializado de volta pro markdown a cada tecla
@@ -793,6 +871,7 @@ onMounted(loadAndWatch)
 
 onBeforeUnmount(() => {
   clearTimeout(saveTimer)
+  clearTimeout(syncStatusResetTimer)
   // última chance de persistir uma edição pendente que o debounce ainda não
   // gravou (ex: node deletado/desmontado logo após digitar)
   saveNow()
@@ -989,6 +1068,67 @@ onBeforeUnmount(() => {
   opacity: 0.6;
 }
 
+.notes-status {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 15px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--color-bg-surface-alt);
+  color: var(--color-text-secondary);
+  font-size: 9.5px;
+  line-height: 1;
+}
+
+.status-pill.status-link {
+  color: #3b82f6;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  opacity: 0.5;
+}
+
+.status-dot.status-saving {
+  background: #f59e0b;
+  opacity: 1;
+  animation: status-pulse 0.9s ease-in-out infinite;
+}
+
+.status-dot.status-saved {
+  background: #22c55e;
+  opacity: 1;
+}
+
+.status-dot.status-error {
+  background: #ef4444;
+  opacity: 1;
+}
+
+@keyframes status-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.35);
+  }
+}
+
 .notes-search {
   position: relative;
   z-index: 1;
@@ -1155,6 +1295,36 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
+/* título de seção — separa assuntos dentro da mesma nota (botão "H" na
+   toolbar, ou "#"/"##"/"###" digitado/colado de fora, ex: por um agente) */
+.notes-body :deep(h1),
+.notes-body :deep(h2),
+.notes-body :deep(h3) {
+  margin: 14px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid #3b82f6;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.notes-body :deep(h1:first-child),
+.notes-body :deep(h2:first-child),
+.notes-body :deep(h3:first-child) {
+  margin-top: 0;
+}
+
+.notes-body :deep(h1) {
+  font-size: 15px;
+}
+
+.notes-body :deep(h2) {
+  font-size: 13.5px;
+}
+
+.notes-body :deep(h3) {
+  font-size: 12.5px;
+}
+
 .notes-body :deep(table) {
   border-collapse: collapse;
   width: 100%;
@@ -1165,8 +1335,17 @@ onBeforeUnmount(() => {
 .notes-body :deep(td),
 .notes-body :deep(th) {
   border: 1px solid var(--color-border-strong);
-  padding: 3px 6px;
-  min-width: 24px;
+  padding: 4px 8px;
+  min-width: 56px;
+  /* .notes-body (mais acima) herda word-break: break-word pro corpo da
+     nota inteiro — sem isso, valores curtos ("1.260,00", "10,5 h") ficam
+     cortados no meio do número quando a coluna espreme, em vez de só
+     quebrar linha no espaço (ou nem quebrar, já que min-width dá espaço
+     de sobra pra a maioria dos valores curtos). Texto longo (descrição)
+     continua quebrando normalmente nos espaços — isso não depende de
+     break-word, só de white-space normal (o padrão). */
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 .notes-body :deep(th) {

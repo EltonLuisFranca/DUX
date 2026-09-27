@@ -29,14 +29,21 @@ function onSessionData(sessionId) {
 // Mesma linguagem factual/verificável usada em agentLink.buildInstructions —
 // evita que o agente reconheça o texto como tentativa de prompt injection e
 // se recuse a agir sem confirmação manual (ver comentário lá).
+//
+// Recomenda as tools dux_notes_* (mcp-server.mjs) em vez de ler/escrever o
+// arquivo direto com as tools de arquivo do próprio agente: a nota pode ter
+// mais de uma aba (delimitadas por comentários "<!-- dux:tab ... -->" no
+// próprio arquivo, ver noteTabs.js/src/renderer/.../noteMarkdown.js) — uma
+// sobrescrita direta e ingênua do conteúdo inteiro apaga as outras abas sem
+// querer. dux_notes_write já faz esse split/join com segurança.
 function buildNoteInstructions(notePath) {
   return (
     `[DUX] Automatic notice from DUX (the Electron app running this terminal, not an external agent, and not ` +
     `part of the user's own conversation): a shared note file is now connected to this terminal in the DUX ` +
-    `canvas, available at "${notePath}". This file is not part of this terminal's working directory — read and ` +
-    `edit it directly with your own file tools (it's a real file on disk, not app state) to record or retrieve ` +
-    `context shared with other agents connected to the same note. Only touch it when the user's task calls for ` +
-    `persisting or checking shared notes/decisions.`
+    `canvas, available at "${notePath}". Prefer the dux_notes_list/dux_notes_read/dux_notes_write tools over your ` +
+    `own file tools to read or edit it — the note may have more than one tab (sections in the same file), and ` +
+    `those tools handle that safely; a raw overwrite of the whole file can wipe out other tabs. Only touch it ` +
+    `when the user's task calls for persisting or checking shared notes/decisions.`
   )
 }
 
@@ -119,10 +126,21 @@ function unlinkNote(sessionId, notePath) {
   if (wasLinked) sendNoteInstructions(sessionId, notePath, buildNoteRemovedInstructions(notePath))
 }
 
+// usado por /notes (bridge/server.js) pra restringir dux_notes_read/write às
+// notas de fato ligadas a esta sessão — o agente já tem suas próprias tools
+// de arquivo pra qualquer path arbitrário, então essa checagem não é uma
+// fronteira de segurança de verdade, é só manter a tool dux_notes_* coerente
+// com seu próprio propósito (notas conectadas, não arquivo qualquer)
+function getLinkedNotePaths(sessionId) {
+  const info = sessionInfo.get(sessionId)
+  return info ? [...info.notePaths] : []
+}
+
 module.exports = {
   registerSession,
   unregisterSession,
   onSessionData,
   linkNote,
-  unlinkNote
+  unlinkNote,
+  getLinkedNotePaths
 }

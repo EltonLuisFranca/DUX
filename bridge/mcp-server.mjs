@@ -102,6 +102,46 @@ function duxbanViaBridge(action, payload) {
   })
 }
 
+// Mesmo padrão de dockerViaBridge: notas são arquivo em disco, não estado do
+// canvas, então /notes (bridge/server.js) resolve sozinho — sem ida-e-volta
+// pra nenhuma conexão ws de terminal.
+function notesViaBridge(action, payload) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({ sessionId, action, payload })
+
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port: agentPort,
+        path: '/notes',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+        timeout: 20_000
+      },
+      (res) => {
+        let responseBody = ''
+        res.on('data', (chunk) => (responseBody += chunk))
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(responseBody)
+            if (res.statusCode !== 200) return reject(new Error(parsed.error || `bridge respondeu HTTP ${res.statusCode}`))
+            resolve(parsed.result)
+          } catch {
+            reject(new Error('resposta inválida do bridge'))
+          }
+        })
+      }
+    )
+
+    req.on('timeout', () => {
+      req.destroy()
+      reject(new Error('timeout esperando resposta do bridge'))
+    })
+    req.on('error', (err) => reject(new Error(`não foi possível falar com o bridge (${err.message})`)))
+    req.end(body)
+  })
+}
+
 // Diferente de askViaBridge/duxbanViaBridge: docker não depende de nenhum
 // estado do canvas (o daemon roda no host, não num node), então não carrega
 // sessionId nenhum — o bridge resolve list/action/logs sozinho chamando
@@ -494,6 +534,73 @@ server.registerTool(
       }
       const images = imagePathsToDataUrls(image_paths)
       const result = await duxbanViaBridge('add_comment', { cardId: card_id, text, images })
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
+server.registerTool(
+  'dux_notes_list',
+  {
+    title: 'List notes connected to this terminal',
+    description:
+      'List the DUX canvas notes currently connected to this terminal via an edge, with the path and tab titles ' +
+      'of each. Call this first — a note may have more than one tab (separate sections in the same file); use the ' +
+      'exact path and tab title with dux_notes_read/dux_notes_write.',
+    inputSchema: {}
+  },
+  async () => {
+    try {
+      const result = await notesViaBridge('list', {})
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
+server.registerTool(
+  'dux_notes_read',
+  {
+    title: 'Read a note connected to this terminal',
+    description:
+      'Read the content of a note connected to this terminal, by path (see dux_notes_list). Pass "tab" to read ' +
+      'just one tab; omit it to get every tab in the note, each with its title.',
+    inputSchema: {
+      path: z.string().describe('exact note path, as returned by dux_notes_list'),
+      tab: z.string().optional().describe('exact tab title to read; omit to get all tabs')
+    }
+  },
+  async ({ path: notePath, tab }) => {
+    try {
+      const result = await notesViaBridge('read', { path: notePath, tab })
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
+server.registerTool(
+  'dux_notes_write',
+  {
+    title: 'Write a note connected to this terminal',
+    description:
+      'Replace the content of one tab of a note connected to this terminal, by path (see dux_notes_list). Only ' +
+      'that tab is touched — other tabs in the same file are preserved. "tab" can be omitted only if the note has ' +
+      'a single tab; prefer this over writing the raw file directly with your own file tools, which would not ' +
+      'know about the tab structure and could wipe out the other tabs.',
+    inputSchema: {
+      path: z.string().describe('exact note path, as returned by dux_notes_list'),
+      tab: z.string().optional().describe('exact tab title to write; required if the note has more than one tab'),
+      content: z.string().describe('full new content (markdown) for that tab')
+    }
+  },
+  async ({ path: notePath, tab, content }) => {
+    try {
+      const result = await notesViaBridge('write', { path: notePath, tab, content })
       return { content: [{ type: 'text', text: JSON.stringify(result) }] }
     } catch (err) {
       return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }

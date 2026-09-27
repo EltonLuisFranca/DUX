@@ -1,72 +1,45 @@
 <template>
-  <div
-    class="agent-node"
-    :class="{ selected }"
-    :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
+  <NodeShell
+    :id="id"
+    :data="data"
+    :selected="selected"
+    :resize="{ minWidth: 320, minHeight: 220, defaultWidth: 480, defaultHeight: 344 }"
+    :title="data.name"
+    :meta="data.cwd"
+    :status="statusColor"
   >
-    <NodeToolbar :id="id" :data="data" :selected="selected" />
-    <Handle
-      id="left"
-      type="target"
-      :position="Position.Left"
-      class="agent-handle"
-      :class="{ connected: isLeftConnected }"
-    />
-    <Handle
-      id="right"
-      type="source"
-      :position="Position.Right"
-      class="agent-handle"
-      :class="{ connected: isRightConnected }"
-    />
-    <Handle
-      id="bottom"
-      type="source"
-      :position="Position.Bottom"
-      class="agent-handle"
-      :class="{ connected: isBottomConnected }"
-    />
-    <div
-      class="agent-header"
-      :style="{ background: data.headerColor || undefined }"
-    >
-      <span class="status-dot" :class="status" />
-      <span class="agent-title">{{ data.name }}</span>
-      <span class="agent-path">{{ data.cwd }}</span>
+    <template #icon>
+      <svg viewBox="0 0 20 20" width="12" height="12" v-html="TERMINAL_ICON"></svg>
+    </template>
+    <template #headerActions>
       <span v-if="connectedPeers.length" class="peer-count" :title="connectedPeers.map((a) => a.name).join(', ')">
         {{ connectedPeers.length }} agente{{ connectedPeers.length === 1 ? '' : 's' }}
       </span>
-      <button class="settings-btn nodrag" title="Configurações" @click="toggleNodeSettings(id)">
-        <GearIcon />
-      </button>
-    </div>
+    </template>
+
     <div
       v-if="usagePercent !== null"
       class="usage-badge nodrag"
       :class="usageLevel"
+      :style="{ top: nodeStyleVariant === 'compact' ? '30px' : '50px' }"
       :title="usageTooltip"
     >
       {{ usagePercent }}%
     </div>
     <div ref="termEl" class="agent-term nodrag nowheel nopan"></div>
-
-    <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
-      <ResizeGripIcon />
-    </div>
-  </div>
+  </NodeShell>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
-import GearIcon from './icons/GearIcon.vue'
-import ResizeGripIcon from './icons/ResizeGripIcon.vue'
-import NodeToolbar from './NodeToolbar.vue'
+import NodeShell from './NodeShell.vue'
+import { TERMINAL_ICON } from '../nodeTypes/nodeIcons'
 import { FitAddon } from '@xterm/addon-fit'
-import { Handle, Position, useVueFlow } from '@vue-flow/core'
+import { useVueFlow } from '@vue-flow/core'
 import '@xterm/xterm/css/xterm.css'
-import { toggleNodeSettings, updateNodeData, activeTerminalId, AGENT_TERMINAL_TYPES } from '../store/flowStore'
-import { theme, XTERM_THEMES } from '../store/themeStore'
+import { updateNodeData, activeTerminalId, AGENT_TERMINAL_TYPES } from '../store/flowStore'
+import { theme, XTERM_THEMES, nodeStyleVariant } from '../store/themeStore'
 import { linkAgents, linkNoteToAgent } from '../lib/bridgeClient'
 import {
   serializeBoard,
@@ -86,8 +59,6 @@ import {
 import { pendingVoiceInput, consumePendingVoiceInput, isRecording } from '../store/voiceStore'
 import { speak, ttsEnabled } from '../store/ttsStore'
 import { playNotificationSound } from '../store/notificationSoundStore'
-import { useHandleConnection } from '../lib/useHandleConnection'
-import { useNodeResize } from '../lib/useNodeResize'
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -96,10 +67,6 @@ const props = defineProps({
 })
 
 const { getConnectedEdges, findNode } = useVueFlow()
-const { isHandleConnected } = useHandleConnection(props.id)
-const isLeftConnected = isHandleConnected('left')
-const isRightConnected = isHandleConnected('right')
-const isBottomConnected = isHandleConnected('bottom')
 
 // Outros terminais de agente ligados a este por edge — mesmo mecanismo do
 // badge "N agentes" do DuxBan (DuxBanNode.vue): deriva das edges em vez de
@@ -116,15 +83,11 @@ const connectedPeers = computed(() => {
   return list
 })
 
-const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
-  minWidth: 320,
-  minHeight: 220,
-  defaultWidth: 480,
-  defaultHeight: 344
-})
-
 const termEl = ref(null)
 const status = ref('connecting')
+
+const STATUS_COLORS = { online: '#28c840', connecting: '#febc2e', offline: '#ff5f57' }
+const statusColor = computed(() => STATUS_COLORS[status.value] || '#6b7280')
 
 // % da janela de contexto do Claude Code em uso nesta sessão, calculado pelo
 // bridge (claudeUsage.js) a partir do transcript da sessão em
@@ -557,17 +520,13 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.agent-node {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px var(--color-shadow);
-}
-
-.agent-handle {
+/* handles do terminal têm comportamento diferente do padrão compartilhado
+   (NodeShell): ficam invisíveis em repouso e só aparecem no hover/durante um
+   arraste de conexão, com feedback de cor (amarelo enquanto arrasta, verde
+   quando o alvo é válido) — sinal importante o bastante aqui (é o principal
+   jeito de ligar dois agentes) pra valer a pena o :deep() em vez de herdar o
+   estilo genérico dos outros node types. */
+:deep(.shell-handle) {
   width: 10px;
   height: 10px;
   background: var(--color-bg-surface);
@@ -576,80 +535,27 @@ onBeforeUnmount(() => {
   transition: opacity 0.12s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.agent-node:hover .agent-handle,
-.agent-handle.connected,
-.agent-handle.vue-flow__handle-connecting,
-.agent-handle.vue-flow__handle-valid {
+:deep(.node-shell:hover .shell-handle),
+:deep(.shell-handle.connected),
+:deep(.shell-handle.vue-flow__handle-connecting),
+:deep(.shell-handle.vue-flow__handle-valid) {
   opacity: 1;
 }
 
-.agent-handle.connected {
+:deep(.shell-handle.connected) {
   background: #3b82f6;
   border-color: #3b82f6;
   box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
 }
 
-.agent-handle.vue-flow__handle-connecting {
+:deep(.shell-handle.vue-flow__handle-connecting) {
   background: #febc2e;
   border-color: #febc2e;
 }
 
-.agent-handle.vue-flow__handle-valid {
+:deep(.shell-handle.vue-flow__handle-valid) {
   background: #28c840;
   border-color: #28c840;
-}
-
-.agent-node.selected {
-  border-color: var(--selected-color);
-}
-
-.agent-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 10px;
-  flex-shrink: 0;
-  background: var(--color-bg-app);
-  border-bottom: 1px solid var(--color-border);
-  border-radius: 9px 9px 0 0;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #6b7280;
-  flex-shrink: 0;
-}
-
-.status-dot.online {
-  background: #28c840;
-}
-
-.status-dot.connecting {
-  background: #febc2e;
-}
-
-.status-dot.offline {
-  background: #ff5f57;
-}
-
-.agent-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  flex-shrink: 0;
-}
-
-.agent-path {
-  flex: 1;
-  min-width: 0;
-  font-size: 11px;
-  color: var(--color-text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .peer-count {
@@ -663,28 +569,8 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.settings-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  border: none;
-  border-radius: 999px;
-  background: var(--color-bg-surface-raised);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-
-.settings-btn:hover {
-  background: var(--color-hover);
-  color: var(--color-text-primary);
-}
-
 .usage-badge {
   position: absolute;
-  top: 38px;
   right: 8px;
   z-index: 5;
   padding: 2px 7px;
@@ -715,27 +601,5 @@ onBeforeUnmount(() => {
   min-height: 0;
   padding: 6px;
   overflow: hidden;
-  border-radius: 0 0 9px 9px;
-}
-
-.resize-handle {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 3px;
-  box-sizing: border-box;
-  color: var(--color-text-tertiary);
-  cursor: nwse-resize;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.agent-node:hover .resize-handle {
-  opacity: 1;
 }
 </style>

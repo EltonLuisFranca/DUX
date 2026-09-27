@@ -1,39 +1,17 @@
 <template>
-  <div
-    class="git-node"
-    :class="{ selected }"
-    :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
+  <NodeShell
+    :id="id"
+    :data="data"
+    :selected="selected"
+    :resize="{ minWidth: 320, minHeight: 220, defaultWidth: 420, defaultHeight: 320 }"
+    :title="data.name"
+    :meta="branch"
+    :status="statusColor"
   >
-    <NodeToolbar :id="id" :data="data" :selected="selected" />
-    <Handle
-      id="left"
-      type="target"
-      :position="Position.Left"
-      class="git-handle"
-      :class="{ connected: isLeftConnected }"
-    />
-    <Handle
-      id="right"
-      type="source"
-      :position="Position.Right"
-      class="git-handle"
-      :class="{ connected: isRightConnected }"
-    />
-    <Handle
-      id="bottom"
-      type="source"
-      :position="Position.Bottom"
-      class="git-handle"
-      :class="{ connected: isBottomConnected }"
-    />
-
-    <div
-      class="git-header"
-      :style="{ background: data.headerColor || undefined }"
-    >
-      <span class="status-dot" :class="status" />
-      <span class="git-title">{{ data.name }}</span>
-      <span class="git-branch" v-if="branch">{{ branch }}</span>
+    <template #icon>
+      <svg viewBox="0 0 20 20" width="12" height="12" v-html="GIT_ICON"></svg>
+    </template>
+    <template #headerActions>
       <button class="header-btn nodrag" title="Atualizar" @click="refresh">
         <svg viewBox="0 0 16 16" width="13" height="13" :class="{ spinning: loading }">
           <path
@@ -46,10 +24,7 @@
           />
         </svg>
       </button>
-      <button class="header-btn nodrag" title="Configurações" @click="toggleNodeSettings(id)">
-        <GearIcon />
-      </button>
-    </div>
+    </template>
 
     <div class="git-body nodrag nowheel nopan">
       <div v-if="errorMessage" class="git-empty">{{ errorMessage }}</div>
@@ -70,22 +45,15 @@
       <pre v-if="selectedDiff" class="diff-view">{{ selectedDiff }}</pre>
     </div>
 
-    <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
-      <ResizeGripIcon />
-    </div>
-  </div>
+  </NodeShell>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Handle, Position } from '@vue-flow/core'
-import GearIcon from './icons/GearIcon.vue'
-import ResizeGripIcon from './icons/ResizeGripIcon.vue'
-import NodeToolbar from './NodeToolbar.vue'
-import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
+import NodeShell from './NodeShell.vue'
+import { GIT_ICON } from '../nodeTypes/nodeIcons'
+import { updateNodeData } from '../store/flowStore'
 import { fetchGitStatus } from '../lib/bridgeClient'
-import { useHandleConnection } from '../lib/useHandleConnection'
-import { useNodeResize } from '../lib/useNodeResize'
 
 const POLL_INTERVAL_MS = 15_000
 
@@ -95,19 +63,9 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
-const { isHandleConnected } = useHandleConnection(props.id)
-const isLeftConnected = isHandleConnected('left')
-const isRightConnected = isHandleConnected('right')
-const isBottomConnected = isHandleConnected('bottom')
-
-const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
-  minWidth: 320,
-  minHeight: 220,
-  defaultWidth: 420,
-  defaultHeight: 320
-})
-
 const status = ref('connecting')
+const STATUS_COLORS = { online: '#22c55e', offline: '#ef4444' }
+const statusColor = computed(() => STATUS_COLORS[status.value] || 'var(--color-text-tertiary)')
 const branch = ref('')
 const files = ref([])
 const diffText = ref('')
@@ -184,87 +142,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.git-node {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px var(--color-shadow);
-}
-
-.git-node.selected {
-  border-color: var(--selected-color);
-}
-
-.git-handle {
-  width: 8px;
-  height: 8px;
-  background: var(--color-border-strong);
-  border: 2px solid var(--color-bg-surface);
-  transition: background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.git-handle.connected {
-  background: #3b82f6;
-  box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
-}
-
-.git-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  height: 34px;
-  padding: 0 10px;
-  background: var(--color-bg-surface-alt);
-  border-bottom: 1px solid var(--color-border);
-  border-radius: 9px 9px 0 0;
+:deep(.shell-header) {
   cursor: grab;
 }
 
-.git-header:active {
+:deep(.shell-header:active) {
   cursor: grabbing;
-}
-
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-text-tertiary);
-  flex-shrink: 0;
-}
-
-.status-dot.online {
-  background: #22c55e;
-}
-
-.status-dot.offline {
-  background: #ef4444;
-}
-
-.git-title {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.git-branch {
-  flex: 1;
-  min-width: 0;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-tertiary);
-  font-size: 10.5px;
-  font-family: 'Menlo', Consolas, monospace;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .header-btn {
@@ -302,7 +185,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  border-radius: 0 0 9px 9px;
 }
 
 .git-empty {
@@ -400,24 +282,4 @@ onBeforeUnmount(() => {
   overflow-y: auto;
 }
 
-.resize-handle {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 3px;
-  box-sizing: border-box;
-  color: var(--color-text-tertiary);
-  cursor: nwse-resize;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.git-node:hover .resize-handle {
-  opacity: 1;
-}
 </style>

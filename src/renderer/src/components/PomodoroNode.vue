@@ -1,44 +1,17 @@
 <template>
-  <div
-    class="pomodoro-node"
-    :class="{ selected }"
-    :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6', '--phase-color': phaseColor }"
+  <NodeShell
+    :id="id"
+    :data="data"
+    :selected="selected"
+    :resize="{ minWidth: 220, minHeight: 260, defaultWidth: 260, defaultHeight: 320 }"
+    :title="data.name"
+    :status="phaseColor"
   >
-    <NodeToolbar :id="id" :data="data" :selected="selected" />
-    <Handle
-      id="left"
-      type="target"
-      :position="Position.Left"
-      class="pomodoro-handle"
-      :class="{ connected: isLeftConnected }"
-    />
-    <Handle
-      id="right"
-      type="source"
-      :position="Position.Right"
-      class="pomodoro-handle"
-      :class="{ connected: isRightConnected }"
-    />
-    <Handle
-      id="bottom"
-      type="source"
-      :position="Position.Bottom"
-      class="pomodoro-handle"
-      :class="{ connected: isBottomConnected }"
-    />
+    <template #icon>
+      <svg viewBox="0 0 20 20" width="12" height="12" v-html="POMODORO_ICON"></svg>
+    </template>
 
-    <div
-      class="pomodoro-header"
-      :style="{ background: data.headerColor || undefined }"
-    >
-      <span class="phase-dot" />
-      <span class="pomodoro-title">{{ data.name }}</span>
-      <button class="header-btn nodrag" title="Configurações" @click="toggleNodeSettings(id)">
-        <GearIcon />
-      </button>
-    </div>
-
-    <div class="pomodoro-body nodrag nowheel nopan">
+    <div class="pomodoro-body nodrag nowheel nopan" :style="{ '--phase-color': phaseColor }">
       <span class="phase-label" :style="{ color: phaseColor }">{{ phaseLabel }}</span>
 
       <div class="ring-wrap">
@@ -88,22 +61,14 @@
 
       <span class="cycle-count">{{ cyclesCompleted }} {{ cyclesCompleted === 1 ? 'ciclo' : 'ciclos' }} completo{{ cyclesCompleted === 1 ? '' : 's' }}</span>
     </div>
-
-    <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
-      <ResizeGripIcon />
-    </div>
-  </div>
+  </NodeShell>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Handle, Position } from '@vue-flow/core'
-import GearIcon from './icons/GearIcon.vue'
-import ResizeGripIcon from './icons/ResizeGripIcon.vue'
-import NodeToolbar from './NodeToolbar.vue'
-import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
-import { useHandleConnection } from '../lib/useHandleConnection'
-import { useNodeResize } from '../lib/useNodeResize'
+import NodeShell from './NodeShell.vue'
+import { POMODORO_ICON } from '../nodeTypes/nodeIcons'
+import { updateNodeData } from '../store/flowStore'
 
 const FOCUS_COLOR = '#3b82f6'
 const BREAK_COLOR = '#22c55e'
@@ -131,18 +96,6 @@ const props = defineProps({
   id: { type: String, required: true },
   data: { type: Object, required: true },
   selected: { type: Boolean, default: false }
-})
-
-const { isHandleConnected } = useHandleConnection(props.id)
-const isLeftConnected = isHandleConnected('left')
-const isRightConnected = isHandleConnected('right')
-const isBottomConnected = isHandleConnected('bottom')
-
-const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
-  minWidth: 220,
-  minHeight: 260,
-  defaultWidth: 260,
-  defaultHeight: 320
 })
 
 const phase = ref(props.data.phase || 'focus')
@@ -259,86 +212,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.pomodoro-node {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px var(--color-shadow);
-}
-
-.pomodoro-node.selected {
-  border-color: var(--selected-color);
-}
-
-.pomodoro-handle {
-  width: 8px;
-  height: 8px;
-  background: var(--color-border-strong);
-  border: 2px solid var(--color-bg-surface);
-  transition: background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.pomodoro-handle.connected {
-  background: #3b82f6;
-  box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
-}
-
-.pomodoro-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  height: 34px;
-  padding: 0 10px;
-  background: var(--color-bg-surface-alt);
-  border-bottom: 1px solid var(--color-border);
-  border-radius: 9px 9px 0 0;
+:deep(.shell-header) {
   cursor: grab;
 }
 
-.pomodoro-header:active {
+:deep(.shell-header:active) {
   cursor: grabbing;
-}
-
-.phase-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--phase-color);
-  flex-shrink: 0;
-}
-
-.pomodoro-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.header-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  border: none;
-  border-radius: 999px;
-  background: var(--color-bg-surface-raised);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-
-.header-btn:hover {
-  background: var(--color-hover);
-  color: var(--color-text-primary);
 }
 
 .pomodoro-body {
@@ -350,7 +229,6 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 12px;
   padding: 16px;
-  border-radius: 0 0 9px 9px;
 }
 
 .phase-label {
@@ -435,24 +313,4 @@ onBeforeUnmount(() => {
   color: var(--color-text-tertiary);
 }
 
-.resize-handle {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 3px;
-  box-sizing: border-box;
-  color: var(--color-text-tertiary);
-  cursor: nwse-resize;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.pomodoro-node:hover .resize-handle {
-  opacity: 1;
-}
 </style>

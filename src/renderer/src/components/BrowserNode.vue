@@ -1,36 +1,15 @@
 <template>
-  <div
-    class="browser-node"
-    :class="{ selected }"
-    :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
+  <NodeShell
+    :id="id"
+    :data="data"
+    :selected="selected"
+    :resize="{ minWidth: 360, minHeight: 260, defaultWidth: 640, defaultHeight: 440 }"
+    :title="data.name || 'Navegador'"
   >
-    <NodeToolbar :id="id" :data="data" :selected="selected" />
-    <Handle
-      id="left"
-      type="target"
-      :position="Position.Left"
-      class="browser-handle"
-      :class="{ connected: isLeftConnected }"
-    />
-    <Handle
-      id="right"
-      type="source"
-      :position="Position.Right"
-      class="browser-handle"
-      :class="{ connected: isRightConnected }"
-    />
-    <Handle
-      id="bottom"
-      type="source"
-      :position="Position.Bottom"
-      class="browser-handle"
-      :class="{ connected: isBottomConnected }"
-    />
-
-    <div
-      class="browser-header"
-      :style="{ background: data.headerColor || undefined }"
-    >
+    <template #icon>
+      <svg viewBox="0 0 20 20" width="12" height="12" v-html="BROWSER_ICON"></svg>
+    </template>
+    <template #headerActions>
       <button class="nav-btn nodrag" title="Voltar" :disabled="!canGoBack" @click="goBack">
         <svg viewBox="0 0 16 16" width="13" height="13">
           <path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
@@ -77,53 +56,32 @@
           <circle cx="8" cy="8.5" r="2.4" stroke="currentColor" stroke-width="1.3" fill="none" />
         </svg>
       </button>
-      <button class="settings-btn nodrag" title="Configurações" @click="toggleNodeSettings(id)">
-        <GearIcon />
-      </button>
+    </template>
+
+    <div class="browser-viewport">
+      <webview
+        ref="webviewEl"
+        class="browser-body nodrag nowheel nopan"
+        :src="data.url"
+        webpreferences="nodeIntegration=no,contextIsolation=yes"
+        allowpopups="false"
+      ></webview>
+
+      <div v-if="captureFlash" class="capture-flash" />
     </div>
-
-    <webview
-      ref="webviewEl"
-      class="browser-body nodrag nowheel nopan"
-      :src="data.url"
-      webpreferences="nodeIntegration=no,contextIsolation=yes"
-      allowpopups="false"
-    ></webview>
-
-    <div v-if="captureFlash" class="capture-flash" />
-
-    <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
-      <ResizeGripIcon />
-    </div>
-  </div>
+  </NodeShell>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Handle, Position } from '@vue-flow/core'
-import GearIcon from './icons/GearIcon.vue'
-import ResizeGripIcon from './icons/ResizeGripIcon.vue'
-import NodeToolbar from './NodeToolbar.vue'
-import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
-import { useHandleConnection } from '../lib/useHandleConnection'
-import { useNodeResize } from '../lib/useNodeResize'
+import NodeShell from './NodeShell.vue'
+import { BROWSER_ICON } from '../nodeTypes/nodeIcons'
+import { updateNodeData } from '../store/flowStore'
 
 const props = defineProps({
   id: { type: String, required: true },
   data: { type: Object, required: true },
   selected: { type: Boolean, default: false }
-})
-
-const { isHandleConnected } = useHandleConnection(props.id)
-const isLeftConnected = isHandleConnected('left')
-const isRightConnected = isHandleConnected('right')
-const isBottomConnected = isHandleConnected('bottom')
-
-const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
-  minWidth: 360,
-  minHeight: 260,
-  defaultWidth: 640,
-  defaultHeight: 440
 })
 
 const webviewEl = ref(null)
@@ -233,42 +191,9 @@ watch(
 </script>
 
 <style scoped>
-.browser-node {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px var(--color-shadow);
-}
-
-.browser-node.selected {
-  border-color: var(--selected-color);
-}
-
-.browser-handle {
-  width: 8px;
-  height: 8px;
-  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.browser-handle.connected {
-  background: #3b82f6;
-  border-color: #3b82f6;
-  box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
-}
-
-.browser-header {
-  display: flex;
-  align-items: center;
+:deep(.shell-header) {
+  padding-right: 6px;
   gap: 4px;
-  flex-shrink: 0;
-  height: 36px;
-  padding: 0 6px;
-  background: var(--color-bg-surface-alt);
-  border-bottom: 1px solid var(--color-border-strong);
-  border-radius: 9px 9px 0 0;
 }
 
 .nav-btn {
@@ -285,26 +210,7 @@ watch(
   cursor: pointer;
 }
 
-.settings-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 999px;
-  background: var(--color-bg-surface-raised);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-
 .nav-btn:hover:not(:disabled) {
-  background: var(--color-hover);
-  color: var(--color-text-primary);
-}
-
-.settings-btn:hover {
   background: var(--color-hover);
   color: var(--color-text-primary);
 }
@@ -332,17 +238,23 @@ watch(
   border-color: var(--color-text-secondary);
 }
 
+.browser-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 .browser-body {
   flex: 1;
   min-height: 0;
   width: 100%;
   background: #fff;
-  border-radius: 0 0 9px 9px;
 }
 
 .capture-flash {
   position: absolute;
-  inset: 36px 0 0 0;
+  inset: 0;
   background: #fff;
   opacity: 0.6;
   pointer-events: none;
@@ -356,26 +268,5 @@ watch(
   to {
     opacity: 0;
   }
-}
-
-.resize-handle {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 3px;
-  box-sizing: border-box;
-  color: var(--color-text-tertiary);
-  cursor: nwse-resize;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.browser-node:hover .resize-handle {
-  opacity: 1;
 }
 </style>

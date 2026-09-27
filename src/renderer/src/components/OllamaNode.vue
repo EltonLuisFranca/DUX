@@ -1,51 +1,26 @@
 <template>
-  <div
-    class="ollama-node"
-    :class="{ selected }"
-    :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
+  <NodeShell
+    :id="id"
+    :data="data"
+    :selected="selected"
+    :resize="{ minWidth: 360, minHeight: 320, defaultWidth: 420, defaultHeight: 480 }"
+    :title="data.name || data.model"
+    :meta="data.model"
+    :status="statusColor"
   >
-    <NodeToolbar :id="id" :data="data" :selected="selected" />
-    <Handle
-      id="left"
-      type="target"
-      :position="Position.Left"
-      class="ollama-handle"
-      :class="{ connected: isLeftConnected }"
-    />
-    <Handle
-      id="right"
-      type="source"
-      :position="Position.Right"
-      class="ollama-handle"
-      :class="{ connected: isRightConnected }"
-    />
-    <Handle
-      id="bottom"
-      type="source"
-      :position="Position.Bottom"
-      class="ollama-handle"
-      :class="{ connected: isBottomConnected }"
-    />
-
-    <div
-      class="ollama-header"
-      :style="{ background: data.headerColor || undefined }"
-    >
-      <span class="status-dot" :class="status" />
-      <span class="ollama-title">{{ data.name || data.model }}</span>
-      <span class="ollama-model">{{ data.model }}</span>
+    <template #icon>
+      <svg viewBox="0 0 20 20" width="12" height="12" v-html="OLLAMA_ICON"></svg>
+    </template>
+    <template #headerActions>
       <button
-        class="settings-btn nodrag"
+        class="header-action-btn nodrag"
         title="Nova conversa"
         :disabled="!data.messages?.length"
         @click="newConversation"
       >
         <NewChatIcon />
       </button>
-      <button class="settings-btn nodrag" title="Configurações" @click="toggleNodeSettings(id)">
-        <GearIcon />
-      </button>
-    </div>
+    </template>
 
     <div ref="historyEl" class="ollama-history nodrag nowheel nopan">
       <div v-if="!data.messages?.length" class="empty-hint">Converse com {{ data.model }}...</div>
@@ -140,27 +115,20 @@
         </svg>
       </button>
     </div>
-
-    <div class="resize-handle nodrag nowheel nopan" @mousedown="startResize">
-      <ResizeGripIcon />
-    </div>
-  </div>
+  </NodeShell>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
-import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import GearIcon from './icons/GearIcon.vue'
-import ResizeGripIcon from './icons/ResizeGripIcon.vue'
+import { useVueFlow } from '@vue-flow/core'
 import CopyIcon from './icons/CopyIcon.vue'
 import CheckIcon from './icons/CheckIcon.vue'
 import NewChatIcon from './icons/NewChatIcon.vue'
-import NodeToolbar from './NodeToolbar.vue'
-import { toggleNodeSettings, updateNodeData } from '../store/flowStore'
+import NodeShell from './NodeShell.vue'
+import { OLLAMA_ICON } from '../nodeTypes/nodeIcons'
+import { updateNodeData } from '../store/flowStore'
 import { streamChat } from '../lib/ollamaClient'
 import { FILE_TOOLS, buildNoteTools, executeTool } from '../lib/ollamaTools'
-import { useHandleConnection } from '../lib/useHandleConnection'
-import { useNodeResize } from '../lib/useNodeResize'
 
 const MAX_TOOL_ITERATIONS = 4
 
@@ -228,11 +196,6 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
-const { isHandleConnected } = useHandleConnection(props.id)
-const isLeftConnected = isHandleConnected('left')
-const isRightConnected = isHandleConnected('right')
-const isBottomConnected = isHandleConnected('bottom')
-
 // notas ligadas por edge a este node — vira tool estruturada (read_note/
 // write_note, ver ollamaTools.js) em vez do aviso em texto que o terminal de
 // agente usa (bridge/noteLink.js): aqui o DUX já controla o loop de
@@ -250,17 +213,11 @@ const connectedNotes = computed(() => {
   return notes
 })
 
-const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
-  minWidth: 360,
-  minHeight: 320,
-  defaultWidth: 420,
-  defaultHeight: 480
-})
-
 const historyEl = ref(null)
 const fileInputEl = ref(null)
 const draft = ref('')
 const status = ref('idle')
+const statusColor = computed(() => (status.value === 'sending' ? '#f59e0b' : 'var(--color-text-tertiary)'))
 const streamingText = ref('')
 const errorText = ref('')
 const copiedIndex = ref(null)
@@ -425,76 +382,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.ollama-node {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px var(--color-shadow);
-}
-
-.ollama-node.selected {
-  border-color: var(--selected-color);
-}
-
-.ollama-handle {
-  width: 8px;
-  height: 8px;
-  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.ollama-handle.connected {
-  background: #3b82f6;
-  border-color: #3b82f6;
-  box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
-}
-
-.ollama-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  height: 36px;
-  padding: 0 10px;
-  background: var(--color-bg-surface-alt);
-  border-bottom: 1px solid var(--color-border-strong);
-  border-radius: 9px 9px 0 0;
-}
-
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--color-text-tertiary);
-}
-
-.status-dot.sending {
-  background: #f59e0b;
-}
-
-.ollama-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ollama-model {
-  flex: 1;
-  min-width: 0;
-  font-size: 11px;
-  color: var(--color-text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.settings-btn {
+.header-action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -508,17 +396,17 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-.settings-btn:hover {
+.header-action-btn:hover {
   background: var(--color-hover);
   color: var(--color-text-primary);
 }
 
-.settings-btn:disabled {
+.header-action-btn:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
-.settings-btn:disabled:hover {
+.header-action-btn:disabled:hover {
   background: var(--color-bg-surface-raised);
   color: var(--color-text-secondary);
 }
@@ -744,7 +632,6 @@ onBeforeUnmount(() => {
   padding: 8px;
   border-top: 1px solid var(--color-border-strong);
   background: var(--color-bg-surface-alt);
-  border-radius: 0 0 9px 9px;
 }
 
 .file-input-hidden {
@@ -815,24 +702,4 @@ onBeforeUnmount(() => {
   cursor: default;
 }
 
-.resize-handle {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 3px;
-  box-sizing: border-box;
-  color: var(--color-text-tertiary);
-  cursor: nwse-resize;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.ollama-node:hover .resize-handle {
-  opacity: 1;
-}
 </style>
