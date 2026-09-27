@@ -159,6 +159,15 @@
           </button>
         </AppTooltip>
         <span class="fmt-divider" />
+        <AppTooltip :label="isModal ? 'Fechar modal' : 'Abrir em modal (tela cheia)'">
+          <button class="fmt-btn" @click="toggleNodeModal(id)">
+            <svg viewBox="0 0 16 16" width="13" height="13">
+              <rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3" fill="none" />
+              <path d="M2 6h12" stroke="currentColor" stroke-width="1.3" />
+            </svg>
+          </button>
+        </AppTooltip>
+        <span class="fmt-divider" />
         <AppTooltip label="Excluir">
           <button class="fmt-btn fmt-danger" @click="requestDeleteNode(id)">
             <svg viewBox="0 0 16 16" width="16" height="16">
@@ -266,7 +275,15 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { updateNodeData, requestDeleteNode, fullscreenNodeId, toggleFullscreen, TERMINAL_TYPES } from '../store/flowStore'
+import {
+  updateNodeData,
+  requestDeleteNode,
+  fullscreenNodeId,
+  toggleFullscreen,
+  modalFullscreenNodeId,
+  toggleNodeModal,
+  TERMINAL_TYPES
+} from '../store/flowStore'
 import { readNote, writeNote, watchNote, saveNoteImage } from '../lib/bridgeClient'
 import { syncNoteContent } from '../lib/noteSync'
 import { htmlToMarkdown, markdownToHtml, splitTabs, joinTabs } from '../lib/noteMarkdown'
@@ -297,6 +314,7 @@ const props = defineProps({
 })
 
 const isFullscreen = computed(() => fullscreenNodeId.value === props.id)
+const isModal = computed(() => modalFullscreenNodeId.value === props.id)
 
 const { isHandleConnected } = useHandleConnection(props.id)
 const isLeftConnected = isHandleConnected('left')
