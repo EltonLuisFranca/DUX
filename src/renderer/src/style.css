@@ -17,6 +17,10 @@
   --color-notes-bg: #332c14;
   --color-notes-header: #3d3418;
   --color-notes-border: #8a6d1f;
+  /* intensidade da sombra dos cards de node (0%–100%) — sobrescrito via JS
+     em themeStore.js (nodeShadowIntensity), fallback aqui é só pro primeiro
+     paint antes do watchEffect rodar */
+  --node-shadow-pct: 100%;
 }
 
 :root[data-theme='light'] {

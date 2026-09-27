@@ -150,7 +150,7 @@ async function replaceImage() {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-strong);
   border-radius: 10px;
-  box-shadow: 0 8px 24px var(--color-shadow);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-shadow) var(--node-shadow-pct), transparent);
 }
 
 .image-node.selected {

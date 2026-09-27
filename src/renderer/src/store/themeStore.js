@@ -118,6 +118,28 @@ export function setCanvasPatternSize(value) {
   canvasPatternSize.value = value
 }
 
+// Intensidade da sombra dos cards de node (0-100, 0 = sem sombra) — vira a
+// custom property --node-shadow-pct (ver style.css), usada num color-mix()
+// no box-shadow do card (NodeShell.vue, NotesNode.vue, ImageNode.vue).
+const NODE_SHADOW_STORAGE_KEY = 'dux-node-shadow-intensity'
+const storedNodeShadowRaw = localStorage.getItem(NODE_SHADOW_STORAGE_KEY)
+const storedNodeShadowIntensity = storedNodeShadowRaw === null ? null : Number(storedNodeShadowRaw)
+
+export const nodeShadowIntensity = ref(
+  Number.isFinite(storedNodeShadowIntensity) && storedNodeShadowIntensity >= 0 && storedNodeShadowIntensity <= 100
+    ? storedNodeShadowIntensity
+    : 100
+)
+
+watchEffect(() => {
+  localStorage.setItem(NODE_SHADOW_STORAGE_KEY, String(nodeShadowIntensity.value))
+  document.documentElement.style.setProperty('--node-shadow-pct', `${nodeShadowIntensity.value}%`)
+})
+
+export function setNodeShadowIntensity(value) {
+  nodeShadowIntensity.value = value
+}
+
 const validEdgeStyleValues = EDGE_STYLES.map((s) => s.value)
 const storedEdgeStyle = localStorage.getItem(EDGE_STYLE_STORAGE_KEY)
 

@@ -906,7 +906,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--rest-border-color, var(--color-notes-border));
   border-radius: 10px;
   overflow: visible;
-  box-shadow: 0 8px 24px var(--color-shadow);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-shadow) var(--node-shadow-pct), transparent);
   cursor: default;
 }
 

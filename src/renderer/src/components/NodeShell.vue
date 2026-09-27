@@ -114,7 +114,7 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, props.resize
   flex-direction: column;
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-strong);
-  box-shadow: 0 8px 24px var(--color-shadow);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-shadow) var(--node-shadow-pct), transparent);
   overflow: hidden;
 }
 

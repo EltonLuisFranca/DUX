@@ -68,6 +68,21 @@
             </div>
 
             <div class="setting-row">
+              <span class="setting-label">
+                Sombra dos nodes ({{ nodeShadowIntensity === 0 ? 'desligada' : `${nodeShadowIntensity}%` }})
+              </span>
+              <input
+                type="range"
+                class="range-input"
+                min="0"
+                max="100"
+                step="5"
+                :value="nodeShadowIntensity"
+                @input="setNodeShadowIntensity(Number($event.target.value))"
+              />
+            </div>
+
+            <div class="setting-row">
               <span class="setting-label">Fundo do canvas</span>
               <div class="bg-variant-grid">
                 <button
@@ -362,6 +377,8 @@ import {
   setTheme,
   nodeStyleVariant,
   setNodeStyleVariant,
+  nodeShadowIntensity,
+  setNodeShadowIntensity,
   canvasVariant,
   setCanvasVariant,
   CANVAS_VARIANTS,
