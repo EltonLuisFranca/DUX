@@ -44,6 +44,10 @@ contextBridge.exposeInMainWorld('voiceAPI', {
   transcribeChunk: (buffer) => ipcRenderer.invoke('voice:transcribe-chunk', { buffer })
 })
 
+contextBridge.exposeInMainWorld('lipSyncAPI', {
+  analyze: (buffer) => ipcRenderer.invoke('lipsync:analyze', { buffer })
+})
+
 contextBridge.exposeInMainWorld('imageNodeAPI', {
   openFile: () => ipcRenderer.invoke('image-node:open-file')
 })

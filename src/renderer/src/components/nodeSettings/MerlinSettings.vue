@@ -66,6 +66,16 @@
     />
   </div>
 
+  <div class="field field-row">
+    <label class="field-label" for="node-lipsync">Sincronizar boca com a fala</label>
+    <input
+      id="node-lipsync"
+      type="checkbox"
+      :checked="node.data.lipSyncEnabled ?? true"
+      @change="updateNodeData(node.id, { lipSyncEnabled: $event.target.checked })"
+    />
+  </div>
+
   <div class="field">
     <label class="field-label" for="node-system-prompt">Prompt de sistema</label>
     <textarea

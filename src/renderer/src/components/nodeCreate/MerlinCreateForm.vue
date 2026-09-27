@@ -101,7 +101,8 @@ function submit() {
     model: selectedModel.value,
     api: detectedApi.value,
     messages: [],
-    voiceOutputEnabled: true
+    voiceOutputEnabled: true,
+    lipSyncEnabled: true
   })
 }
 

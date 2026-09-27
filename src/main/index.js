@@ -6,6 +6,7 @@ import { registerWorkspacesIpc } from './ipc/workspaces'
 import { registerAuthIpc, AUTH_PROTOCOL, handleAuthCallbackUrl } from './ipc/auth'
 import { registerHttpNodeIpc } from './ipc/httpNode'
 import { registerVoiceIpc } from './ipc/voice'
+import { registerLipSyncIpc } from './ipc/lipsync'
 import { registerBrowserNodeIpc } from './ipc/browserNode'
 import { registerImageNodeIpc } from './ipc/imageNode'
 import { registerVulnReportIpc } from './ipc/vulnReport'
@@ -50,6 +51,7 @@ registerWorkspacesIpc()
 registerAuthIpc()
 registerHttpNodeIpc()
 registerVoiceIpc()
+registerLipSyncIpc()
 registerBrowserNodeIpc()
 registerImageNodeIpc()
 registerVulnReportIpc()

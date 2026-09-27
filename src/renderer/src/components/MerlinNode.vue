@@ -56,7 +56,8 @@ import { toggleNodeSettings, updateNodeData, requestDeleteNode } from '../store/
 import { streamChat } from '../lib/ollamaClient'
 import { DEFAULT_MERLIN_SYSTEM_PROMPT, matchWakeWord } from '../lib/merlinPrompt'
 import { pendingVoiceInput, consumePendingVoiceInput, startRecording, cancelRecording, waveLevels } from '../store/voiceStore'
-import { speak, isSpeaking, stopSpeaking } from '../store/ttsStore'
+import { speak, isSpeaking, stopSpeaking, getCurrentAudioTime } from '../store/ttsStore'
+import { visemeAt } from '../store/visemeStore'
 import { useHandleConnection } from '../lib/useHandleConnection'
 import { useNodeResize } from '../lib/useNodeResize'
 
@@ -417,6 +418,45 @@ function loadFacePoster() {
   facePoster = img // drawImage de uma <img> incompleta simplesmente não desenha nada, é seguro
 }
 
+// crops de boca (visemas) pra sobrepor no rosto durante a fala, extraídos do
+// mesmo vídeo-fonte do rosto (mesma pose/luz/cabelo, confirmado pixel a pixel
+// idêntico ao merlin-face-idle.mp4) pra não repetir o "fantasma" da tentativa
+// antiga. O vídeo disponível só tem amplitude de boca pra 2 formas reais e
+// distintas (fechada / aberta com dentes à mostra, sem transição suave nem
+// arredondamento tipo "O") — os 9 códigos do Rhubarb caem todos num desses
+// dois. Dá pra expandir pra mais formas no futuro só adicionando entradas
+// aqui, sem mexer no resto do pipeline.
+const MOUTH_SHAPE_FILES = {
+  closed: '/merlin-mouths/closed.png',
+  open: '/merlin-mouths/open.png'
+}
+const RHUBARB_TO_SHAPE = {
+  X: 'closed',
+  A: 'closed',
+  B: 'open',
+  C: 'open',
+  D: 'open',
+  E: 'open',
+  F: 'open',
+  G: 'open',
+  H: 'open'
+}
+const mouthShapes = {}
+
+function loadMouthShapes() {
+  for (const [key, src] of Object.entries(MOUTH_SHAPE_FILES)) {
+    const img = new Image()
+    img.src = src
+    mouthShapes[key] = img
+  }
+}
+
+// janela normalizada da boca (mesma unidade do FACE_WINDOW: fração 0..1 do
+// frame inteiro do vídeo-fonte) — calibrada olhando o próprio
+// merlin-face-idle.mp4 (448x656). Recalibrar se o vídeo-fonte for trocado por
+// um com enquadramento diferente.
+const MOUTH_WINDOW = { nxMin: 0.277, nyMin: 0.412, nxMax: 0.723, nyMax: 0.625 }
+
 function loadFaceVideos() {
   for (const [key, src] of Object.entries(VIDEO_CLIPS)) {
     const video = document.createElement('video')
@@ -674,6 +714,25 @@ function drawFace(cx, cy, gradient, flatColor, brightAmount) {
 
   off.drawImage(media.el, sx0, sy0, srcW, srcH, 0, 0, offW, offH)
 
+  // boca sincronizada com a fala: desenhada ANTES dos efeitos de holograma
+  // (scanline/varredura/degradê logo abaixo) pra herdar o mesmo tratamento
+  // visual do resto do rosto em vez de ficar "colada" por cima, sem o
+  // flicker/feather. Reprojeta o MOUTH_WINDOW (mesma unidade normalizada do
+  // FACE_WINDOW) pro espaço de pixels do canvas offscreen — não precisa
+  // duplicar a matemática de faceCx/boxW/drift/breathe, o offscreen já é
+  // local ao frame.
+  if ((props.data.lipSyncEnabled ?? true) && state.value === 'speaking') {
+    const shapeKey = RHUBARB_TO_SHAPE[visemeAt(getCurrentAudioTime())]
+    const mouthImg = shapeKey && mouthShapes[shapeKey]
+    if (mouthImg?.complete && mouthImg.naturalWidth) {
+      const mx = ((MOUTH_WINDOW.nxMin - nxMin) / (nxMax - nxMin)) * offW
+      const my = ((MOUTH_WINDOW.nyMin - nyMin) / (nyMax - nyMin)) * offH
+      const mw = ((MOUTH_WINDOW.nxMax - MOUTH_WINDOW.nxMin) / (nxMax - nxMin)) * offW
+      const mh = ((MOUTH_WINDOW.nyMax - MOUTH_WINDOW.nyMin) / (nyMax - nyMin)) * offH
+      off.drawImage(mouthImg, mx, my, mw, mh)
+    }
+  }
+
   // scanlines estáticas — textura fina tipo tela/holograma
   off.save()
   off.fillStyle = 'rgba(0, 0, 0, 0.14)'
@@ -750,6 +809,7 @@ function resizeCanvas() {
 onMounted(() => {
   loadFacePoster()
   loadFaceVideos()
+  loadMouthShapes()
   nextTick(() => {
     resizeCanvas()
     resizeObserver = new ResizeObserver(resizeCanvas)
