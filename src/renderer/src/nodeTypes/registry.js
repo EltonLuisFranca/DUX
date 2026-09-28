@@ -134,8 +134,8 @@ export const nodeTypeRegistry = {
     icon: OLLAMA_ICON
   },
   merlin: {
-    label: 'Merlin',
-    description: 'Assistente de voz: diga "Merlin" para chamar, converse e ele responde falando — respostas curtas, estilo Jarvis.',
+    label: 'Themis',
+    description: 'Assistente de voz: clique pra ativar, converse e ela responde falando — respostas curtas, estilo Jarvis.',
     category: 'agents',
     createForm: MerlinCreateForm,
     settingsComponent: MerlinSettings,

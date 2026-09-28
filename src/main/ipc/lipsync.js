@@ -63,6 +63,7 @@ export function registerLipSyncIpc() {
 
     try {
       if (!existsSync(RHUBARB_BIN)) {
+        console.error('[lipsync] binário não encontrado em', RHUBARB_BIN, '— sem lip-sync')
         return { ok: true, mouthCues: [] } // sem binário vendorado ainda — degrada pra sem lip-sync
       }
 
@@ -70,6 +71,7 @@ export function registerLipSyncIpc() {
       await runRhubarb(wavPath, jsonPath)
 
       const { mouthCues } = JSON.parse(readFileSync(jsonPath, 'utf-8'))
+      console.log('[lipsync] ok:', (mouthCues || []).length, 'cues')
       return { ok: true, mouthCues: mouthCues || [] }
     } catch (err) {
       console.error('[lipsync] análise falhou', err)

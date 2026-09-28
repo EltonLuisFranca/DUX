@@ -40,7 +40,7 @@
     <p class="status" :class="{ invalid: status === 'error' }">
       <span v-if="status === 'error'">Não foi possível conectar em {{ host }}. O Ollama está rodando?</span>
       <span v-else-if="status === 'ready' && !models.length">Nenhum modelo instalado nesse Ollama.</span>
-      <span v-else>Diga "Merlin" pra chamar, depois de criado.</span>
+      <span v-else>Clique nela e já pode falar, depois de criada.</span>
     </p>
 
     <button class="btn-primary" :disabled="!canSubmit" @click="submit">Criar</button>
@@ -95,7 +95,7 @@ async function fetchModels() {
 function submit() {
   if (!canSubmit.value) return
   emit('submit', {
-    name: 'Merlin',
+    name: 'Themis',
     host: host.value,
     token: token.value.trim(),
     model: selectedModel.value,

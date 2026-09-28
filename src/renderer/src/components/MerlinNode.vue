@@ -54,7 +54,7 @@ import GearIcon from './icons/GearIcon.vue'
 import ResizeGripIcon from './icons/ResizeGripIcon.vue'
 import { toggleNodeSettings, updateNodeData, requestDeleteNode } from '../store/flowStore'
 import { streamChat } from '../lib/ollamaClient'
-import { DEFAULT_MERLIN_SYSTEM_PROMPT, matchWakeWord } from '../lib/merlinPrompt'
+import { DEFAULT_MERLIN_SYSTEM_PROMPT } from '../lib/merlinPrompt'
 import { pendingVoiceInput, consumePendingVoiceInput, startRecording, cancelRecording, waveLevels } from '../store/voiceStore'
 import { speak, isSpeaking, stopSpeaking, getCurrentAudioTime } from '../store/ttsStore'
 import { visemeAt } from '../store/visemeStore'
@@ -151,13 +151,13 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, {
   defaultHeight: 380
 })
 
-// off: mic desligado, nada acontece. passive: ouvindo em segundo plano só
-// pra reconhecer a wake word "Merlin", nunca envia nada pro modelo sozinho.
-// active: wake word detectada, capturando o pedido. thinking: esperando
-// resposta do modelo. speaking: tocando a resposta em voz alta (mic
-// desligado nesse meio tempo, pra não se ouvir).
+// off: mic desligado, nada acontece. passive: ouvindo, em standby (visual
+// mais calmo), só esperando a primeira fala pra virar active — sem wake word,
+// qualquer fala captada já entra direto como início do pedido. active:
+// capturando o pedido de verdade. thinking: esperando resposta do modelo.
+// speaking: tocando a resposta em voz alta (mic desligado nesse meio tempo,
+// pra não se ouvir).
 const state = ref('off')
-const passiveBuffer = ref('')
 const commandBuffer = ref('')
 const captionText = ref('')
 const errorText = ref('')
@@ -169,9 +169,9 @@ const displayText = computed(() => captionText.value)
 const hintText = computed(() => {
   switch (state.value) {
     case 'off':
-      return 'Clique para ativar o Merlin'
+      return 'Clique para ativar a Themis'
     case 'passive':
-      return 'Diga "Merlin" para chamar'
+      return 'Pode falar...'
     case 'thinking':
       return 'Pensando...'
     default:
@@ -193,7 +193,6 @@ async function toggleMic() {
 
 async function enableListening() {
   errorText.value = ''
-  passiveBuffer.value = ''
   commandBuffer.value = ''
   captionText.value = ''
   try {
@@ -212,25 +211,18 @@ function disableListening() {
   stopSpeaking()
   cancelRecording()
   state.value = 'off'
-  passiveBuffer.value = ''
   commandBuffer.value = ''
 }
 
 function handleVoiceSignal(pending) {
   if (state.value === 'passive') {
+    // sem wake word: a primeira fala captada já é o início do pedido, não
+    // precisa dizer "Themis" antes.
     if (pending.text) {
-      passiveBuffer.value += pending.text
-      const remainder = matchWakeWord(passiveBuffer.value)
-      if (remainder !== null) {
-        passiveBuffer.value = ''
-        state.value = 'active'
-        commandBuffer.value = remainder ? `${remainder} ` : ''
-        captionText.value = remainder
-      }
+      state.value = 'active'
+      commandBuffer.value = pending.text
+      captionText.value = pending.text.trim()
     }
-    // silêncio longo sem wake word: só reseta o buffer, continua ouvindo em
-    // segundo plano — não é pra acontecer nada sozinho sem "Merlin".
-    if (pending.sendEnter) passiveBuffer.value = ''
     return
   }
 
@@ -248,8 +240,8 @@ function handleVoiceSignal(pending) {
       if (query) {
         submitQuery(query)
       } else {
-        // disse "Merlin" e não completou o pedido — volta a ouvir em
-        // segundo plano em vez de ficar preso esperando pra sempre.
+        // pausa longa sem ter dito nada de fato — volta a ouvir em standby
+        // em vez de ficar preso esperando pra sempre.
         state.value = 'passive'
         startRecording(props.id).catch(() => {})
       }
@@ -764,10 +756,17 @@ function drawFace(cx, cy, gradient, flatColor, brightAmount) {
   off.globalCompositeOperation = 'destination-in'
   off.translate(offW / 2, offH * 0.48)
   off.scale(1, offH / offW)
-  const featherR = offW * 0.56
-  const feather = off.createRadialGradient(0, 0, featherR * 0.52, 0, 0, featherR)
+  // núcleo sólido pequeno (só 28% do raio) e o resto inteiro em degradê —
+  // com blend "lighter" por cima de um fundo escuro, um núcleo sólido
+  // grande (75% antigo) deixava a borda praticamente imperceptível: o
+  // aditivo faz qualquer alpha razoável ainda "estourar" bem visível contra
+  // o preto, então só uma faixa de transição BEM mais larga (e que termina
+  // rente à borda da caixa, não além dela) realmente lê como oval suave em
+  // vez de retângulo com canto arredondado.
+  const featherR = offW * 0.5
+  const feather = off.createRadialGradient(0, 0, featherR * 0.28, 0, 0, featherR)
   feather.addColorStop(0, 'rgba(255, 255, 255, 1)')
-  feather.addColorStop(0.75, 'rgba(255, 255, 255, 1)')
+  feather.addColorStop(0.55, 'rgba(255, 255, 255, 0.7)')
   feather.addColorStop(1, 'rgba(255, 255, 255, 0)')
   off.fillStyle = feather
   off.fillRect(-offW, -offH, offW * 2, offH * 2)

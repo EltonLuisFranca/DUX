@@ -12,6 +12,7 @@ export async function analyzeSpeech(wavBlob) {
   try {
     const buffer = await wavBlob.arrayBuffer()
     const { ok, mouthCues: cues } = await window.lipSyncAPI.analyze(buffer)
+    console.log('[viseme] recebido', cues?.length ?? 0, 'cues', cues)
     if (ok) mouthCues.value = cues || []
   } catch (err) {
     // nunca deixa a falha de análise impedir a fala em si — só fica sem
