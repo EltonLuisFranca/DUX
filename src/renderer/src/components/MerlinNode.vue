@@ -12,7 +12,7 @@
     <Handle id="bottom" type="source" :position="Position.Bottom" class="merlin-handle" :class="{ connected: isBottomConnected }" />
 
     <div v-if="menuOpen" class="context-menu nodrag" @click.stop>
-      <button class="menu-item" @click="openSettings">
+      <button class="menu-item" data-node-settings-toggle @click="openSettings">
         <GearIcon />
         Configurações
       </button>

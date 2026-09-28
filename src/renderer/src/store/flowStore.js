@@ -86,6 +86,10 @@ export const fullscreenNodeId = ref(null)
 
 export function toggleFullscreen(id) {
   fullscreenNodeId.value = fullscreenNodeId.value === id ? null : id
+  // sidebar aberta rouba espaço do canvas — o fitView do node fullscreen
+  // calcula a área disponível na hora, então a sidebar precisa estar
+  // fechada antes pro node ocupar a largura toda
+  if (fullscreenNodeId.value) activeSettingsNodeId.value = null
 }
 
 export function exitFullscreen() {

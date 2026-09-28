@@ -2,7 +2,6 @@
   <div class="window-shell">
     <TitleBar title="DUX" />
     <div class="canvas-area">
-      <NodeSettingsSidebar />
       <div class="canvas-stack">
         <div v-for="ws in workspaces" :key="ws.id" v-show="ws.id === activeWorkspaceId" class="canvas-slot">
           <FleetCanvas :workspace="ws" />
@@ -30,6 +29,7 @@
         </div>
         <ClaudeUsageDock />
       </div>
+      <NodeSettingsSidebar />
       <SettingsSidebar />
     </div>
     <AddNodeModal />

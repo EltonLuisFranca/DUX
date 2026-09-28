@@ -2,7 +2,7 @@
   <Transition name="toolbar-fade">
     <div v-if="selected" class="node-toolbar nodrag nowheel">
       <AppTooltip label="Configurações">
-        <button class="tool-btn" @click="toggleNodeSettings(id)">
+        <button class="tool-btn" data-node-settings-toggle @click="toggleNodeSettings(id)">
           <GearIcon />
         </button>
       </AppTooltip>

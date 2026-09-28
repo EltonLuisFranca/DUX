@@ -1,5 +1,6 @@
 <template>
   <div
+    ref="rootRef"
     class="sidebar"
     :class="{ open: !!activeNode, resizing }"
     :style="{ width: activeNode ? `${width}px` : '0' }"
@@ -82,8 +83,11 @@ watch(activeSettingsNodeId, () => {
 const { width, resizing, showTip, startResize, handleTipEnter, handleTipLeave } = useSidebarResize({
   defaultWidth: 260,
   minWidth: 220,
-  maxWidth: 440
+  maxWidth: 440,
+  invert: true
 })
+
+const rootRef = ref(null)
 
 // captura antes do xterm.js pra fechar mesmo com o terminal focado
 function onKeydown(event) {
@@ -95,10 +99,31 @@ function onKeydown(event) {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown, { capture: true }))
+// mousedown (não click) + capture: o pane do Vue Flow intercepta o clique
+// pra pan/seleção e nunca deixaria um listener normal de click ver o evento.
+// Ignora cliques nos próprios gatilhos (engrenagem do NodeToolbar, menu do
+// MerlinNode) — senão o mousedown fecha primeiro e o click do gatilho, ao
+// ver a sidebar já fechada, reabre em vez de alternar (toggle quebrado).
+// Ignora também cliques em qualquer node do canvas — trocar de node com a
+// sidebar aberta já é tratado por onNodeClicked (flowStore), que decide se
+// troca o conteúdo ou fecha; sem essa exceção o mousedown fecharia primeiro
+// e o handleNodeClick, ao ver activeSettingsNodeId nulo, nunca troca.
+function handleClickOutside(event) {
+  if (!activeSettingsNodeId.value) return
+  if (event.target.closest?.('[data-node-settings-toggle], .vue-flow__node')) return
+  if (rootRef.value && !rootRef.value.contains(event.target)) {
+    closeNodeSettings()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown, { capture: true })
+  document.addEventListener('mousedown', handleClickOutside, { capture: true })
+})
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown, { capture: true })
+  document.removeEventListener('mousedown', handleClickOutside, { capture: true })
 })
 </script>
 
@@ -108,7 +133,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   overflow: visible;
   background: var(--color-bg-surface-alt);
-  border-right: 1px solid var(--color-border);
+  border-left: 1px solid var(--color-border);
   transition: width 0.16s ease;
 }
 
@@ -212,7 +237,7 @@ onBeforeUnmount(() => {
 .resize-handle {
   position: absolute;
   top: 0;
-  right: -3px;
+  left: -3px;
   width: 6px;
   height: 100%;
   display: flex;
@@ -224,7 +249,7 @@ onBeforeUnmount(() => {
 
 .resize-grip {
   position: relative;
-  right: 3px;
+  left: 3px;
   width: 3px;
   height: 35px;
   border-radius: 4px;
@@ -248,7 +273,7 @@ onBeforeUnmount(() => {
 
 .resize-tooltip {
   position: absolute;
-  left: 14px;
+  right: 14px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
