@@ -209,6 +209,11 @@
         <DnsWhoisNode v-bind="nodeProps" />
       </NodeModalWrapper>
     </template>
+    <template #node-network-device-scan="nodeProps">
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <NetworkDeviceScanNode v-bind="nodeProps" />
+      </NodeModalWrapper>
+    </template>
     <template #node-pomodoro="nodeProps">
       <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
         <PomodoroNode v-bind="nodeProps" />
@@ -281,6 +286,7 @@ import TlsCheckNode from './TlsCheckNode.vue'
 import TechFingerprintNode from './TechFingerprintNode.vue'
 import VulnScanNode from './VulnScanNode.vue'
 import DnsWhoisNode from './DnsWhoisNode.vue'
+import NetworkDeviceScanNode from './NetworkDeviceScanNode.vue'
 import PomodoroNode from './PomodoroNode.vue'
 import DuxBanNode from './DuxBanNode.vue'
 import NodeModalWrapper from './NodeModalWrapper.vue'

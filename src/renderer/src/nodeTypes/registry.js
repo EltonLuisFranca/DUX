@@ -30,7 +30,8 @@ import {
   TLS_CHECK_ICON,
   TECH_FINGERPRINT_ICON,
   VULN_SCAN_ICON,
-  DNS_WHOIS_ICON
+  DNS_WHOIS_ICON,
+  NETWORK_DEVICE_SCAN_ICON
 } from './nodeIcons'
 
 // registro de tipos de node: cada tipo novo entra aqui com seu próprio
@@ -239,6 +240,13 @@ export const nodeTypeRegistry = {
     category: 'tools',
     createData: () => ({ name: 'DNS / WHOIS' }),
     icon: DNS_WHOIS_ICON
+  },
+  'network-device-scan': {
+    label: 'Dispositivos na Rede',
+    description: 'Varre a rede local (ping sweep + tabela ARP) e lista os dispositivos conectados: IP, MAC e hostname.',
+    category: 'tools',
+    createData: () => ({ name: 'Dispositivos na Rede' }),
+    icon: NETWORK_DEVICE_SCAN_ICON
   },
   image: {
     label: 'Imagem',

@@ -21,6 +21,7 @@ const { createRunner: createTlsCheckRunner } = require('./tlsCheck')
 const { createRunner: createTechFingerprintRunner } = require('./techFingerprint')
 const { createRunner: createVulnScanRunner } = require('./vulnScan')
 const { createRunner: createDnsWhoisRunner } = require('./dnsWhois')
+const { createRunner: createNetworkDeviceScanRunner } = require('./networkDeviceScan')
 const { createRunner: createPentestSuiteRunner } = require('./pentestSuite')
 const { startWatchingNote, stopWatchingNote, stopAllNoteWatches, readNoteFile } = require('./noteWatch')
 const { detectTerminalAvailability } = require('./terminalAvailability')
@@ -98,6 +99,8 @@ function createConnectionHandler({ agentPort }) {
     const activeDnsWhois = new Map()
     // mesmo cuidado, agora pra suíte consolidada de pentest (pentestSuiteStop / ws.close())
     const activePentestSuites = new Map()
+    // mesmo cuidado, agora pro scanner de dispositivos de rede (networkDeviceScanStop / ws.close())
+    const activeNetworkDeviceScans = new Map()
 
     ws.on('message', (raw) => {
       let msg
@@ -544,6 +547,25 @@ function createConnectionHandler({ agentPort }) {
         activeDnsWhois.set(requestId, runner)
       } else if (msg.type === 'dnsWhoisStop') {
         activeDnsWhois.get(msg.requestId)?.stop()
+      } else if (msg.type === 'networkDeviceScanStart') {
+        const requestId = msg.requestId
+        if (!requestId || activeNetworkDeviceScans.has(requestId)) return
+        const runner = createNetworkDeviceScanRunner(msg, {
+          onProgress: (progress) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'networkDeviceScanProgress', requestId, ...progress }))
+            }
+          },
+          onDone: (summary) => {
+            activeNetworkDeviceScans.delete(requestId)
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'networkDeviceScanResult', requestId, ...summary }))
+            }
+          }
+        })
+        activeNetworkDeviceScans.set(requestId, runner)
+      } else if (msg.type === 'networkDeviceScanStop') {
+        activeNetworkDeviceScans.get(msg.requestId)?.stop()
       } else if (msg.type === 'pentestSuiteStart') {
         const requestId = msg.requestId
         if (!requestId || activePentestSuites.has(requestId)) return
@@ -756,6 +778,8 @@ function createConnectionHandler({ agentPort }) {
       activeVulnScans.clear()
       for (const runner of activeDnsWhois.values()) runner.stop()
       activeDnsWhois.clear()
+      for (const runner of activeNetworkDeviceScans.values()) runner.stop()
+      activeNetworkDeviceScans.clear()
       for (const runner of activePentestSuites.values()) runner.stop()
       activePentestSuites.clear()
       ptyProcess?.kill()

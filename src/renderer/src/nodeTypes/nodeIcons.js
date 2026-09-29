@@ -82,6 +82,11 @@ export const DNS_WHOIS_ICON =
 export const DUXBAN_ICON =
   '<rect x="3" y="4" width="14" height="12" rx="1.6" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M3 8h14" stroke="currentColor" stroke-width="1.3"/><path d="M7 11.5h6M7 14h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>'
 
+// roteador com três dispositivos conectados: varredura de dispositivos na
+// rede local — mesmo estilo stroke=currentColor dos outros ícones
+export const NETWORK_DEVICE_SCAN_ICON =
+  '<circle cx="10" cy="5" r="1.8" stroke="currentColor" stroke-width="1.2" fill="none"/><circle cx="3.5" cy="15.5" r="1.8" stroke="currentColor" stroke-width="1.2" fill="none"/><circle cx="16.5" cy="15.5" r="1.8" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M10 6.8V10M10 10L4.6 14.1M10 10l5.4 4.1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>'
+
 // clock simples — usado pelo PomodoroNode (também sem campo icon no registry)
 export const POMODORO_ICON =
   '<circle cx="10" cy="11" r="6.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M10 7.5V11l3 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M7.5 2.5h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'
