@@ -307,8 +307,9 @@
             <p v-if="lastError" class="setting-hint setting-error">Erro: {{ lastError }}</p>
 
             <p class="setting-hint">
-              Só existem vozes masculinas em português no momento — o catálogo do Piper TTS não
-              inclui nenhuma voz feminina para pt-BR.
+              O catálogo oficial do Piper TTS só tem vozes masculinas em português. A "Dii" é uma
+              voz feminina treinada pela comunidade (OpenVoiceOS) e baixada de um repositório à
+              parte na primeira vez que for selecionada.
             </p>
 
             <div class="setting-divider" />

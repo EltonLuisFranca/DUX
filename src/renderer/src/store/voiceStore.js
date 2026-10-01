@@ -2,6 +2,11 @@ import { ref, watch } from 'vue'
 
 export const isRecording = ref(false)
 export const isTranscribing = ref(false)
+// Erro da última transcrição que falhou (ex.: binário whisper-server ausente
+// nesta instalação) — antes disso a falha só ia pro console.error e a
+// gravação parecia "não fazer nada": waveform anima normal (é só VAD local no
+// renderer) e nenhum texto chega no terminal, sem pista nenhuma do motivo.
+export const lastError = ref(null)
 
 const MIC_DEVICE_STORAGE_KEY = 'dux-microphone-device-id'
 
@@ -148,11 +153,15 @@ async function transcribeSegment(samples, segmentIndex, sessionToken) {
     const result = await window.voiceAPI.transcribeChunk(wavBuffer)
     if (sessionToken !== recordingSessionToken) return // gravação foi cancelada/reiniciada
     pendingSegmentTexts.set(segmentIndex, result.ok ? result.text : '')
-    if (!result.ok) console.error('[voice] chunk transcription error', result.error)
+    if (!result.ok) {
+      console.error('[voice] chunk transcription error', result.error)
+      lastError.value = result.error
+    }
   } catch (err) {
     if (sessionToken !== recordingSessionToken) return
     pendingSegmentTexts.set(segmentIndex, '')
     console.error('[voice] chunk transcription failed', err)
+    lastError.value = err.message
   } finally {
     if (sessionToken === recordingSessionToken) {
       flushEmittableSegments()
@@ -202,6 +211,7 @@ function cutSegmentIfAny() {
 export async function startRecording(targetTerminalId) {
   if (isRecording.value) return
 
+  lastError.value = null
   recordingSessionToken += 1
   activeTerminalId = targetTerminalId
   nextSegmentIndex = 0

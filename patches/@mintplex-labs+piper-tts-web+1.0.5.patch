@@ -1,0 +1,96 @@
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/README.md b/node_modules/@mintplex-labs/piper-tts-web/README.md
+old mode 100644
+new mode 100755
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/dist/audio.d.ts b/node_modules/@mintplex-labs/piper-tts-web/dist/audio.d.ts
+old mode 100644
+new mode 100755
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/dist/fixtures.d.ts b/node_modules/@mintplex-labs/piper-tts-web/dist/fixtures.d.ts
+old mode 100644
+new mode 100755
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/dist/http.d.ts b/node_modules/@mintplex-labs/piper-tts-web/dist/http.d.ts
+old mode 100644
+new mode 100755
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/dist/index.d.ts b/node_modules/@mintplex-labs/piper-tts-web/dist/index.d.ts
+old mode 100644
+new mode 100755
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/dist/inference.d.ts b/node_modules/@mintplex-labs/piper-tts-web/dist/inference.d.ts
+old mode 100644
+new mode 100755
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/dist/opfs.d.ts b/node_modules/@mintplex-labs/piper-tts-web/dist/opfs.d.ts
+old mode 100644
+new mode 100755
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/dist/piper-o91UDS6e.js b/node_modules/@mintplex-labs/piper-tts-web/dist/piper-o91UDS6e.js
+old mode 100644
+new mode 100755
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/dist/piper-tts-web.js b/node_modules/@mintplex-labs/piper-tts-web/dist/piper-tts-web.js
+old mode 100644
+new mode 100755
+index 250fa01..fb18187
+--- a/node_modules/@mintplex-labs/piper-tts-web/dist/piper-tts-web.js
++++ b/node_modules/@mintplex-labs/piper-tts-web/dist/piper-tts-web.js
+@@ -138,8 +138,13 @@ const PATH_MAP = {
+   "en_US-bryce-medium": "en/en_US/bryce/medium/en_US-bryce-medium.onnx",
+   "en_US-john-medium": "en/en_US/john/medium/en_US-john-medium.onnx",
+   "en_US-norman-medium": "en/en_US/norman/medium/en_US-norman-medium.onnx",
+-  "it_IT-paola-medium": "it/it_IT/paola/medium/it_IT-paola-medium.onnx"
++  "it_IT-paola-medium": "it/it_IT/paola/medium/it_IT-paola-medium.onnx",
++  // Added by DUX - OpenVoiceOS community voice (female, pt_BR), hosted outside the diffusionstudio mirror.
++  "pt_BR-dii-medium": "https://huggingface.co/OpenVoiceOS/pipertts_pt-BR_dii/resolve/main/dii_pt-BR.onnx"
+ };
++function resolveModelUrl(path) {
++  return path.startsWith("http") ? path : `${HF_BASE}/${path}`;
++}
+ async function writeBlob(url, blob) {
+   if (!url.match("https://huggingface.co")) return;
+   try {
+@@ -298,10 +303,11 @@ const _TtsSession = class _TtsSession {
+       }
+     }
+     const path = PATH_MAP[this.voiceId];
+-    const modelConfigBlob = await getBlob(`${HF_BASE}/${path}.json`);
++    const modelUrl = resolveModelUrl(path);
++    const modelConfigBlob = await getBlob(`${modelUrl}.json`);
+     __privateSet(this, _modelConfig, JSON.parse(await modelConfigBlob.text()));
+     const modelBlob = await getBlob(
+-      `${HF_BASE}/${path}`,
++      modelUrl,
+       __privateGet(this, _progressCallback)
+     );
+     __privateSet(this, _ortSession, await ort.InferenceSession.create(
+@@ -464,14 +470,16 @@ async function getBlob(url, callback) {
+ }
+ async function download(voiceId, callback) {
+   const path = PATH_MAP[voiceId];
+-  const urls = [`${HF_BASE}/${path}`, `${HF_BASE}/${path}.json`];
++  const modelUrl = resolveModelUrl(path);
++  const urls = [modelUrl, `${modelUrl}.json`];
+   await Promise.all(urls.map(async (url) => {
+     writeBlob(url, await fetchBlob(url, url.endsWith(".onnx") ? callback : void 0));
+   }));
+ }
+ async function remove(voiceId) {
+   const path = PATH_MAP[voiceId];
+-  const urls = [`${HF_BASE}/${path}`, `${HF_BASE}/${path}.json`];
++  const modelUrl = resolveModelUrl(path);
++  const urls = [modelUrl, `${modelUrl}.json`];
+   await Promise.all(urls.map((url) => removeBlob(url)));
+ }
+ async function stored() {
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/dist/piper.d.ts b/node_modules/@mintplex-labs/piper-tts-web/dist/piper.d.ts
+old mode 100644
+new mode 100755
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/dist/storage.d.ts b/node_modules/@mintplex-labs/piper-tts-web/dist/storage.d.ts
+old mode 100644
+new mode 100755
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/dist/types.d.ts b/node_modules/@mintplex-labs/piper-tts-web/dist/types.d.ts
+old mode 100644
+new mode 100755
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/dist/voices.d.ts b/node_modules/@mintplex-labs/piper-tts-web/dist/voices.d.ts
+old mode 100644
+new mode 100755
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/dist/voices_static-D_OtJDHM.js b/node_modules/@mintplex-labs/piper-tts-web/dist/voices_static-D_OtJDHM.js
+old mode 100644
+new mode 100755
+diff --git a/node_modules/@mintplex-labs/piper-tts-web/dist/voices_static.json.d.ts b/node_modules/@mintplex-labs/piper-tts-web/dist/voices_static.json.d.ts
+old mode 100644
+new mode 100755

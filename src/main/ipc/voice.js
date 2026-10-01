@@ -55,7 +55,41 @@ async function ensureWhisperModel() {
 const WHISPER_CPP_ROOT = app.isPackaged
   ? join(app.getAppPath(), 'node_modules/nodejs-whisper/cpp/whisper.cpp').replace('app.asar', 'app.asar.unpacked')
   : join(app.getAppPath(), 'node_modules/nodejs-whisper/cpp/whisper.cpp')
-const WHISPER_SERVER_BIN = join(WHISPER_CPP_ROOT, 'build/bin/whisper-server')
+
+// No Linux, nodejs-whisper compila o whisper.cpp sob demanda na primeira
+// transcrição (precisa de cmake + gcc, que a máquina de dev/o usuário Linux
+// costuma ter) — depois disso build/bin/whisper-server já existe e os
+// candidatos abaixo acham ele. No Windows isso não dá: a máquina que gera o
+// instalador não tem MSVC/cmake (de propósito, ver release-dux), e um
+// usuário final muito menos — não existe "compilar na primeira vez" viável
+// aí. Por isso a build oficial pré-compilada do próprio projeto whisper.cpp
+// (ggml-org/whisper.cpp, release v1.9.1 — mesma versão vendorizada pelo
+// nodejs-whisper, então o formato do modelo ggml bate certinho) vai
+// vendorizada em resources/whisper/win e embutida no instalador via
+// build.win.extraResources no package.json, em vez de depender de compilação.
+function resolveWhisperServerBin() {
+  const execName = process.platform === 'win32' ? 'whisper-server.exe' : 'whisper-server'
+
+  const bundled = app.isPackaged
+    ? join(process.resourcesPath, 'whisper', execName)
+    : join(app.getAppPath(), 'resources', 'whisper', 'win', execName)
+  if (process.platform === 'win32' && existsSync(bundled)) return bundled
+
+  // Mesma lógica de busca que o nodejs-whisper usa internamente pro
+  // whisper-cli (WhisperHelper.js: getExecutablePath) — CMake multi-config
+  // (MSVC) joga o binário em build/bin/Release ou build/bin/Debug em vez de
+  // build/bin direto como no Unix Makefile-based build, e o executável leva
+  // ".exe". Sem isso, em qualquer build Windows o spawn() abaixo apontaria
+  // pra um caminho que nunca existe, e falharia calado (ver comentário no
+  // 'error' handler mais abaixo).
+  const candidates = [
+    join(WHISPER_CPP_ROOT, 'build/bin', execName),
+    join(WHISPER_CPP_ROOT, 'build/bin/Release', execName),
+    join(WHISPER_CPP_ROOT, 'build/bin/Debug', execName),
+    join(WHISPER_CPP_ROOT, 'build', execName)
+  ]
+  return candidates.find((path) => existsSync(path)) ?? null
+}
 const WHISPER_SERVER_HOST = '127.0.0.1'
 const WHISPER_SERVER_PORT = 4579
 const WHISPER_SERVER_IDLE_SHUTDOWN_MS = 60_000
@@ -84,7 +118,14 @@ async function ensureWhisperServer() {
   whisperServerReady = (async () => {
     const modelPath = await ensureWhisperModel()
 
-    whisperServerProcess = spawn(WHISPER_SERVER_BIN, [
+    const serverBin = resolveWhisperServerBin()
+    if (!serverBin) {
+      throw new Error(
+        `binário whisper-server não encontrado em ${WHISPER_CPP_ROOT} (whisper.cpp não foi compilado/empacotado para ${process.platform} nesta instalação)`
+      )
+    }
+
+    whisperServerProcess = spawn(serverBin, [
       '--host',
       WHISPER_SERVER_HOST,
       '--port',

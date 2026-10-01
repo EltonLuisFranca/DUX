@@ -2,7 +2,12 @@
   <AppTooltip :label="tooltipLabel">
     <button
       class="voice-badge"
-      :class="{ recording: isRecording, transcribing: isTranscribing && !isRecording, disabled: !activeTerminalId }"
+      :class="{
+        recording: isRecording,
+        transcribing: isTranscribing && !isRecording,
+        disabled: !activeTerminalId,
+        error: lastError && !isRecording && !isTranscribing
+      }"
       :disabled="isTranscribing && !isRecording"
       @click="handleClick"
     >
@@ -43,7 +48,14 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import AppTooltip from './AppTooltip.vue'
 import { activeTerminalId } from '../store/flowStore'
-import { isRecording, isTranscribing, startRecording, stopRecordingAndTranscribe, waveLevels } from '../store/voiceStore'
+import {
+  isRecording,
+  isTranscribing,
+  lastError,
+  startRecording,
+  stopRecordingAndTranscribe,
+  waveLevels
+} from '../store/voiceStore'
 
 // Gera algumas curvas senoidais sobrepostas, cada uma moduladas pelo mesmo
 // nível de áudio real (waveLevels) mas com fase/frequência levemente
@@ -135,6 +147,7 @@ const wavePaths = computed(() => CURVE_CONFIGS.map(buildWavePath))
 const tooltipLabel = computed(() => {
   if (isRecording.value) return 'Ditando ao vivo — clique para parar'
   if (isTranscribing.value) return 'Finalizando transcrição...'
+  if (lastError.value) return `Erro no ditado: ${lastError.value}`
   if (!activeTerminalId.value) return 'Clique num terminal antes de ditar'
   return 'Ditar comando por voz'
 })
@@ -206,6 +219,10 @@ function handleClick() {
 .voice-badge.transcribing {
   cursor: wait;
   color: var(--color-text-tertiary);
+}
+
+.voice-badge.error {
+  color: #f87171;
 }
 
 .spinner {
