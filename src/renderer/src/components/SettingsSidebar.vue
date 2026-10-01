@@ -331,6 +331,113 @@
               em voz (acima) desativada.
             </p>
           </section>
+
+          <section v-else-if="activeCategory === 'themis'" class="settings-section">
+            <span class="subsection-title">Conexão com o modelo</span>
+
+            <div class="setting-row">
+              <span class="setting-label">Endereço do Ollama</span>
+              <input
+                class="text-input"
+                type="text"
+                placeholder="http://localhost:11434"
+                :value="themisConfig.host"
+                @change="onThemisHostChange($event.target.value)"
+              />
+            </div>
+
+            <div class="setting-row">
+              <span class="setting-label">Token de autenticação</span>
+              <input
+                class="text-input"
+                type="password"
+                placeholder="Bearer token, se o servidor exigir"
+                :value="themisConfig.token"
+                @change="onThemisTokenChange($event.target.value)"
+              />
+            </div>
+
+            <div class="setting-row">
+              <span class="setting-label">Modelo</span>
+              <select
+                class="select-input"
+                :value="themisConfig.model"
+                :disabled="themisModelsStatus === 'checking'"
+                @change="updateThemisConfig({ model: $event.target.value })"
+              >
+                <option v-if="!themisConfig.model" value="" disabled>Escolha um modelo</option>
+                <option v-if="themisConfig.model && !themisModels.includes(themisConfig.model)" :value="themisConfig.model">
+                  {{ themisConfig.model }}
+                </option>
+                <option v-for="m in themisModels" :key="m" :value="m">{{ m }}</option>
+              </select>
+              <p v-if="themisModelsStatus === 'checking'" class="setting-hint">Buscando modelos...</p>
+              <p v-else-if="themisModelsStatus === 'error'" class="setting-hint setting-error">
+                Não foi possível conectar em {{ themisConfig.host }}. O Ollama está rodando?
+              </p>
+            </div>
+
+            <div class="setting-divider" />
+
+            <span class="subsection-title">Comportamento</span>
+
+            <div class="setting-row">
+              <span class="setting-label">Falar respostas em voz alta</span>
+              <div class="segmented">
+                <button
+                  class="segmented-btn"
+                  :class="{ active: themisConfig.voiceOutputEnabled }"
+                  @click="updateThemisConfig({ voiceOutputEnabled: true })"
+                >
+                  Ativado
+                </button>
+                <button
+                  class="segmented-btn"
+                  :class="{ active: !themisConfig.voiceOutputEnabled }"
+                  @click="updateThemisConfig({ voiceOutputEnabled: false })"
+                >
+                  Desativado
+                </button>
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <span class="setting-label">Sincronizar boca com a fala</span>
+              <div class="segmented">
+                <button
+                  class="segmented-btn"
+                  :class="{ active: themisConfig.lipSyncEnabled }"
+                  @click="updateThemisConfig({ lipSyncEnabled: true })"
+                >
+                  Ativado
+                </button>
+                <button
+                  class="segmented-btn"
+                  :class="{ active: !themisConfig.lipSyncEnabled }"
+                  @click="updateThemisConfig({ lipSyncEnabled: false })"
+                >
+                  Desativado
+                </button>
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <span class="setting-label">Prompt de sistema</span>
+              <textarea
+                class="text-input text-area"
+                rows="5"
+                :value="themisConfig.systemPrompt || DEFAULT_MERLIN_SYSTEM_PROMPT"
+                @change="updateThemisConfig({ systemPrompt: $event.target.value })"
+              ></textarea>
+            </div>
+
+            <button class="action-btn" @click="clearThemisConversation">Limpar conversa</button>
+
+            <p class="setting-hint">
+              A voz usada é a escolhida em Voz e sons. Clique na Themis (barra do topo) para
+              ativar o microfone; botão direito abre esta aba.
+            </p>
+          </section>
         </div>
 
         <nav class="category-nav">
@@ -340,7 +447,7 @@
             class="category-btn"
             :class="{ active: activeCategory === cat.id }"
             :title="cat.label"
-            @click="activeCategory = cat.id"
+            @click="selectCategory(cat.id)"
           >
             <component :is="cat.icon" class="category-icon" />
           </button>
@@ -371,7 +478,7 @@
 </template>
 
 <script setup>
-import { computed, h, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   theme,
   setTheme,
@@ -397,8 +504,12 @@ import {
   snapEnabled,
   setSnapEnabled,
   settingsSidebarOpen,
+  settingsActiveCategory,
   closeSettings
 } from '../store/themeStore'
+import { themisConfig, updateThemisConfig, clearThemisConversation } from '../store/themisStore'
+import { listModels } from '../lib/ollamaClient'
+import { DEFAULT_MERLIN_SYSTEM_PROMPT } from '../lib/merlinPrompt'
 import { isAuthenticated, user, login, logout } from '../store/authStore'
 import AppTooltip from './AppTooltip.vue'
 import { ttsEnabled, selectedVoiceId, AVAILABLE_VOICES, isSpeaking, isDownloadingVoice, lastError, speak } from '../store/ttsStore'
@@ -447,10 +558,65 @@ const CATEGORIES = [
       h('path', { d: 'M2.5 6.2h2.3L8.3 3v10L4.8 9.8H2.5z', 'stroke-linejoin': 'round' }),
       h('path', { d: 'M11 5.6a3.4 3.4 0 0 1 0 4.8M13 3.6a6.3 6.3 0 0 1 0 8.8' })
     ])
+  },
+  {
+    id: 'themis',
+    label: 'Themis',
+    // Rostinho do robô: painel arredondado com dois olhos.
+    icon: icon([
+      h('rect', { x: 2, y: 4, width: 12, height: 8.5, rx: 2.4 }),
+      h('path', { d: 'M6.2 7.4v1.6M9.8 7.4v1.6' })
+    ])
   }
 ]
 
-const activeCategory = ref('account')
+// aba ativa vive no themeStore — permite abrir direto numa aba de fora daqui
+const activeCategory = settingsActiveCategory
+
+function selectCategory(id) {
+  settingsActiveCategory.value = id
+}
+
+// --- aba Themis: lista os modelos do Ollama configurado pra escolher
+const themisModels = ref([])
+const themisModelsStatus = ref('idle') // idle | checking | ready | error
+
+async function refreshThemisModels() {
+  const host = (themisConfig.value.host || '').trim().replace(/\/+$/, '')
+  if (!host) return
+  themisModelsStatus.value = 'checking'
+  try {
+    const { api, models } = await listModels(host, (themisConfig.value.token || '').trim())
+    themisModels.value = models
+    themisModelsStatus.value = 'ready'
+    updateThemisConfig({ api })
+    if (!themisConfig.value.model && models.length) {
+      updateThemisConfig({ model: models.includes('qwen3:8b') ? 'qwen3:8b' : models[0] })
+    }
+  } catch (err) {
+    console.error('[themis] falha ao listar modelos', err)
+    themisModels.value = []
+    themisModelsStatus.value = 'error'
+  }
+}
+
+function onThemisHostChange(value) {
+  updateThemisConfig({ host: value.trim().replace(/\/+$/, '') })
+  refreshThemisModels()
+}
+
+function onThemisTokenChange(value) {
+  updateThemisConfig({ token: value.trim() })
+  refreshThemisModels()
+}
+
+watch(
+  () => settingsSidebarOpen.value && activeCategory.value === 'themis',
+  (showing) => {
+    if (showing) refreshThemisModels()
+  },
+  { immediate: true }
+)
 const version = window.appInfo?.version ?? '0.0.0'
 
 const testStatusLabel = computed(() => {
@@ -680,6 +846,27 @@ onBeforeUnmount(() => {
   font-size: 11.5px;
   cursor: pointer;
   box-sizing: border-box;
+}
+
+/* campos de texto da aba Themis — mesmo visual do .select-input */
+.text-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 11.5px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.text-area {
+  height: auto;
+  padding: 6px 8px;
+  line-height: 1.45;
+  resize: vertical;
 }
 
 .select-input:disabled {

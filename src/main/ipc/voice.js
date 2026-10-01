@@ -123,6 +123,19 @@ async function ensureWhisperServer() {
   return whisperServerReady
 }
 
+// sem isso o whisper-server sobrevive ao app (fechar a janela ou o
+// electron-vite reiniciar o main em dev) e fica órfão segurando a porta —
+// a próxima execução sobe outro que nem consegue abrir a porta, e os órfãos
+// vão se acumulando
+function killWhisperServer() {
+  clearTimeout(whisperServerIdleTimer)
+  whisperServerProcess?.kill()
+  whisperServerProcess = null
+  whisperServerReady = null
+}
+app.on('will-quit', killWhisperServer)
+process.on('exit', killWhisperServer)
+
 export function registerVoiceIpc() {
   ipcMain.handle('voice:transcribe', async (_event, { buffer }) => {
     const { nodewhisper } = await import('nodejs-whisper')

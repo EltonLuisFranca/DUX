@@ -3,8 +3,6 @@ import TerminalCreateForm from '../components/nodeCreate/TerminalCreateForm.vue'
 import BrowserCreateForm from '../components/nodeCreate/BrowserCreateForm.vue'
 import OllamaCreateForm from '../components/nodeCreate/OllamaCreateForm.vue'
 import OllamaSettings from '../components/nodeSettings/OllamaSettings.vue'
-import MerlinCreateForm from '../components/nodeCreate/MerlinCreateForm.vue'
-import MerlinSettings from '../components/nodeSettings/MerlinSettings.vue'
 import DuxBanSettings from '../components/nodeSettings/DuxBanSettings.vue'
 import DockerSettings from '../components/nodeSettings/DockerSettings.vue'
 import GitCreateForm from '../components/nodeCreate/GitCreateForm.vue'
@@ -16,7 +14,6 @@ import {
   TERMINAL_ICON,
   BROWSER_ICON,
   OLLAMA_ICON,
-  MERLIN_ICON,
   GIT_ICON,
   IMAGE_ICON,
   HTTP_ICON,
@@ -133,14 +130,6 @@ export const nodeTypeRegistry = {
     createForm: OllamaCreateForm,
     settingsComponent: OllamaSettings,
     icon: OLLAMA_ICON
-  },
-  merlin: {
-    label: 'Themis',
-    description: 'Assistente de voz: clique pra ativar, converse e ela responde falando — respostas curtas, estilo Jarvis.',
-    category: 'agents',
-    createForm: MerlinCreateForm,
-    settingsComponent: MerlinSettings,
-    icon: MERLIN_ICON
   },
   browser: {
     label: 'Navegador',

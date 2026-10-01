@@ -2,7 +2,7 @@
   <div class="app-tooltip-wrap" @mouseenter="handleEnter" @mouseleave="handleLeave">
     <slot />
     <Transition name="tip-fade">
-      <div v-if="show" class="app-tooltip">
+      <div v-if="show" class="app-tooltip" :class="`placement-${placement}`">
         <span>{{ label }}</span>
         <kbd v-if="shortcut">{{ shortcut }}</kbd>
       </div>
@@ -15,7 +15,10 @@ import { onBeforeUnmount, ref } from 'vue'
 
 defineProps({
   label: { type: String, required: true },
-  shortcut: { type: String, default: '' }
+  shortcut: { type: String, default: '' },
+  // 'top' (padrão) abre acima do elemento; 'bottom' pra quem fica colado no
+  // topo da janela (ex: barra do topo), onde acima sairia da tela
+  placement: { type: String, default: 'top' }
 })
 
 const show = ref(false)
@@ -53,7 +56,6 @@ onBeforeUnmount(() => clearTimeout(timer))
 
 .app-tooltip {
   position: absolute;
-  bottom: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -69,6 +71,14 @@ onBeforeUnmount(() => clearTimeout(timer))
   font-size: 11px;
   pointer-events: none;
   z-index: 2;
+}
+
+.placement-top {
+  bottom: calc(100% + 8px);
+}
+
+.placement-bottom {
+  top: calc(100% + 8px);
 }
 
 .app-tooltip kbd {

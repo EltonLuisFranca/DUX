@@ -134,11 +134,6 @@
         <OllamaNode v-bind="nodeProps" />
       </NodeModalWrapper>
     </template>
-    <template #node-merlin="nodeProps">
-      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
-        <MerlinNode v-bind="nodeProps" />
-      </NodeModalWrapper>
-    </template>
     <template #node-git="nodeProps">
       <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
         <GitNode v-bind="nodeProps" />
@@ -271,7 +266,6 @@ import WslClaudeTerminalNode from './WslClaudeTerminalNode.vue'
 import NotesNode from './NotesNode.vue'
 import BrowserNode from './BrowserNode.vue'
 import OllamaNode from './OllamaNode.vue'
-import MerlinNode from './MerlinNode.vue'
 import GitNode from './GitNode.vue'
 import ImageNode from './ImageNode.vue'
 import HttpNode from './HttpNode.vue'

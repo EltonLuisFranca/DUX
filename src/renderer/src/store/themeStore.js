@@ -188,8 +188,12 @@ export function setSnapEnabled(value) {
 // (flowStore.activeSettingsNodeId) — estado global simples em vez de local,
 // pra empurrar o layout do canvas em vez de sobrepor como overlay.
 export const settingsSidebarOpen = ref(false)
+// aba ativa da sidebar — global pra dar pra abrir direto numa aba específica
+// de fora dela (ex: botão direito na Themis abre em 'themis')
+export const settingsActiveCategory = ref('account')
 
-export function openSettings() {
+export function openSettings(category) {
+  if (category) settingsActiveCategory.value = category
   settingsSidebarOpen.value = true
 }
 
