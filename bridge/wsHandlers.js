@@ -235,7 +235,7 @@ function createConnectionHandler({ agentPort }) {
 
         if (sessionId) {
           agentLink.registerSession(sessionId, { name: msg.name || sessionId, cwd, ptyProcess })
-          noteLink.registerSession(sessionId, { ptyProcess })
+          noteLink.registerSession(sessionId)
           duxbanLink.registerSession(sessionId, { ptyProcess, ws })
         }
 
@@ -253,7 +253,6 @@ function createConnectionHandler({ agentPort }) {
         ptyProcess.onData((data) => {
           if (sessionId) {
             agentLink.onSessionData(sessionId, data)
-            noteLink.onSessionData(sessionId)
             duxbanLink.onSessionData(sessionId)
           }
           if (ws.readyState === WebSocket.OPEN) {
