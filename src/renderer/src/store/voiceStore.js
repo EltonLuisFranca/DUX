@@ -1,7 +1,40 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 export const isRecording = ref(false)
 export const isTranscribing = ref(false)
+
+const MIC_DEVICE_STORAGE_KEY = 'dux-microphone-device-id'
+
+// Vazio = microfone padrão do sistema. Guarda o deviceId escolhido pelo
+// usuário na barra de configurações; usado tanto pela Duxi quanto pelo
+// ditado por voz nos terminais, já que os dois passam por startRecording().
+export const selectedMicrophoneId = ref(localStorage.getItem(MIC_DEVICE_STORAGE_KEY) || '')
+
+watch(selectedMicrophoneId, (id) => {
+  if (id) localStorage.setItem(MIC_DEVICE_STORAGE_KEY, id)
+  else localStorage.removeItem(MIC_DEVICE_STORAGE_KEY)
+})
+
+export const availableMicrophones = ref([])
+
+// Precisa de uma permissão de mic já concedida pra enumerateDevices() trazer
+// os labels (senão vêm vazios) — o app já pede getUserMedia em algum momento
+// antes do usuário abrir essa aba, então na prática os labels aparecem.
+export async function refreshMicrophoneList() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    availableMicrophones.value = devices
+      .filter((d) => d.kind === 'audioinput')
+      .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Microfone ${i + 1}` }))
+  } catch (err) {
+    console.error('[voice] falha ao listar microfones', err)
+    availableMicrophones.value = []
+  }
+}
+
+if (navigator.mediaDevices?.addEventListener) {
+  navigator.mediaDevices.addEventListener('devicechange', refreshMicrophoneList)
+}
 
 // Cada node de terminal observa isto e, se o id bater com o próprio, envia o
 // texto pro seu WebSocket e chama consumePendingVoiceInput() — evita precisar
@@ -182,7 +215,18 @@ export async function startRecording(targetTerminalId) {
   enterSentForCurrentSilence = false
   enterPendingAfterSegment = null
 
-  mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia(
+      selectedMicrophoneId.value
+        ? { audio: { deviceId: { exact: selectedMicrophoneId.value } } }
+        : { audio: true }
+    )
+  } catch (err) {
+    // device pode ter sido desconectado desde a última escolha — cai pro
+    // padrão do sistema em vez de travar a gravação inteira por causa disso.
+    console.error('[voice] falha ao abrir microfone escolhido, caindo pro padrão', err)
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  }
   audioContext = new AudioContext({ sampleRate: WHISPER_SAMPLE_RATE })
   sourceNode = audioContext.createMediaStreamSource(mediaStream)
 

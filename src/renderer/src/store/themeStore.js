@@ -189,7 +189,7 @@ export function setSnapEnabled(value) {
 // pra empurrar o layout do canvas em vez de sobrepor como overlay.
 export const settingsSidebarOpen = ref(false)
 // aba ativa da sidebar — global pra dar pra abrir direto numa aba específica
-// de fora dela (ex: botão direito na Themis abre em 'themis')
+// de fora dela (ex: botão direito na Duxi abre em 'duxi')
 export const settingsActiveCategory = ref('account')
 
 export function openSettings(category) {

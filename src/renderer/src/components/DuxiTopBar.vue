@@ -1,26 +1,26 @@
 <template>
-  <div ref="rootRef" class="themis-top-bar" :class="{ engaged: themisEngaged }" @click="handleBarClick">
+  <div ref="rootRef" class="duxi-top-bar" :class="{ engaged: duxiEngaged }" @click="handleBarClick">
     <div class="dock-surface" :style="dockMaskStyle" />
-    <div ref="fillRef" class="focus-fill" :class="{ visible: themisEngaged }">
+    <div ref="fillRef" class="focus-fill" :class="{ visible: duxiEngaged }">
       <canvas ref="particlesEl" class="particles" />
     </div>
-    <div class="bar-row" :class="[`phase-${themisPhase}`, { engaged: themisEngaged, sleeping: themisState === 'off' }]">
-      <ThemisBot />
+    <div class="bar-row" :class="[`phase-${duxiPhase}`, { engaged: duxiEngaged, sleeping: duxiState === 'off' }]">
+      <DuxiBot />
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import ThemisBot from './ThemisBot.vue'
-import { themisPhase, themisEngaged, themisState, hearingVoice, hitThemis } from '../store/themisStore'
+import DuxiBot from './DuxiBot.vue'
+import { duxiPhase, duxiEngaged, duxiState, hearingVoice, hitDuxi } from '../store/duxiStore'
 import { waveLevels } from '../store/voiceStore'
 
-// Barra da Themis, grudada na borda de CIMA do canvas. Mesma técnica de
+// Barra da Duxi, grudada na borda de CIMA do canvas. Mesma técnica de
 // máscara côncava da barra de baixo (ZoomControls.vue) e do ClaudeUsageDock,
 // só que espelhada verticalmente: os fillets côncavos saem da borda de cima
 // e os cantos convexos ficam embaixo. É uma só pro app inteiro (montada no
-// App.vue), já que a Themis é global — a barra de baixo é por workspace.
+// App.vue), já que a Duxi é global — a barra de baixo é por workspace.
 const rootRef = ref(null)
 const barSize = ref({ width: 0, height: 0 })
 const barResizeObserver = new ResizeObserver(([entry]) => {
@@ -93,7 +93,7 @@ const dockMaskStyle = computed(() => {
 // Pontinhos bem pequenos espalhados pelo cinza inteiro, flutuando devagar em
 // direções aleatórias (tipo poeira em suspensão), dando a volta nas bordas.
 // Aparecem com fade enquanto o usuário fala (tom quente, aceleram com o
-// volume da voz) e enquanto a Themis responde — pensando ou falando — em
+// volume da voz) e enquanto a Duxi responde — pensando ou falando — em
 // verde. O loop só roda enquanto a barra está aberta.
 const fillRef = ref(null)
 const particlesEl = ref(null)
@@ -155,7 +155,7 @@ function voiceLevel() {
 function particleFrame(ts) {
   const dt = particleLastTs ? Math.min(0.05, (ts - particleLastTs) / 1000) : 0
   particleLastTs = ts
-  const st = themisState.value
+  const st = duxiState.value
   const userTalking = st === 'active' || hearingVoice.value
   const replying = st === 'thinking' || st === 'speaking'
   const ease = Math.min(1, dt * 4)
@@ -192,7 +192,7 @@ watch(fillRef, (el, prevEl) => {
 })
 
 watch(
-  themisEngaged,
+  duxiEngaged,
   (engaged) => {
     if (engaged && !particleRaf) {
       particleLastTs = 0
@@ -208,11 +208,11 @@ watch(
 )
 
 // clique no cinza (barra aberta) = batida no robô; clique no próprio robô
-// continua sendo ligar/desligar o mic (tratado no ThemisBot)
+// continua sendo ligar/desligar o mic (tratado no DuxiBot)
 function handleBarClick(event) {
-  if (!themisEngaged.value) return
+  if (!duxiEngaged.value) return
   if (event.target.closest('.face-wrap')) return
-  hitThemis()
+  hitDuxi()
 }
 
 onBeforeUnmount(() => {
@@ -223,7 +223,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.themis-top-bar {
+.duxi-top-bar {
   position: absolute;
   top: 0;
   left: 50%;
@@ -233,7 +233,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   transition: min-width 0.35s ease;
   /* nunca encosta no badge de usuário (canto esquerdo) nem na engrenagem
-     (canto direito) — quem encolhe é o texto da Themis, com reticências */
+     (canto direito) — quem encolhe é o texto da Duxi, com reticências */
   max-width: calc(100% - 460px);
 }
 
@@ -290,7 +290,7 @@ onBeforeUnmount(() => {
 /* engajada (até desativar no clique): barra grande — ~50% da largura da
    área do canvas. Foco = robô no meio; texto = robô no canto e o texto ao
    lado */
-.themis-top-bar.engaged {
+.duxi-top-bar.engaged {
   min-width: min(50%, calc(100% - 460px));
 }
 

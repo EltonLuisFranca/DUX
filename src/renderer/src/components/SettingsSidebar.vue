@@ -253,6 +253,29 @@
           </section>
 
           <section v-else-if="activeCategory === 'voice'" class="settings-section">
+            <span class="subsection-title">Microfone</span>
+
+            <div class="setting-row">
+              <span class="setting-label">Dispositivo</span>
+              <select
+                class="select-input"
+                :value="selectedMicrophoneId"
+                @change="selectedMicrophoneId = $event.target.value"
+              >
+                <option value="">Padrão do sistema</option>
+                <option v-for="mic in availableMicrophones" :key="mic.deviceId" :value="mic.deviceId">
+                  {{ mic.label }}
+                </option>
+              </select>
+            </div>
+
+            <p class="setting-hint">
+              Usado tanto pela Duxi quanto pelo ditado por voz nos terminais. Se o microfone
+              escolhido for desconectado, a captura volta pro padrão do sistema.
+            </p>
+
+            <div class="setting-divider" />
+
             <span class="subsection-title">Leitura em voz</span>
 
             <div class="setting-row">
@@ -332,7 +355,7 @@
             </p>
           </section>
 
-          <section v-else-if="activeCategory === 'themis'" class="settings-section">
+          <section v-else-if="activeCategory === 'duxi'" class="settings-section">
             <span class="subsection-title">Conexão com o modelo</span>
 
             <div class="setting-row">
@@ -341,8 +364,8 @@
                 class="text-input"
                 type="text"
                 placeholder="http://localhost:11434"
-                :value="themisConfig.host"
-                @change="onThemisHostChange($event.target.value)"
+                :value="duxiConfig.host"
+                @change="onDuxiHostChange($event.target.value)"
               />
             </div>
 
@@ -352,8 +375,8 @@
                 class="text-input"
                 type="password"
                 placeholder="Bearer token, se o servidor exigir"
-                :value="themisConfig.token"
-                @change="onThemisTokenChange($event.target.value)"
+                :value="duxiConfig.token"
+                @change="onDuxiTokenChange($event.target.value)"
               />
             </div>
 
@@ -361,19 +384,19 @@
               <span class="setting-label">Modelo</span>
               <select
                 class="select-input"
-                :value="themisConfig.model"
-                :disabled="themisModelsStatus === 'checking'"
-                @change="updateThemisConfig({ model: $event.target.value })"
+                :value="duxiConfig.model"
+                :disabled="duxiModelsStatus === 'checking'"
+                @change="updateDuxiConfig({ model: $event.target.value })"
               >
-                <option v-if="!themisConfig.model" value="" disabled>Escolha um modelo</option>
-                <option v-if="themisConfig.model && !themisModels.includes(themisConfig.model)" :value="themisConfig.model">
-                  {{ themisConfig.model }}
+                <option v-if="!duxiConfig.model" value="" disabled>Escolha um modelo</option>
+                <option v-if="duxiConfig.model && !duxiModels.includes(duxiConfig.model)" :value="duxiConfig.model">
+                  {{ duxiConfig.model }}
                 </option>
-                <option v-for="m in themisModels" :key="m" :value="m">{{ m }}</option>
+                <option v-for="m in duxiModels" :key="m" :value="m">{{ m }}</option>
               </select>
-              <p v-if="themisModelsStatus === 'checking'" class="setting-hint">Buscando modelos...</p>
-              <p v-else-if="themisModelsStatus === 'error'" class="setting-hint setting-error">
-                Não foi possível conectar em {{ themisConfig.host }}. O Ollama está rodando?
+              <p v-if="duxiModelsStatus === 'checking'" class="setting-hint">Buscando modelos...</p>
+              <p v-else-if="duxiModelsStatus === 'error'" class="setting-hint setting-error">
+                Não foi possível conectar em {{ duxiConfig.host }}. O Ollama está rodando?
               </p>
             </div>
 
@@ -386,15 +409,15 @@
               <div class="segmented">
                 <button
                   class="segmented-btn"
-                  :class="{ active: themisConfig.voiceOutputEnabled }"
-                  @click="updateThemisConfig({ voiceOutputEnabled: true })"
+                  :class="{ active: duxiConfig.voiceOutputEnabled }"
+                  @click="updateDuxiConfig({ voiceOutputEnabled: true })"
                 >
                   Ativado
                 </button>
                 <button
                   class="segmented-btn"
-                  :class="{ active: !themisConfig.voiceOutputEnabled }"
-                  @click="updateThemisConfig({ voiceOutputEnabled: false })"
+                  :class="{ active: !duxiConfig.voiceOutputEnabled }"
+                  @click="updateDuxiConfig({ voiceOutputEnabled: false })"
                 >
                   Desativado
                 </button>
@@ -406,15 +429,15 @@
               <div class="segmented">
                 <button
                   class="segmented-btn"
-                  :class="{ active: themisConfig.lipSyncEnabled }"
-                  @click="updateThemisConfig({ lipSyncEnabled: true })"
+                  :class="{ active: duxiConfig.lipSyncEnabled }"
+                  @click="updateDuxiConfig({ lipSyncEnabled: true })"
                 >
                   Ativado
                 </button>
                 <button
                   class="segmented-btn"
-                  :class="{ active: !themisConfig.lipSyncEnabled }"
-                  @click="updateThemisConfig({ lipSyncEnabled: false })"
+                  :class="{ active: !duxiConfig.lipSyncEnabled }"
+                  @click="updateDuxiConfig({ lipSyncEnabled: false })"
                 >
                   Desativado
                 </button>
@@ -426,15 +449,15 @@
               <textarea
                 class="text-input text-area"
                 rows="5"
-                :value="themisConfig.systemPrompt || DEFAULT_MERLIN_SYSTEM_PROMPT"
-                @change="updateThemisConfig({ systemPrompt: $event.target.value })"
+                :value="duxiConfig.systemPrompt || DEFAULT_DUXI_SYSTEM_PROMPT"
+                @change="updateDuxiConfig({ systemPrompt: $event.target.value })"
               ></textarea>
             </div>
 
-            <button class="action-btn" @click="clearThemisConversation">Limpar conversa</button>
+            <button class="action-btn" @click="clearDuxiConversation">Limpar conversa</button>
 
             <p class="setting-hint">
-              A voz usada é a escolhida em Voz e sons. Clique na Themis (barra do topo) para
+              A voz usada é a escolhida em Voz e sons. Clique na Duxi (barra do topo) para
               ativar o microfone; botão direito abre esta aba.
             </p>
           </section>
@@ -507,12 +530,13 @@ import {
   settingsActiveCategory,
   closeSettings
 } from '../store/themeStore'
-import { themisConfig, updateThemisConfig, clearThemisConversation } from '../store/themisStore'
+import { duxiConfig, updateDuxiConfig, clearDuxiConversation } from '../store/duxiStore'
 import { listModels } from '../lib/ollamaClient'
-import { DEFAULT_MERLIN_SYSTEM_PROMPT } from '../lib/merlinPrompt'
+import { DEFAULT_DUXI_SYSTEM_PROMPT } from '../lib/duxiPrompt'
 import { isAuthenticated, user, login, logout } from '../store/authStore'
 import AppTooltip from './AppTooltip.vue'
 import { ttsEnabled, selectedVoiceId, AVAILABLE_VOICES, isSpeaking, isDownloadingVoice, lastError, speak } from '../store/ttsStore'
+import { selectedMicrophoneId, availableMicrophones, refreshMicrophoneList } from '../store/voiceStore'
 import {
   notificationSoundEnabled,
   selectedSoundId,
@@ -560,8 +584,8 @@ const CATEGORIES = [
     ])
   },
   {
-    id: 'themis',
-    label: 'Themis',
+    id: 'duxi',
+    label: 'Duxi',
     // Rostinho do robô: painel arredondado com dois olhos.
     icon: icon([
       h('rect', { x: 2, y: 4, width: 12, height: 8.5, rx: 2.4 }),
@@ -577,43 +601,51 @@ function selectCategory(id) {
   settingsActiveCategory.value = id
 }
 
-// --- aba Themis: lista os modelos do Ollama configurado pra escolher
-const themisModels = ref([])
-const themisModelsStatus = ref('idle') // idle | checking | ready | error
+// --- aba Duxi: lista os modelos do Ollama configurado pra escolher
+const duxiModels = ref([])
+const duxiModelsStatus = ref('idle') // idle | checking | ready | error
 
-async function refreshThemisModels() {
-  const host = (themisConfig.value.host || '').trim().replace(/\/+$/, '')
+async function refreshDuxiModels() {
+  const host = (duxiConfig.value.host || '').trim().replace(/\/+$/, '')
   if (!host) return
-  themisModelsStatus.value = 'checking'
+  duxiModelsStatus.value = 'checking'
   try {
-    const { api, models } = await listModels(host, (themisConfig.value.token || '').trim())
-    themisModels.value = models
-    themisModelsStatus.value = 'ready'
-    updateThemisConfig({ api })
-    if (!themisConfig.value.model && models.length) {
-      updateThemisConfig({ model: models.includes('qwen3:8b') ? 'qwen3:8b' : models[0] })
+    const { api, models } = await listModels(host, (duxiConfig.value.token || '').trim())
+    duxiModels.value = models
+    duxiModelsStatus.value = 'ready'
+    updateDuxiConfig({ api })
+    if (!duxiConfig.value.model && models.length) {
+      updateDuxiConfig({ model: models.includes('qwen3:8b') ? 'qwen3:8b' : models[0] })
     }
   } catch (err) {
-    console.error('[themis] falha ao listar modelos', err)
-    themisModels.value = []
-    themisModelsStatus.value = 'error'
+    console.error('[duxi] falha ao listar modelos', err)
+    duxiModels.value = []
+    duxiModelsStatus.value = 'error'
   }
 }
 
-function onThemisHostChange(value) {
-  updateThemisConfig({ host: value.trim().replace(/\/+$/, '') })
-  refreshThemisModels()
+function onDuxiHostChange(value) {
+  updateDuxiConfig({ host: value.trim().replace(/\/+$/, '') })
+  refreshDuxiModels()
 }
 
-function onThemisTokenChange(value) {
-  updateThemisConfig({ token: value.trim() })
-  refreshThemisModels()
+function onDuxiTokenChange(value) {
+  updateDuxiConfig({ token: value.trim() })
+  refreshDuxiModels()
 }
 
 watch(
-  () => settingsSidebarOpen.value && activeCategory.value === 'themis',
+  () => settingsSidebarOpen.value && activeCategory.value === 'duxi',
   (showing) => {
-    if (showing) refreshThemisModels()
+    if (showing) refreshDuxiModels()
+  },
+  { immediate: true }
+)
+
+watch(
+  () => settingsSidebarOpen.value && activeCategory.value === 'voice',
+  (showing) => {
+    if (showing) refreshMicrophoneList()
   },
   { immediate: true }
 )
@@ -848,7 +880,7 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
-/* campos de texto da aba Themis — mesmo visual do .select-input */
+/* campos de texto da aba Duxi — mesmo visual do .select-input */
 .text-input {
   width: 100%;
   height: 28px;

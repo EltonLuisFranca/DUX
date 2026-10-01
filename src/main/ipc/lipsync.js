@@ -7,7 +7,7 @@ import { existsSync, writeFileSync, unlinkSync, readFileSync } from 'fs'
 // é DSP + reconhecimento fonético, não IA) e devolve uma timeline de visemas
 // (formatos de boca A-H/X com start/end em segundos). Diferente do
 // whisper-server em voice.js, aqui não vale a pena manter processo de vida
-// longa: cada fala do Merlin é só alguns segundos, então spawn avulso por
+// longa: cada fala da Duxi é só alguns segundos, então spawn avulso por
 // chamada (igual ao nodewhisper() do handler voice:transcribe) é simples e
 // rápido o bastante.
 //
@@ -25,7 +25,7 @@ const RHUBARB_TIMEOUT_MS = 5_000
 function runRhubarb(wavPath, jsonPath) {
   return new Promise((resolve, reject) => {
     // recognizer "pocketSphinx" (padrão do binário) só reconhece inglês — o
-    // Merlin fala pt_BR, então precisa do "phonetic" (reconhece só sons,
+    // Duxi fala pt_BR, então precisa do "phonetic" (reconhece só sons,
     // independente de idioma; menos preciso, mas é o único que funciona
     // aqui). Como bônus, phonetic não depende dos modelos de idioma em
     // res/sphinx/ (~65MB, específicos de en-us), então não precisamos

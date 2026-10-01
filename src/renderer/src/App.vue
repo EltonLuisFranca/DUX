@@ -28,7 +28,7 @@
           <RoomPresenceBadge />
         </div>
         <ClaudeUsageDock />
-        <ThemisTopBar />
+        <DuxiTopBar />
       </div>
       <NodeSettingsSidebar />
       <SettingsSidebar />
@@ -49,7 +49,7 @@ import AddNodeModal from './components/AddNodeModal.vue'
 import ConfirmDeleteNodeModal from './components/ConfirmDeleteNodeModal.vue'
 import ConfirmDeleteWorkspaceModal from './components/ConfirmDeleteWorkspaceModal.vue'
 import SettingsSidebar from './components/SettingsSidebar.vue'
-import ThemisTopBar from './components/ThemisTopBar.vue'
+import DuxiTopBar from './components/DuxiTopBar.vue'
 import UserBadge from './components/UserBadge.vue'
 import RoomPresenceBadge from './components/RoomPresenceBadge.vue'
 import ClaudeUsageDock from './components/ClaudeUsageDock.vue'

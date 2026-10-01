@@ -102,8 +102,9 @@ function onKeydown(event) {
 // mousedown (não click) + capture: o pane do Vue Flow intercepta o clique
 // pra pan/seleção e nunca deixaria um listener normal de click ver o evento.
 // Ignora cliques nos próprios gatilhos (engrenagem do NodeToolbar, menu do
-// MerlinNode) — senão o mousedown fecha primeiro e o click do gatilho, ao
-// ver a sidebar já fechada, reabre em vez de alternar (toggle quebrado).
+// node de assistente legado) — senão o mousedown fecha primeiro e o click do
+// gatilho, ao ver a sidebar já fechada, reabre em vez de alternar (toggle
+// quebrado).
 // Ignora também cliques em qualquer node do canvas — trocar de node com a
 // sidebar aberta já é tratado por onNodeClicked (flowStore), que decide se
 // troca o conteúdo ou fecha; sem essa exceção o mousedown fecharia primeiro

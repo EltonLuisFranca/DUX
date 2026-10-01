@@ -1,11 +1,11 @@
 <template>
-  <div class="themis-bot nodrag nowheel nopan" :class="[`phase-${themisPhase}`, { engaged: themisEngaged }]">
+  <div class="duxi-bot nodrag nowheel nopan" :class="[`phase-${duxiPhase}`, { engaged: duxiEngaged }]">
     <AppTooltip :label="micTitle" placement="bottom">
-      <div class="face-wrap" @click="toggleThemisMic" @contextmenu.prevent="openSettings('themis')">
+      <div class="face-wrap" @click="toggleDuxiMic" @contextmenu.prevent="openSettings('duxi')">
         <canvas ref="canvasEl" class="face-canvas"></canvas>
         <!-- desligada = cochilando: "zZz" subindo do canto de cima da cabeça -->
         <Transition name="zzz-fade">
-          <div v-if="themisState === 'off'" class="zzz" aria-hidden="true">
+          <div v-if="duxiState === 'off'" class="zzz" aria-hidden="true">
             <span>z</span>
             <span>z</span>
             <span>Z</span>
@@ -15,10 +15,20 @@
     </AppTooltip>
 
     <Transition name="text-in">
-      <div v-if="themisPhase === 'text'" class="themis-text">
+      <div v-if="duxiPhase === 'text'" class="duxi-text">
         <p v-if="userText" class="line line-user">{{ userText }}</p>
         <p v-if="errorText" class="line line-error">{{ errorText }}</p>
         <p v-else-if="replyText" ref="replyEl" class="line line-reply">{{ replyText }}</p>
+        <div v-if="pendingChoice" class="line-options">
+          <button
+            v-for="opt in pendingChoice.options"
+            :key="opt.id"
+            class="option-btn"
+            @click.stop="chooseDuxiOption(opt.id)"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
       </div>
     </Transition>
   </div>
@@ -32,22 +42,24 @@ import { getCurrentAudioTime } from '../store/ttsStore'
 import { visemeAt } from '../store/visemeStore'
 import { openSettings } from '../store/themeStore'
 import {
-  themisState,
-  themisConfig,
-  themisPhase,
-  themisEngaged,
+  duxiState,
+  duxiConfig,
+  duxiPhase,
+  duxiEngaged,
   hearingVoice,
-  themisLastHitAt,
-  themisDizzyUntil,
+  duxiLastHitAt,
+  duxiDizzyUntil,
   userText,
   replyText,
   errorText,
-  toggleThemisMic
-} from '../store/themisStore'
+  pendingChoice,
+  chooseDuxiOption,
+  toggleDuxiMic
+} from '../store/duxiStore'
 
-// Só a parte visual da Themis (rosto + texto da última troca), montada dentro
+// Só a parte visual da Duxi (rosto + texto da última troca), montada dentro
 // da barra do topo (ZoomControls). O cérebro — mic, modelo, voz — é um
-// singleton em themisStore.js, então este componente pode ser montado e
+// singleton em duxiStore.js, então este componente pode ser montado e
 // desmontado (troca de workspace) sem perder a conversa.
 
 // resposta aparece inteira (quebrando linha); se passar da altura máxima vira
@@ -61,7 +73,7 @@ watch(replyText, () => {
 })
 
 const micTitle = computed(() =>
-  themisState.value === 'off' ? 'Ativar Themis (botão direito: configurações)' : 'Desativar Themis'
+  duxiState.value === 'off' ? 'Ativar Duxi (botão direito: configurações)' : 'Desativar Duxi'
 )
 
 const canvasEl = ref(null)
@@ -75,7 +87,7 @@ let rafId = null
 let lastTs = 0
 let clock = 0
 
-// --- rosto da Themis: painel desenhado 100% por código no canvas — depois
+// --- rosto da Duxi: painel desenhado 100% por código no canvas — depois
 // de tentar sincronizar boca sobre foto/vídeo várias vezes (drift de câmera,
 // a boca própria do vídeo brigando com o overlay, seam de recorte mesmo com
 // feather), trocamos de estratégia: sem foto por baixo não tem "encaixe"
@@ -179,7 +191,7 @@ function lookTarget() {
 // Cor do casco por estado (transição suave, ver accentAmount/replyMix/
 // offAmount): branco em repouso com um degradê laranja bem leve embaixo;
 // usuário falando = base do degradê em laranja sutil + ondas de áudio nas
-// laterais; Themis respondendo (pensando ou falando) = base do degradê em
+// laterais; Duxi respondendo (pensando ou falando) = base do degradê em
 // VERDE, com brilho, e sem ondas; cinza com olhos sonolentos (pálpebra
 // caída) quando desligado.
 //
@@ -197,9 +209,9 @@ const SHELL_WHITE = [255, 255, 255]
 const SHELL_GRAY = [150, 152, 158]
 
 let accentAmount = 0 // intensidade do degradê/brilho
-let replyMix = 0 // 0 = laranja (usuário), 1 = verde (Themis respondendo)
+let replyMix = 0 // 0 = laranja (usuário), 1 = verde (Duxi respondendo)
 let thinkAmount = 0 // 0..1, suavizado — olhar de "pensando" enquanto processa
-let dizzyAmount = 0 // 0..1, suavizado — tonto depois da 3ª batida (ver hitThemis)
+let dizzyAmount = 0 // 0..1, suavizado — tonto depois da 3ª batida (ver hitDuxi)
 const DIZZY_RED = '#ef4444'
 
 // --- desenhos do estado "tonto" (referência mandada pelo usuário: olhos em
@@ -291,13 +303,13 @@ function drawRobotFace() {
 
   // --- estado (atualizado UMA vez por frame, antes de pintar rosto + reflexo)
 
-  const isOff = themisState.value === 'off'
+  const isOff = duxiState.value === 'off'
   // usuário falando: laranja sutil, já a partir do primeiro som captado
-  // (hearingVoice), sem esperar a transcrição. Themis respondendo: verde —
+  // (hearingVoice), sem esperar a transcrição. Duxi respondendo: verde —
   // mais forte enquanto fala, um pouco menos enquanto pensa
-  const userTalking = themisState.value === 'active' || hearingVoice.value
-  const replying = themisState.value === 'thinking' || themisState.value === 'speaking'
-  const accentTarget = themisState.value === 'speaking' ? 1 : replying ? 0.6 : userTalking ? 0.45 : 0
+  const userTalking = duxiState.value === 'active' || hearingVoice.value
+  const replying = duxiState.value === 'thinking' || duxiState.value === 'speaking'
+  const accentTarget = duxiState.value === 'speaking' ? 1 : replying ? 0.6 : userTalking ? 0.45 : 0
   accentAmount += (accentTarget - accentAmount) * 0.12
   replyMix += ((replying ? 1 : 0) - replyMix) * 0.12
   offAmount += ((isOff ? 1 : 0) - offAmount) * 0.08
@@ -305,9 +317,9 @@ function drawRobotFace() {
   // batida (clique no cinza da barra): tranco lateral amortecido + achatada +
   // olhos fechando, ~0.45s. Tonto: 4s depois da 3ª batida seguida.
   const nowMs = performance.now()
-  const hitAge = (nowMs - themisLastHitAt.value) / 1000
-  const recoil = themisLastHitAt.value && hitAge < 0.45 ? Math.exp(-hitAge * 9) : 0
-  dizzyAmount += ((nowMs < themisDizzyUntil.value ? 1 : 0) - dizzyAmount) * 0.15
+  const hitAge = (nowMs - duxiLastHitAt.value) / 1000
+  const recoil = duxiLastHitAt.value && hitAge < 0.45 ? Math.exp(-hitAge * 9) : 0
+  dizzyAmount += ((nowMs < duxiDizzyUntil.value ? 1 : 0) - dizzyAmount) * 0.15
 
   // piscada: dispara sozinha num intervalo curto e aleatório (ver
   // nextBlinkAt/blinkStart, módulo acima). closedAmount vai de 0 (aberto) a
@@ -336,7 +348,7 @@ function drawRobotFace() {
   // desligado = sonolento, não fica acompanhando o mouse
   // pensando (esperando o modelo): olhar pra cima, varrendo devagar de um lado
   // pro outro, com os olhos um pouco apertados — em vez de seguir o mouse
-  thinkAmount += ((themisState.value === 'thinking' ? 1 : 0) - thinkAmount) * 0.08
+  thinkAmount += ((duxiState.value === 'thinking' ? 1 : 0) - thinkAmount) * 0.08
   const mouseTarget = lookTarget()
   const thinkX = 0.65 * Math.sin(clock * 0.9)
   const thinkY = -0.85
@@ -350,15 +362,15 @@ function drawRobotFace() {
 
   // boca: só em 'speaking', altura = abertura do visema atual suavizada
   // (evita saltar duro entre visemas)
-  const lipSyncOn = themisConfig.value.lipSyncEnabled ?? true
-  const targetAperture = lipSyncOn && themisState.value === 'speaking' ? (VISEME_APERTURE[visemeAt(getCurrentAudioTime())] ?? 0.05) : 0
+  const lipSyncOn = duxiConfig.value.lipSyncEnabled ?? true
+  const targetAperture = lipSyncOn && duxiState.value === 'speaking' ? (VISEME_APERTURE[visemeAt(getCurrentAudioTime())] ?? 0.05) : 0
   currentAperture += (targetAperture - currentAperture) * 0.35
 
   // nível das ondas: voz do microfone quando é o usuário falando; quando é a
-  // Themis falando o mic fica desligado, então usa a própria abertura da boca
-  // ondas de áudio só pra voz do usuário — quando é a Themis respondendo, não
+  // Duxi falando o mic fica desligado, então usa a própria abertura da boca
+  // ondas de áudio só pra voz do usuário — quando é a Duxi respondendo, não
   let waveLevel = 0
-  if (themisState.value === 'passive' || themisState.value === 'active') waveLevel = Math.min(1, avgWaveLevel() * 1.4)
+  if (duxiState.value === 'passive' || duxiState.value === 'active') waveLevel = Math.min(1, avgWaveLevel() * 1.4)
   waveLevel *= Math.min(1, accentAmount * 2.5) * (1 - replyMix)
 
   // --- geometria
@@ -630,7 +642,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.themis-bot {
+.duxi-bot {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -738,7 +750,7 @@ onBeforeUnmount(() => {
 
 /* última troca: o que ela entendeu em cima, a resposta embaixo — uma linha
    cada, cortada com reticências (a barra continua fina) */
-.themis-text {
+.duxi-text {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -751,12 +763,12 @@ onBeforeUnmount(() => {
   flex: 1 1 auto;
 }
 
-.phase-text.engaged .themis-text {
+.phase-text.engaged .duxi-text {
   flex: 1 1 auto;
   max-width: none;
 }
 
-.engaged .themis-text {
+.engaged .duxi-text {
   padding-left: 6px;
 }
 
@@ -787,5 +799,30 @@ onBeforeUnmount(() => {
 
 .line-error {
   color: #ff6b6b;
+}
+
+/* escolha ambígua (ex: 2 notas candidatas) — fora do .line-reply de
+   propósito, pra não ficar cortado/rolando junto do texto da resposta */
+.line-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.option-btn {
+  padding: 3px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 11.5px;
+  line-height: 1.35;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.option-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 </style>
