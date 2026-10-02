@@ -35,6 +35,12 @@ async function getTtsSession(voiceId) {
   if (ttsSessionPromise && ttsSessionVoiceId === voiceId) return ttsSessionPromise
   await configureOnnxRuntimeSingleThread()
   const tts = await import('@mintplex-labs/piper-tts-web')
+  // TtsSession é singleton: se já existe uma instância, o construtor só troca
+  // o campo voiceId e devolve a mesma sessão, com o modelo da voz ANTERIOR
+  // ainda carregado (init() só roda uma vez) — trocar de voz nas
+  // configurações continuava falando com a voz antiga. Zerar a instância
+  // força carregar o modelo da voz nova.
+  tts.TtsSession._instance = null
   ttsSessionVoiceId = voiceId
   ttsSessionPromise = tts.TtsSession.create({
     voiceId,

@@ -177,6 +177,26 @@ function killWhisperServer() {
 app.on('will-quit', killWhisperServer)
 process.on('exit', killWhisperServer)
 
+// Com música de fundo/barulho o whisper anota o que ouviu em vez de fala —
+// "[Música]", "(risos)", "*aplausos*", "♪", "[BLANK_AUDIO]" — e às vezes
+// alucina frases de legenda de vídeo em trechos sem fala. Nada disso é o
+// usuário falando, então sai do texto (e um trecho só de ruído vira '').
+const NON_SPEECH_TAG = /\[[^\]]*\]|\([^)]*\)|\*[^*]*\*|[♪♫🎵🎶]+/gu
+const HALLUCINATED_PHRASES = [
+  /legendas? (pela|por) .*$/i,
+  /amara\.org/i,
+  /obrigad[oa] por assistir\.?/i,
+  /inscreva-se no canal\.?/i
+]
+
+function stripNonSpeech(text) {
+  let cleaned = text.replace(NON_SPEECH_TAG, ' ')
+  for (const phrase of HALLUCINATED_PHRASES) cleaned = cleaned.replace(phrase, ' ')
+  cleaned = cleaned.replace(/\s+/g, ' ').trim()
+  // sobrou só pontuação solta ("...", "-")
+  return /[\p{L}\p{N}]/u.test(cleaned) ? cleaned : ''
+}
+
 export function registerVoiceIpc() {
   ipcMain.handle('voice:transcribe', async (_event, { buffer }) => {
     const { nodewhisper } = await import('nodejs-whisper')
@@ -201,7 +221,7 @@ export function registerVoiceIpc() {
         .map((line) => line.replace(/^\[[\d:.,\s>-]+\]\s*/, '').trim())
         .filter(Boolean)
         .join(' ')
-      return { ok: true, text: cleaned }
+      return { ok: true, text: stripNonSpeech(cleaned) }
     } catch (err) {
       console.error('[voice] transcription failed', err)
       return { ok: false, error: err.message }
@@ -225,7 +245,7 @@ export function registerVoiceIpc() {
       if (!response.ok) throw new Error(`whisper-server respondeu HTTP ${response.status}`)
 
       const { text } = await response.json()
-      return { ok: true, text: (text || '').trim() }
+      return { ok: true, text: stripNonSpeech(text || '') }
     } catch (err) {
       console.error('[voice] chunk transcription failed', err)
       return { ok: false, error: err.message }

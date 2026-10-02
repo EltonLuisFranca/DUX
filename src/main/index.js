@@ -9,6 +9,7 @@ import { registerVoiceIpc } from './ipc/voice'
 import { registerLipSyncIpc } from './ipc/lipsync'
 import { registerBrowserNodeIpc } from './ipc/browserNode'
 import { registerImageNodeIpc } from './ipc/imageNode'
+import { registerWebToolsIpc } from './ipc/webTools'
 import { registerVulnReportIpc } from './ipc/vulnReport'
 import { attachRenderBridge } from './renderBridge'
 
@@ -55,6 +56,7 @@ registerLipSyncIpc()
 registerBrowserNodeIpc()
 registerImageNodeIpc()
 registerVulnReportIpc()
+registerWebToolsIpc()
 
 let mainWindowRef = null
 

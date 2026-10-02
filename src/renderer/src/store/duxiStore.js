@@ -8,7 +8,7 @@ import {
   waveLevels,
   isRecording
 } from './voiceStore'
-import { speak, isSpeaking, stopSpeaking } from './ttsStore'
+import { speak, isSpeaking, stopSpeaking, getCurrentAudioTime, getCurrentAudioDuration } from './ttsStore'
 import { streamChat } from '../lib/ollamaClient'
 import { DEFAULT_DUXI_SYSTEM_PROMPT } from '../lib/duxiPrompt'
 import { DUXI_TOOLS, executeDuxiTool } from '../lib/duxiTools'
@@ -30,6 +30,7 @@ const LEGACY_STORAGE_KEY = 'dux-themis'
 // só as últimas N mensagens (user+assistant) vão pro modelo — conversa de voz
 // é troca curta, sem isso o prompt cresce sem limite a cada pergunta.
 const MAX_HISTORY = 16
+const MAX_LOG = 200
 // id fixo usado pra rotear a transcrição do voiceStore (que foi feito pra
 // terminais e identifica o destino por id) de volta pra cá
 const DUXI_VOICE_ID = 'duxi'
@@ -43,7 +44,11 @@ const DEFAULT_CONFIG = {
   systemPrompt: '',
   voiceOutputEnabled: true,
   lipSyncEnabled: true,
-  messages: []
+  wakeWordEnabled: true,
+  messages: [],
+  // histórico só pra exibir (ícone de histórico na barra) — bem mais longo
+  // que `messages`, que é o contexto mandado pro modelo (MAX_HISTORY)
+  log: []
 }
 
 // config antiga pode estar sob a chave 'dux-themis' (nome anterior) — lida só
@@ -87,6 +92,12 @@ export const duxiConfig = ref({
   ...stripUndefined(loadStoredConfig() ?? configFromLegacyNode())
 })
 
+// config salva antes do histórico existir: começa ele com o contexto que já
+// havia, pra não abrir vazio
+if (!duxiConfig.value.log?.length && duxiConfig.value.messages?.length) {
+  duxiConfig.value.log = duxiConfig.value.messages.filter((m) => m.role === 'user' || m.role === 'assistant')
+}
+
 watch(
   duxiConfig,
   (cfg) => {
@@ -105,6 +116,7 @@ export function updateDuxiConfig(patch) {
 
 export function clearDuxiConversation() {
   duxiConfig.value.messages = []
+  duxiConfig.value.log = []
   userText.value = ''
   replyText.value = ''
   errorText.value = ''
@@ -135,9 +147,27 @@ export const duxiState = ref('off')
 export const userText = ref('') // o que ela entendeu que o usuário falou
 export const replyText = ref('') // resposta dela (streaming)
 export const errorText = ref('')
+// histórico aberto: a área de texto da barra mostra a conversa inteira
+// (duxiConfig.log), com scroll, no lugar da última troca
+export const duxiHistoryOpen = ref(false)
+
+export function toggleDuxiHistory() {
+  duxiHistoryOpen.value = !duxiHistoryOpen.value
+}
+
+// digitação: campo de texto na barra (ícone de teclado) pra mandar pedidos
+// sem microfone — abre sozinho quando o mic falha ao ativar
+export const duxiTypingOpen = ref(false)
+export const duxiMicUnavailable = ref(false)
+
+export function toggleDuxiTyping() {
+  duxiTypingOpen.value = !duxiTypingOpen.value
+}
 
 let commandBuffer = ''
 let abortController = null
+// usuário mandou parar a resposta (botão ■ do campo de digitação)
+let stopRequested = false
 
 // Detecta que o usuário começou a falar direto pelo nível do microfone, sem
 // esperar a transcrição (que chega 1-2s depois, ao fim do trecho) — é isso
@@ -154,7 +184,9 @@ watch(waveLevels, (levels) => {
   if (!listening) return
   if (!levels.slice(-6).some((l) => l > 0.05)) return
   if (!hearingVoice.value && duxiState.value === 'passive') {
-    // começou um pedido novo: some a troca anterior da barra
+    // começou um pedido novo: some a troca anterior da barra (e o histórico,
+    // pra mostrar o pedido que está chegando)
+    duxiHistoryOpen.value = false
     userText.value = ''
     replyText.value = ''
     errorText.value = ''
@@ -171,11 +203,15 @@ watch(duxiState, (s) => {
     clearTimeout(voiceHoldTimer)
     hearingVoice.value = false
   }
-  if (s === 'off') duxiEngaged.value = false
+  if (s === 'off') {
+    duxiEngaged.value = false
+    duxiHistoryOpen.value = false
+    duxiTypingOpen.value = false
+  }
   else if (s !== 'passive') duxiEngaged.value = true
 })
 
-// "Engajada": a conversa começou (primeira fala captada). A barra cresce e
+// "Engajada": foi ativada (clique ou "Duxi") ou captou fala. A barra cresce e
 // fica grande até o usuário desativar a Duxi no clique — parar de falar,
 // ela pensar ou responder não encolhe de volta.
 export const duxiEngaged = ref(false)
@@ -207,11 +243,12 @@ export function chooseDuxiOption(id) {
 }
 
 // Layout da barra do topo:
-// - compact: só o robô, pequeno (desligada, ou ligada esperando a 1ª fala)
+// - compact: só o robô, pequeno (desligada)
 // - focus: engajada, ainda sem texto — barra grande, robô grande no meio
 // - text: tem texto da troca — mesma barra grande, robô no canto e o texto ao
 //   lado (ou, desligada, só a mensagem de erro ao lado do robô pequeno)
 export const duxiPhase = computed(() => {
+  if ((duxiHistoryOpen.value || duxiTypingOpen.value) && duxiEngaged.value) return 'text'
   const hasText = Boolean(userText.value || replyText.value || errorText.value || pendingChoice.value)
   if (hasText && (duxiEngaged.value || errorText.value)) return 'text'
   if (duxiEngaged.value) return 'focus'
@@ -231,18 +268,47 @@ async function enableListening() {
   userText.value = ''
   replyText.value = ''
   commandBuffer = ''
+  await sleepListenPromise
   try {
     // startRecording ignora a chamada em silêncio se o mic já estiver
-    // gravando pra outro destino (ex: ditado de terminal pela barra de baixo)
+    // gravando pra outro destino (ex: gravação anterior que não foi encerrada)
     // — aí a Duxi ficava "ouvindo" mas a transcrição ia pra outro lugar
     if (isRecording.value) cancelRecording()
     await startRecording(DUXI_VOICE_ID)
-    duxiState.value = 'passive'
+    duxiMicUnavailable.value = false
   } catch (err) {
+    // sem mic a Duxi ainda funciona digitando: abre a barra já no campo de texto
     console.error('[duxi] falha ao acessar microfone', err)
-    errorText.value = 'Não foi possível acessar o microfone.'
-    duxiState.value = 'off'
+    duxiMicUnavailable.value = true
+    duxiTypingOpen.value = true
   }
+  duxiState.value = 'passive'
+  duxiGreetAt.value = performance.now()
+  duxiEngaged.value = true // abre a barra grande já no clique, sem esperar a 1ª fala
+}
+
+// interrompe a resposta em andamento: corta o streaming do modelo se ainda
+// estiver pensando, ou a fala se já estiver respondendo
+export function stopDuxiReply() {
+  if (duxiState.value !== 'thinking' && duxiState.value !== 'speaking') return
+  stopRequested = true
+  abortController?.abort()
+  stopSpeaking()
+}
+
+// pedido digitado: mesmo caminho de um pedido falado (submitQuery), só que
+// sem passar pelo microfone
+export function submitDuxiText(text) {
+  const query = text.trim()
+  if (!query) return false
+  if (duxiState.value === 'thinking' || duxiState.value === 'speaking') return false
+  commandBuffer = ''
+  // mic desliga antes de chamar o modelo, como no pedido falado — senão a
+  // própria voz da Duxi respondendo seria captada
+  cancelRecording()
+  duxiHistoryOpen.value = false
+  submitQuery(query)
+  return true
 }
 
 function disableListening() {
@@ -252,9 +318,93 @@ function disableListening() {
   cancelRecording()
   duxiState.value = 'off'
   commandBuffer = ''
+  startSleepListening()
+}
+
+// --- ativar/desativar pela voz ---------------------------------------------
+// Desligada (state 'off'), se wakeWordEnabled, o mic continua aberto pra
+// Duxi em modo "dormindo": cada trecho transcrito só é olhado em busca do
+// nome dela — nada vai pro modelo nem aparece na barra. Falar "Duxi" acorda
+// (se vier um pedido junto, "Duxi, cria uma tarefa...", ele já vale); falar
+// "descansar Duxi" com ela ativa volta a dormir.
+//
+// O whisper não conhece a palavra e escreve do jeito que ouve — Duxi, Dúxi,
+// Ducsi, Duchi, Dushi, Duki, Duque... — então a busca é por som, não exata.
+const WAKE_WORD_RE = /\bd[uo](?:x|cs|ks|ch|sh|k|qu)[iey]\b/
+const SLEEP_WORD_RE = /\bdescans\w*/
+
+// minúsculo e sem acento, caractere a caractere — mantém o mesmo tamanho do
+// texto original, então um índice achado aqui vale pra cortar o original
+function normalizeSpeech(text) {
+  return text
+    .split('')
+    .map((c) => c.normalize('NFD')[0].toLowerCase()[0])
+    .join('')
+}
+
+function isSleepCommand(text) {
+  const norm = normalizeSpeech(text)
+  if (!SLEEP_WORD_RE.test(norm)) return false
+  // "descansar Duxi" / "pode descansar" — curto, pra não desligar no meio de
+  // um pedido que só menciona a palavra ("anota que preciso descansar mais")
+  const words = norm.split(/\s+/).filter(Boolean)
+  return WAKE_WORD_RE.test(norm) || words.length <= 3
+}
+
+// startRecording é async e só marca isRecording no fim — guardar a promise
+// evita abrir o mic duas vezes (ex: clique pra ativar enquanto ele ainda
+// estava abrindo pra dormir)
+let sleepListenPromise = null
+
+function startSleepListening() {
+  if (!duxiConfig.value.wakeWordEnabled || duxiState.value !== 'off') return
+  if (isRecording.value || sleepListenPromise) return
+  sleepListenPromise = startRecording(DUXI_VOICE_ID)
+    .catch((err) => console.error('[duxi] falha ao abrir microfone pra ouvir o nome', err))
+    .finally(() => {
+      sleepListenPromise = null
+      // desativou a opção enquanto o mic abria
+      if (duxiState.value === 'off' && !duxiConfig.value.wakeWordEnabled) cancelRecording()
+    })
+}
+
+function stopSleepListening() {
+  if (duxiState.value === 'off') cancelRecording()
+}
+
+watch(
+  () => duxiConfig.value.wakeWordEnabled,
+  (enabled) => (enabled ? startSleepListening() : stopSleepListening())
+)
+startSleepListening()
+
+function wakeUp(text) {
+  errorText.value = ''
+  userText.value = ''
+  replyText.value = ''
+  commandBuffer = ''
+  duxiState.value = 'passive'
+  duxiGreetAt.value = performance.now()
+  duxiEngaged.value = true // barra cresce: sinal visual de que ouviu o nome
+  // o que veio depois do nome no mesmo trecho já é o começo do pedido
+  const match = normalizeSpeech(text).match(WAKE_WORD_RE)
+  const rest = text
+    .slice(match.index + match[0].length)
+    .replace(/^[\s,.!?:;-]+/, '')
+  if (/[\p{L}\p{N}]/u.test(rest)) handleVoiceSignal({ text: rest })
 }
 
 function handleVoiceSignal(pending) {
+  if (duxiState.value === 'off') {
+    if (pending.text && WAKE_WORD_RE.test(normalizeSpeech(pending.text))) wakeUp(pending.text)
+    return
+  }
+
+  if (pending.text && (duxiState.value === 'passive' || duxiState.value === 'active') && isSleepCommand(pending.text)) {
+    disableListening()
+    return
+  }
+
   if (duxiState.value === 'passive') {
     if (pending.text) {
       duxiState.value = 'active'
@@ -315,6 +465,59 @@ function toApiMessages(messages, api) {
   })
 }
 
+// O prompt já proíbe emoji e markdown, mas modelo pequeno às vezes manda
+// mesmo assim (principalmente resumindo resultado de web_search: lista com
+// "- **Título**" e links) — e o TTS lê "asterisco", URL letra por letra, o
+// nome do emoji. Limpa na marra, e o mesmo texto vai pra bolha e pra fala.
+const EMOJI = /[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\u200d\ufe0f\u20e3]/gu
+
+function cleanReply(text) {
+  return (
+    text
+      .replace(EMOJI, '')
+      .replace(/```[a-z]*\n?/gi, '')
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1') // [texto](url) -> texto
+      .replace(/https?:\/\/\S+|www\.\S+/g, '')
+      .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+      .replace(/^\s*(?:[-*+•]|\d+[.)])\s+/gm, '') // marcador de item de lista
+      .replace(/[*`~#]/g, '')
+      .replace(/(^|\s)_+|_+(?=\s|[.,!?:;]|$)/g, '$1')
+      // item de lista que veio emendado na mesma linha ("... links. - Chosic lista ...")
+      .replace(/([.!?:;])\s+[-–—•]\s+/g, '$1 ')
+      // cada linha vira uma frase (a bolha e a fala juntam tudo num parágrafo)
+      .replace(/([^\s.!?:;,])[ \t]*\n+/g, '$1. ')
+      .replace(/\s*\n+\s*/g, ' ')
+      .replace(/\(\s*\)/g, '')
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/ +([.,!?:;])/g, '$1')
+      .trim()
+  )
+}
+
+// Com a voz ligada, a resposta só aparece quando o áudio começa e vai sendo
+// revelada no ritmo dele (proporcional ao tempo tocado, cortando em fim de
+// palavra) — mostrar no streaming fazia o texto chegar segundos antes da
+// fala, já que a síntese só começa com a resposta completa.
+function revealWithSpeech(text) {
+  return new Promise((resolve) => {
+    const tick = () => {
+      if (!isSpeaking.value || duxiState.value !== 'speaking') {
+        resolve()
+        return
+      }
+      const duration = getCurrentAudioDuration()
+      const ratio = duration > 0 ? Math.min(1, getCurrentAudioTime() / duration) : 0
+      // um pouco à frente do áudio: ler acompanhando é mais natural que
+      // ver a palavra só depois de ouvi-la
+      const cut = Math.min(text.length, Math.ceil(text.length * ratio) + 12)
+      const nextSpace = text.indexOf(' ', cut)
+      replyText.value = nextSpace === -1 ? text : text.slice(0, nextSpace)
+      requestAnimationFrame(tick)
+    }
+    tick()
+  })
+}
+
 async function submitQuery(query) {
   duxiState.value = 'thinking'
   errorText.value = ''
@@ -338,7 +541,9 @@ async function submitQuery(query) {
   let apiMessages = [{ role: 'system', content: systemPrompt }, ...baseHistory]
   let toolsUnsupported = Boolean(cfg.toolsUnsupported)
   let fullText = ''
+  const speakReply = cfg.voiceOutputEnabled ?? true
   abortController = new AbortController()
+  stopRequested = false
 
   try {
     for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
@@ -360,7 +565,7 @@ async function submitQuery(query) {
         signal: abortController.signal,
         onToken: (chunk) => {
           fullText += chunk
-          replyText.value = fullText
+          if (!speakReply) replyText.value = cleanReply(fullText)
         },
         onToolCalls: (calls) => {
           toolCalls = calls
@@ -383,6 +588,7 @@ async function submitQuery(query) {
 
       for (const call of toolCalls) {
         let retryArgs = call.arguments || {}
+        reactToolStart(call.name)
         let outcome = await executeDuxiTool(call.name, retryArgs)
         // `while` (não só um retry): uma tool pode ter mais de um parâmetro
         // ambíguo (ex: board E agente) — cada rodada resolve um, a próxima
@@ -392,6 +598,7 @@ async function submitQuery(query) {
           retryArgs = { ...retryArgs, [outcome.retryKey]: choiceId }
           outcome = await executeDuxiTool(call.name, retryArgs)
         }
+        reactToolEnd(call.name, outcome)
         apiMessages = [...apiMessages, { role: 'tool', name: call.name, content: outcome.content, toolCallId: call.id }]
       }
 
@@ -400,8 +607,12 @@ async function submitQuery(query) {
       }
     }
 
+    fullText = cleanReply(fullText)
     cfg.messages = [...baseHistory, { role: 'assistant', content: fullText }].slice(-MAX_HISTORY)
-    replyText.value = fullText.trim()
+    if (fullText) {
+      cfg.log = [...(cfg.log || []), { role: 'user', content: query }, { role: 'assistant', content: fullText }].slice(-MAX_LOG)
+    }
+    if (!speakReply) replyText.value = fullText
   } catch (err) {
     if (err.name !== 'AbortError') {
       console.error('[duxi] falha ao conversar com o modelo', err)
@@ -415,15 +626,24 @@ async function submitQuery(query) {
 
   if (duxiState.value === 'off') return // desativou enquanto pensava
 
-  if (!errorText.value && fullText.trim() && (cfg.voiceOutputEnabled ?? true)) {
+  // parado no meio do streaming: fica o que já tinha chegado, sem falar
+  if (stopRequested && fullText && !replyText.value) replyText.value = `${cleanReply(fullText)} …`
+
+  if (!errorText.value && fullText && speakReply && !stopRequested) {
     duxiState.value = 'speaking'
-    await speak(fullText.trim(), { forceSpeak: true })
+    await speak(fullText, { forceSpeak: true })
+    // parou enquanto a voz ainda era sintetizada: o áudio começou depois do
+    // stopSpeaking() e precisa ser cortado agora
+    if (stopRequested) stopSpeaking()
+    await revealWithSpeech(fullText)
+    // fim do áudio, falha no TTS ou fala interrompida: texto inteiro na tela
+    if (duxiState.value !== 'off') replyText.value = fullText
     await waitForSpeechEnd()
   }
 
   if (duxiState.value === 'off') return // desativou enquanto falava
   duxiState.value = 'passive'
-  startRecording(DUXI_VOICE_ID).catch(() => {})
+  if (!duxiMicUnavailable.value) startRecording(DUXI_VOICE_ID).catch(() => {})
 }
 
 function waitForSpeechEnd() {
@@ -453,6 +673,37 @@ watch(
   { flush: 'sync' }
 )
 
+// erro mostrado na barra (falha do modelo, mic, etc.) = cara de erro
+watch(errorText, (text) => {
+  if (text) react('error')
+})
+
+// cartão concluído por um agente (taskState vira 'done') em qualquer board de
+// qualquer workspace = comemoração. A primeira leitura só registra o que já
+// estava concluído, pra não comemorar tudo de novo ao abrir o app.
+function doneCardIds() {
+  const ids = []
+  for (const ws of workspaces.value) {
+    for (const node of ws.nodes) {
+      if (node.type !== 'duxban') continue
+      for (const col of node.data?.columns || []) {
+        for (const card of col.cards || []) if (card.taskState === 'done') ids.push(card.id)
+      }
+    }
+  }
+  return ids
+}
+let knownDoneCards = null
+watch(
+  () => doneCardIds().join(','),
+  (joined) => {
+    const ids = joined ? joined.split(',') : []
+    if (knownDoneCards && ids.some((id) => !knownDoneCards.has(id))) react('celebrate')
+    knownDoneCards = new Set(ids)
+  },
+  { immediate: true }
+)
+
 // --- "batidas" na barra -------------------------------------------------------
 // Cada clique no cinza da barra aberta dá uma batida no robô (tranco + olhos
 // fechando, ver DuxiBot). Na 3ª batida seguida ele fica tonto por 4s
@@ -460,14 +711,71 @@ watch(
 // (> HIT_STREAK_MS) recomeçam a contagem. Timestamps em performance.now().
 const HIT_STREAK_MS = 3000
 const DIZZY_MS = 4000
+// cada batida a mais com ela já tonta soma impacto (0..1): o rosto vai
+// ficando mais vermelho e o tranco mais forte — ver rageAmount em DuxiBot
+const RAGE_PER_HIT = 0.2
 export const duxiLastHitAt = ref(0)
+// momento em que foi ativada (clique ou "Duxi") — dispara o tchauzinho com as
+// mãos em DuxiBot (performance.now(), 0 = nunca)
+export const duxiGreetAt = ref(0)
+
+// --- reações ao que acontece no app -------------------------------------------
+// DuxiBot desenha a cara/gesto de cada uma enquanto `now < until`:
+// - celebrate: um agente concluiu um cartão do DuxBan (olhos de estrela,
+//   pulinho, confete)
+// - error: o modelo ou uma tool falhou (olhos em X, gota de suor)
+// - search: web_search/fetch_url rodando (lupa passando na frente dos olhos)
+// - write: escrevendo nota / mexendo em cartão (mãozinha com lápis)
+// A pergunta ambígua (cabeça inclinada, "?") não passa por aqui: DuxiBot lê
+// direto o pendingChoice.
+export const duxiReaction = ref(null) // { type, at, until } — performance.now()
+const REACTION_MS = { celebrate: 2600, error: 2600, search: 1600, write: 1800 }
+const TOOL_REACTION = {
+  web_search: 'search',
+  fetch_url: 'search',
+  write_note: 'write',
+  create_duxban_card: 'write',
+  move_duxban_card: 'write',
+  assign_duxban_card: 'write',
+  add_duxban_comment: 'write'
+}
+
+function react(type, ms = REACTION_MS[type]) {
+  const now = performance.now()
+  duxiReaction.value = { type, at: now, until: now + ms }
+}
+
+// tool começou: a reação fica até ela terminar (until infinito); ao terminar,
+// ainda dura o mínimo da reação, pra uma tool instantânea não só piscar
+function reactToolStart(name) {
+  const type = TOOL_REACTION[name]
+  if (type) react(type, Infinity)
+}
+
+function reactToolEnd(name, outcome) {
+  const r = duxiReaction.value
+  if (outcome?.content?.startsWith?.('Erro')) {
+    react('error')
+    return
+  }
+  if (!r || r.type !== TOOL_REACTION[name]) return
+  const now = performance.now()
+  duxiReaction.value = { ...r, until: Math.max(r.at + REACTION_MS[r.type], now + 300) }
+}
 export const duxiDizzyUntil = ref(0)
+export const duxiRage = ref(0)
 let hitCount = 0
 
 export function hitDuxi() {
   const now = performance.now()
   if (now - duxiLastHitAt.value > HIT_STREAK_MS) hitCount = 0
   duxiLastHitAt.value = now
+  if (now < duxiDizzyUntil.value) {
+    duxiRage.value = Math.min(1, duxiRage.value + RAGE_PER_HIT)
+    duxiDizzyUntil.value = now + DIZZY_MS // apanhando de novo: continua tonta
+    return
+  }
+  duxiRage.value = 0
   hitCount += 1
   if (hitCount >= 3) {
     hitCount = 0

@@ -5,9 +5,6 @@
     <div class="toolbar-row">
       <WorkspaceSwitcher />
 
-      <span class="toolbar-divider" />
-
-      <VoiceInputBadge />
 
       <span class="toolbar-divider" />
 
@@ -77,7 +74,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useVueFlow } from '@vue-flow/core'
 import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
-import VoiceInputBadge from './VoiceInputBadge.vue'
 import AppTooltip from './AppTooltip.vue'
 import { openAddNodeModal } from '../store/flowStore'
 

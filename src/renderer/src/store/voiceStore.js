@@ -55,8 +55,8 @@ const WHISPER_SAMPLE_RATE = 16000
 const WAVE_BAR_COUNT = 24
 
 // Amplitude real do áudio captado, uma por barra da waveform — atualizado a
-// cada onaudioprocess, consumido pelo VoiceInputBadge pra desenhar o nível
-// de volume de verdade em vez de uma animação genérica.
+// cada onaudioprocess, consumido pela Duxi pra detectar fala na hora (sem
+// esperar a transcrição) e animar o rosto.
 export const waveLevels = ref(new Array(WAVE_BAR_COUNT).fill(0))
 
 // VAD (voice activity detection) bem simples baseado no mesmo RMS já

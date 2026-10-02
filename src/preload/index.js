@@ -56,6 +56,11 @@ contextBridge.exposeInMainWorld('httpNodeAPI', {
   request: (options) => ipcRenderer.invoke('http-node:request', options)
 })
 
+contextBridge.exposeInMainWorld('webToolsAPI', {
+  search: (query, limit) => ipcRenderer.invoke('web-tools:search', { query, limit }),
+  fetch: (url) => ipcRenderer.invoke('web-tools:fetch', { url })
+})
+
 contextBridge.exposeInMainWorld('vulnReportAPI', {
   saveHtml: (html, defaultName) => ipcRenderer.invoke('vuln-report:save-html', { html, defaultName }),
   savePdf: (html, defaultName) => ipcRenderer.invoke('vuln-report:save-pdf', { html, defaultName })

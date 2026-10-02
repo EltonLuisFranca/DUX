@@ -76,7 +76,7 @@ export const activeWorkspace = computed(
 
 export const activeSettingsNodeId = ref(null)
 
-// Terminal que recebe o texto ditado por voz — o último node de terminal
+// Terminal em foco (lido em voz alta pelo TTS) — o último node de terminal
 // clicado, não persistido (só faz sentido durante a sessão atual da janela).
 export const activeTerminalId = ref(null)
 

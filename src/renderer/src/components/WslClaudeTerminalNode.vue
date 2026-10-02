@@ -55,7 +55,6 @@ import {
   addComment,
   resendPendingDispatch
 } from '../lib/duxbanOps'
-import { pendingVoiceInput, consumePendingVoiceInput, isRecording } from '../store/voiceStore'
 import { speak, ttsEnabled } from '../store/ttsStore'
 import { playNotificationSound } from '../store/notificationSoundStore'
 
@@ -117,7 +116,6 @@ let retryTimer = null
 let stopThemeWatch = null
 let stopCwdWatch = null
 let stopNameWatch = null
-let stopVoiceInputWatch = null
 let renameDebounceTimer = null
 
 // Não existe hoje nenhum sinal explícito de "o agente terminou de responder"
@@ -137,18 +135,16 @@ function resetTtsCapture() {
   ttsSilenceTimer = null
 }
 
-// Escopo restrito de propósito: só o terminal selecionado (activeTerminalId,
-// o mesmo usado pelo ditado por voz) e só se o ditado estava ativo quando a
-// captura começou — sem isso, TODO terminal aberto acumulava e lia sua
-// própria saída, misturando resposta de um agente que nem estava em foco
-// (ex: outro terminal imprimindo "92% do limite usado" no meio da leitura da
-// resposta certa). A checagem de isRecording só vale pra ABRIR uma captura
-// nova (buffer vazio) — uma vez iniciada, continua até o silêncio real mesmo
-// que o usuário solte o botão de ditar no meio da resposta chegando, pra não
-// cortar a fala pela metade só porque ele terminou de falar primeiro.
+// Escopo restrito de propósito: só o terminal selecionado (activeTerminalId)
+// — sem isso, TODO terminal aberto acumulava e lia sua própria saída,
+// misturando resposta de um agente que nem estava em foco (ex: outro terminal
+// imprimindo "92% do limite usado" no meio da leitura da resposta certa). A
+// checagem só vale pra ABRIR uma captura nova (buffer vazio) — uma vez
+// iniciada, continua até o silêncio real mesmo que o foco mude no meio da
+// resposta chegando, pra não cortar a fala pela metade.
 function onPtyDataForTts(chunk) {
   const isNewCapture = ttsBuffer === ''
-  if (isNewCapture && (props.id !== activeTerminalId.value || !isRecording.value)) return
+  if (isNewCapture && props.id !== activeTerminalId.value) return
   ttsBuffer += chunk
   clearTimeout(ttsSilenceTimer)
   ttsSilenceTimer = setTimeout(() => {
@@ -488,20 +484,6 @@ onMounted(async () => {
       connect()
     }
   )
-
-  stopVoiceInputWatch = watch(pendingVoiceInput, (pending) => {
-    if (!pending || pending.terminalId !== props.id) return
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      if (pending.text) ws.send(JSON.stringify({ type: 'input', data: pending.text }))
-      if (pending.sendEnter) {
-        ws.send(JSON.stringify({ type: 'input', data: '\r' }))
-        resetTtsCapture()
-        resetNotificationCapture()
-        armNotificationCapture()
-      }
-    }
-    consumePendingVoiceInput()
-  })
 })
 
 onBeforeUnmount(() => {
@@ -512,7 +494,6 @@ onBeforeUnmount(() => {
   stopThemeWatch?.()
   stopCwdWatch?.()
   stopNameWatch?.()
-  stopVoiceInputWatch?.()
   disconnect()
   term?.dispose()
 })

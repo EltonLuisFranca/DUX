@@ -4,6 +4,32 @@
     <div ref="fillRef" class="focus-fill" :class="{ visible: duxiEngaged }">
       <canvas ref="particlesEl" class="particles" />
     </div>
+    <!-- faixa de ícones em cima do painel (barra aberta): à esquerda o
+         histórico da conversa; à direita, espaço reservado pra ações futuras -->
+    <Transition name="header-fade">
+      <div v-if="duxiEngaged" class="bar-header">
+        <div class="header-group">
+          <AppTooltip :label="duxiHistoryOpen ? 'Voltar pra conversa atual' : 'Histórico da conversa'" placement="bottom">
+            <button class="header-btn" :class="{ active: duxiHistoryOpen }" @click="toggleDuxiHistory">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9" />
+                <path d="M2.5 2.5v2.2h2.2" />
+                <path d="M8 5.2V8l1.9 1.2" />
+              </svg>
+            </button>
+          </AppTooltip>
+          <AppTooltip :label="duxiTypingOpen ? 'Fechar digitação' : 'Digitar pra Duxi'" placement="bottom">
+            <button class="header-btn" :class="{ active: duxiTypingOpen }" @click="toggleDuxiTyping">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="1.5" y="4" width="13" height="8.5" rx="1.8" />
+                <path d="M4 6.6h.01M6.3 6.6h.01M8.6 6.6h.01M10.9 6.6h.01M4.6 9.8h6.8" />
+              </svg>
+            </button>
+          </AppTooltip>
+        </div>
+        <div class="header-group header-group-right" />
+      </div>
+    </Transition>
     <div class="bar-row" :class="[`phase-${duxiPhase}`, { engaged: duxiEngaged, sleeping: duxiState === 'off' }]">
       <DuxiBot />
     </div>
@@ -13,7 +39,19 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import DuxiBot from './DuxiBot.vue'
-import { duxiPhase, duxiEngaged, duxiState, hearingVoice, hitDuxi } from '../store/duxiStore'
+import AppTooltip from './AppTooltip.vue'
+import {
+  duxiPhase,
+  duxiEngaged,
+  duxiState,
+  hearingVoice,
+  hitDuxi,
+  duxiGreetAt,
+  duxiHistoryOpen,
+  toggleDuxiHistory,
+  duxiTypingOpen,
+  toggleDuxiTyping
+} from '../store/duxiStore'
 import { waveLevels } from '../store/voiceStore'
 
 // Barra da Duxi, grudada na borda de CIMA do canvas. Mesma técnica de
@@ -144,6 +182,92 @@ function resizeParticles() {
   }
 }
 
+// --- onda de partículas ao ativar --------------------------------------------
+// Junto com o tchauzinho (duxiGreetAt): centenas de pontinhos minúsculos saem
+// de trás do robô num anel elíptico (bem mais largo que alto) que se expande
+// até as laterais do painel, com um brilho quente atrás dele. Cada ponto tem
+// velocidade própria, então o anel vira uma faixa espessa e espalhada (poeira
+// em onda), não uma linha. Dourados perto do centro, clareando e apagando
+// conforme chegam nas bordas.
+const BURST_COUNT = 900
+const BURST_DURATION = 1.5 // s
+const BURST_GOLD = [255, 196, 96]
+const BURST_WHITE = [255, 246, 228]
+let burst = [] // { theta, r0, reach, jitter, size, delay }
+let burstAge = -1
+
+function burstOrigin() {
+  const face = rootRef.value?.querySelector('.face-wrap')
+  const fill = fillRef.value
+  if (!face || !fill) return { x: pw / 2, y: ph / 2 }
+  const f = face.getBoundingClientRect()
+  const b = fill.getBoundingClientRect()
+  return { x: f.left + f.width / 2 - b.left, y: f.top + f.height / 2 - b.top }
+}
+
+function spawnBurst() {
+  burstAge = 0
+  burst = Array.from({ length: BURST_COUNT }, () => ({
+    theta: Math.random() * Math.PI * 2,
+    r0: 0.08 + Math.random() * 0.1, // nasce já fora do robô (atrás dele)
+    reach: 0.55 + Math.random() * 0.6, // até onde vai (fração do raio do painel)
+    jitter: (Math.random() - 0.5) * 0.12,
+    size: 0.5 + Math.random() * 1.1,
+    delay: Math.random() * 0.18
+  }))
+}
+
+watch(duxiGreetAt, (at) => {
+  if (at) spawnBurst()
+})
+
+function drawBurst(dt) {
+  burstAge += dt
+  if (burstAge > BURST_DURATION + 0.2) {
+    burst = []
+    burstAge = -1
+    return
+  }
+  const origin = burstOrigin()
+  // raio horizontal até a borda mais distante; vertical bem menor (elipse)
+  const rx = Math.max(origin.x, pw - origin.x, 1)
+  const ry = Math.max(ph * 0.75, 1)
+  const t = burstAge
+
+  // brilho quente atrás do robô: acende rápido e apaga devagar
+  const glow = Math.min(1, t / 0.12) * Math.max(0, 1 - t / BURST_DURATION)
+  if (glow > 0.01) {
+    const gr = ph * (0.55 + 0.35 * Math.min(1, t / 0.5))
+    const g = pctx.createRadialGradient(origin.x, origin.y, 0, origin.x, origin.y, gr)
+    g.addColorStop(0, `rgba(255, 236, 200, ${(0.35 * glow).toFixed(3)})`)
+    g.addColorStop(0.45, `rgba(255, 190, 110, ${(0.12 * glow).toFixed(3)})`)
+    g.addColorStop(1, 'rgba(255, 170, 80, 0)')
+    pctx.fillStyle = g
+    pctx.fillRect(origin.x - gr, origin.y - gr, gr * 2, gr * 2)
+  }
+
+  pctx.save()
+  pctx.globalCompositeOperation = 'lighter'
+  for (const p of burst) {
+    const age = t - p.delay
+    if (age <= 0) continue
+    // sai rápido e desacelera chegando no alcance
+    const k = 1 - Math.exp(-age * 3.2)
+    const r = p.r0 + (p.reach - p.r0) * k + p.jitter * k
+    if (r >= 1) continue
+    const x = origin.x + Math.cos(p.theta) * r * rx
+    const y = origin.y + Math.sin(p.theta) * r * ry
+    const life = Math.max(0, 1 - age / BURST_DURATION)
+    const alpha = Math.pow(1 - r, 0.8) * Math.min(1, life * 2.2) * Math.min(1, age / 0.08)
+    if (alpha < 0.02) continue
+    const mix = Math.min(1, r * 1.8)
+    const c = BURST_GOLD.map((v, i) => Math.round(v + (BURST_WHITE[i] - v) * mix))
+    pctx.fillStyle = `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${alpha.toFixed(3)})`
+    pctx.fillRect(x - p.size / 2, y - p.size / 2, p.size, p.size)
+  }
+  pctx.restore()
+}
+
 function voiceLevel() {
   const levels = waveLevels.value
   if (!levels.length) return 0
@@ -181,6 +305,7 @@ function particleFrame(ts) {
         pctx.fill()
       }
     }
+    if (burstAge >= 0) drawBurst(dt)
   }
   particleRaf = requestAnimationFrame(particleFrame)
 }
@@ -211,7 +336,9 @@ watch(
 // continua sendo ligar/desligar o mic (tratado no DuxiBot)
 function handleBarClick(event) {
   if (!duxiEngaged.value) return
-  if (event.target.closest('.face-wrap')) return
+  if (event.target.closest('.face-wrap, .bar-header')) return
+  // rolando/selecionando o histórico não é batida
+  if (event.target.closest('.duxi-history, .duxi-input')) return
   hitDuxi()
 }
 
@@ -248,6 +375,64 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
+/* faixa dos ícones: no preto, acima do painel cinza (que desce pra abrir
+   espaço pra ela, ver .engaged .focus-fill) */
+.bar-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  padding: 6px 14px 0;
+  box-sizing: border-box;
+}
+
+.header-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 24px;
+}
+
+.header-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.header-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.header-btn.active {
+  background: rgba(255, 255, 255, 0.9);
+  color: #000000;
+}
+
+.header-fade-enter-active {
+  transition: opacity 0.3s ease 0.15s;
+}
+
+.header-fade-leave-active {
+  transition: opacity 0.12s ease;
+}
+
+.header-fade-enter-from,
+.header-fade-leave-to {
+  opacity: 0;
+}
+
 /* fundo cinza do foco (enquanto o usuário fala): ocupa a barra inteira, mas
    recuado alguns px das bordas — a faixa preta que sobra em volta vira a
    borda dele */
@@ -264,6 +449,10 @@ onBeforeUnmount(() => {
 
 .particles {
   display: block;
+}
+
+.duxi-top-bar.engaged .focus-fill {
+  top: 34px;
 }
 
 .focus-fill.visible {

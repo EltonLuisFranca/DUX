@@ -50,6 +50,35 @@ export const DUXI_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'web_search',
+      description: 'Busca na internet (DuckDuckGo) e devolve uma lista de resultados com título, link e um trecho de cada. Use quando a pergunta depende de informação atual ou externa ao workspace. Não traz a página inteira — para ler um resultado a fundo, use fetch_url com o link.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Termos de busca.' },
+          limit: { type: 'number', description: 'Quantos resultados trazer (padrão 5, máx 10).' }
+        },
+        required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fetch_url',
+      description: 'Baixa uma página web e devolve o texto principal dela (sem HTML/scripts, cortado se for muito longa). Use quando já tiver o link — seja de um web_search ou dado pelo usuário.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'Endereço completo da página (começando com http:// ou https://).' }
+        },
+        required: ['url']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'list_duxban_board',
       description: 'Lista as colunas, cartões (com id), responsável e status de um board DuxBan do workspace atual — use antes de mover/atribuir/comentar um cartão, pra saber o id certo.',
       parameters: {
@@ -233,6 +262,24 @@ export async function executeDuxiTool(name, args = {}) {
 
       if (name === 'read_note') return { type: 'result', content: await readNoteContent(note, args.tab) }
       return { type: 'result', content: await writeNoteContent(note, args.tab, args.content ?? '') }
+    }
+
+    if (name === 'web_search') {
+      const res = await window.webToolsAPI?.search(args.query, args.limit)
+      if (!res) return { type: 'result', content: 'Busca na web indisponível neste ambiente.' }
+      if (!res.ok) return { type: 'result', content: `Erro na busca: ${res.error}` }
+      if (!res.results.length) return { type: 'result', content: `Nenhum resultado para "${args.query}".` }
+      const formatted = res.results
+        .map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`)
+        .join('\n\n')
+      return { type: 'result', content: formatted }
+    }
+
+    if (name === 'fetch_url') {
+      const res = await window.webToolsAPI?.fetch(args.url)
+      if (!res) return { type: 'result', content: 'Leitura de páginas indisponível neste ambiente.' }
+      if (!res.ok) return { type: 'result', content: `Erro ao abrir a página: ${res.error}` }
+      return { type: 'result', content: res.content }
     }
 
     if (name === 'list_duxban_board') {

@@ -270,7 +270,7 @@
             </div>
 
             <p class="setting-hint">
-              Usado tanto pela Duxi quanto pelo ditado por voz nos terminais. Se o microfone
+              Usado pela Duxi. Se o microfone
               escolhido for desconectado, a captura volta pro padrão do sistema.
             </p>
 
@@ -295,7 +295,6 @@
               <select
                 class="select-input"
                 :value="selectedVoiceId"
-                :disabled="!ttsEnabled"
                 @change="selectedVoiceId = $event.target.value"
               >
                 <option v-for="voice in AVAILABLE_VOICES" :key="voice.id" :value="voice.id">{{ voice.label }}</option>
@@ -426,6 +425,45 @@
             </div>
 
             <div class="setting-row">
+              <span class="setting-label">Ativar dizendo "Duxi"</span>
+              <div class="segmented">
+                <button
+                  class="segmented-btn"
+                  :class="{ active: duxiConfig.wakeWordEnabled }"
+                  @click="updateDuxiConfig({ wakeWordEnabled: true })"
+                >
+                  Ativado
+                </button>
+                <button
+                  class="segmented-btn"
+                  :class="{ active: !duxiConfig.wakeWordEnabled }"
+                  @click="updateDuxiConfig({ wakeWordEnabled: false })"
+                >
+                  Desativado
+                </button>
+              </div>
+            </div>
+
+            <p class="setting-hint">
+              Com a Duxi desligada, o microfone fica aberto só esperando o nome dela. Diga
+              "descansar Duxi" pra desligar de novo.
+            </p>
+
+            <div class="setting-row">
+              <span class="setting-label">Voz</span>
+              <select
+                class="select-input"
+                :value="selectedVoiceId"
+                :disabled="!duxiConfig.voiceOutputEnabled"
+                @change="selectedVoiceId = $event.target.value"
+              >
+                <option v-for="voice in AVAILABLE_VOICES" :key="voice.id" :value="voice.id">{{ voice.label }}</option>
+              </select>
+            </div>
+
+            <button class="action-btn" :disabled="testDisabled" @click="testVoice">{{ testStatusLabel }}</button>
+
+            <div class="setting-row">
               <span class="setting-label">Sincronizar boca com a fala</span>
               <div class="segmented">
                 <button
@@ -458,7 +496,7 @@
             <button class="action-btn" @click="clearDuxiConversation">Limpar conversa</button>
 
             <p class="setting-hint">
-              A voz usada é a escolhida em Voz e sons. Clique na Duxi (barra do topo) para
+              A voz é a mesma da leitura de respostas em Voz e sons — trocar aqui troca lá. Clique na Duxi (barra do topo) para
               ativar o microfone; botão direito abre esta aba.
             </p>
           </section>
@@ -797,7 +835,16 @@ onBeforeUnmount(() => {
   gap: 4px;
   padding: 8px 6px;
   border-left: 1px solid var(--color-border);
+  overflow-x: hidden;
   overflow-y: auto;
+  /* a scrollbar vertical (janela baixa) comia largura da coluna estreita e
+     os botões de 30px passavam a transbordar na horizontal — rola com a
+     roda do mouse, sem barra visível */
+  scrollbar-width: none;
+}
+
+.category-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .category-btn {
