@@ -3,3 +3,6 @@ out
 dist
 dist-electron
 *.log
+
+# modelos do whisper (baixados localmente, grandes demais pro git)
+resources/whisper/models/

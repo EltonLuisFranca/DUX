@@ -9,7 +9,8 @@
     "preview": "electron-vite preview",
     "dist": "electron-vite build && electron-builder",
     "dist:publish": "electron-vite build && electron-builder --publish always",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "whisper:vulkan": "cd node_modules/nodejs-whisper/cpp/whisper.cpp && cmake -B build -DGGML_VULKAN=1 -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release -j"
   },
   "keywords": [],
   "author": "Uzuno",

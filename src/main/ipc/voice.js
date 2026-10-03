@@ -5,21 +5,28 @@ import { existsSync, writeFileSync, unlinkSync, mkdirSync, renameSync, createWri
 import { pipeline } from 'stream/promises'
 
 // Modelo fica em userData, não empacotado no instalador nem em node_modules —
-// é baixado sob demanda na primeira transcrição (~148MB pro modelo "base").
-// O binário whisper-cli em si é que vai empacotado (via asarUnpack), porque
-// nodejs-whisper resolve seu caminho de forma fixa relativa ao próprio
-// node_modules, sem permitir apontar pra outro lugar.
-const WHISPER_MODEL_DIR = join(app.getPath('userData'), 'whisper-models')
-const WHISPER_MODEL_NAME = 'base'
-const WHISPER_MODEL_FILE = 'ggml-base.bin'
+// é baixado sob demanda na primeira transcrição. O binário whisper-cli em si
+// é que vai empacotado (via asarUnpack), porque nodejs-whisper resolve seu
+// caminho de forma fixa relativa ao próprio node_modules, sem permitir
+// apontar pra outro lugar.
+//
+// Linux usa large-v3-turbo (~1.6GB): o "base" errava muito em português, e
+// aqui o whisper.cpp é compilado com Vulkan (npm run whisper:vulkan), então
+// roda na GPU e o modelo maior continua rápido. No Windows o whisper-server
+// vendorizado em resources/whisper/win é a build só-CPU, onde o turbo ficaria
+// lento demais pro ditado ao vivo — lá continua o base.
+const WHISPER_MODEL_NAME = process.platform === 'win32' ? 'base' : 'large-v3-turbo'
+const WHISPER_MODEL_FILE = `ggml-${WHISPER_MODEL_NAME}.bin`
 const WHISPER_MODEL_URL = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${WHISPER_MODEL_FILE}`
 
-// Baixado manualmente via fetch em vez de usar autoDownloadModelName do
-// nodejs-whisper: essa opção dispara um shell script (download-ggml-model.sh)
-// resolvido relativo ao cwd do processo, que só funciona por acaso quando o
-// cwd é a pasta certa — dentro do Electron main process (cwd = raiz do app,
-// não node_modules/nodejs-whisper/cpp/whisper.cpp) ele falha silenciosamente
-// com "Cannot read properties of undefined (reading 'code')".
+// Em dev, se o modelo já foi baixado pra pasta do projeto (resources/whisper/
+// models, ignorada no git), usa ele direto em vez de baixar outra cópia.
+const PROJECT_MODEL_DIR = join(app.getAppPath(), 'resources', 'whisper', 'models')
+const WHISPER_MODEL_DIR =
+  !app.isPackaged && existsSync(join(PROJECT_MODEL_DIR, WHISPER_MODEL_FILE))
+    ? PROJECT_MODEL_DIR
+    : join(app.getPath('userData'), 'whisper-models')
+
 async function ensureWhisperModel() {
   const modelPath = join(WHISPER_MODEL_DIR, WHISPER_MODEL_FILE)
   if (existsSync(modelPath)) return modelPath
@@ -147,8 +154,10 @@ async function ensureWhisperServer() {
 
     // sem endpoint de health check dedicado — poll no /inference com um
     // corpo vazio até ele parar de recusar conexão (ECONNREFUSED), que é só
-    // enquanto o processo ainda está de boot/carregando o modelo.
-    const deadline = Date.now() + 20_000
+    // enquanto o processo ainda está de boot/carregando o modelo. Folga
+    // grande porque o turbo (1.6GB) + inicialização do Vulkan na primeira
+    // vez passam fácil dos 20s.
+    const deadline = Date.now() + 60_000
     while (Date.now() < deadline) {
       try {
         await fetch(`http://${WHISPER_SERVER_HOST}:${WHISPER_SERVER_PORT}/`)
