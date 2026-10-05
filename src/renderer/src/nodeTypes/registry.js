@@ -38,8 +38,9 @@ import {
 // todo tipo terminado em "-terminal" renderiza o mesmo componente de node
 // (WslClaudeTerminalNode, ver templates no FleetCanvas e TERMINAL_TYPES lá) —
 // só o form de criação/settings, o texto e o `command` enviado ao bridge
-// mudam; qual aparece no modal depende do SO (wsl-claude-terminal, ver
-// AddNodeModal.vue) ou de detecção em runtime pelo bridge (wsl-terminal,
+// mudam; qual aparece no modal depende do SO (wsl-claude-terminal, via
+// requiresPlatformFeature, ver shared/platformProfile.js) ou de detecção em
+// runtime pelo bridge (wsl-terminal,
 // powershell-terminal, cmd-terminal — via requiresAvailability, checado
 // contra terminalAvailabilityStore.js)
 // category organiza a listagem em abas no AddNodeModal — agents (terminais
@@ -61,6 +62,7 @@ export const nodeTypeRegistry = {
     settingsProps: { wslMode: true },
     createForm: TerminalCreateForm,
     createFormProps: { wslMode: true },
+    requiresPlatformFeature: 'wslClaudeTerminal',
     icon: TERMINAL_ICON
   },
   'claude-terminal': {

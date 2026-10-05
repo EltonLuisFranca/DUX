@@ -12,6 +12,7 @@ import { speak, isSpeaking, stopSpeaking, getCurrentAudioTime, getCurrentAudioDu
 import { streamChat } from '../lib/ollamaClient'
 import { DEFAULT_DUXI_SYSTEM_PROMPT } from '../lib/duxiPrompt'
 import { DUXI_TOOLS, executeDuxiTool } from '../lib/duxiTools'
+import { platform } from '../lib/platform'
 
 // limite de idas-e-voltas modelo<->tool numa mesma pergunta — como em
 // OllamaNode.vue, evita loop infinito se o modelo insistir em chamar tools
@@ -44,7 +45,7 @@ const DEFAULT_CONFIG = {
   systemPrompt: '',
   voiceOutputEnabled: true,
   lipSyncEnabled: true,
-  wakeWordEnabled: true,
+  wakeWordEnabled: platform.duxiDefaults.wakeWordEnabled,
   messages: [],
   // histórico só pra exibir (ícone de histórico na barra) — bem mais longo
   // que `messages`, que é o contexto mandado pro modelo (MAX_HISTORY)

@@ -2,6 +2,7 @@ import { ipcMain, app } from 'electron'
 import { join } from 'path'
 import { spawn } from 'child_process'
 import { existsSync, writeFileSync, unlinkSync, readFileSync } from 'fs'
+import { platform, vendoredBinaryPath } from '../platform'
 
 // Rhubarb Lip Sync analisa um WAV já pronto (não precisa de modelo/download,
 // é DSP + reconhecimento fonético, não IA) e devolve uma timeline de visemas
@@ -15,10 +16,9 @@ import { existsSync, writeFileSync, unlinkSync, readFileSync } from 'fs'
 // dentro de node_modules — é vendorado à mão em resources/rhubarb/. Isso
 // significa que, ao contrário do whisper, não precisamos do truque
 // .replace('app.asar', 'app.asar.unpacked'): extraResources nunca entra no
-// .asar, process.resourcesPath já aponta direto pro lugar certo.
-const RHUBARB_BIN = app.isPackaged
-  ? join(process.resourcesPath, 'rhubarb', 'rhubarb')
-  : join(app.getAppPath(), 'resources', 'rhubarb', 'linux', 'rhubarb')
+// .asar, process.resourcesPath já aponta direto pro lugar certo. Só existe
+// pras plataformas com platform.features.lipSync.
+const RHUBARB_BIN = vendoredBinaryPath('rhubarb', 'rhubarb')
 
 const RHUBARB_TIMEOUT_MS = 5_000
 
@@ -60,6 +60,8 @@ export function registerLipSyncIpc() {
     const stamp = Date.now()
     const wavPath = join(app.getPath('temp'), `dux-lipsync-${stamp}.wav`)
     const jsonPath = join(app.getPath('temp'), `dux-lipsync-${stamp}.json`)
+
+    if (!platform.features.lipSync) return { ok: true, mouthCues: [] }
 
     try {
       if (!existsSync(RHUBARB_BIN)) {

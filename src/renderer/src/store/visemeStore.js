@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { platform } from '../lib/platform'
 
 // Rhubarb Lip Sync analisa o WAV já sintetizado pelo Piper (a lib de TTS não
 // expõe nenhuma timeline de fonema/palavra, ver comentário em ttsWorker.js) e
@@ -9,6 +10,7 @@ export const mouthCues = ref([]) // [{ start, end, value }] — vazio = sem lip-
 
 export async function analyzeSpeech(wavBlob) {
   mouthCues.value = []
+  if (!platform.features.lipSync) return
   try {
     const buffer = await wavBlob.arrayBuffer()
     const { ok, mouthCues: cues } = await window.lipSyncAPI.analyze(buffer)

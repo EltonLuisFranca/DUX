@@ -80,18 +80,17 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { addNode, closeAddNodeModal, isAddNodeModalOpen, openAddNodeModal } from '../store/flowStore'
 import { nodeTypeRegistry, CATEGORY_LABELS } from '../nodeTypes/registry'
 import { terminalAvailability } from '../store/terminalAvailabilityStore'
+import { platform } from '../lib/platform'
 
 const query = ref('')
 const searchInput = ref(null)
 const selectedType = ref(null)
 const activeCategory = ref(Object.keys(CATEGORY_LABELS)[0])
 
-const isWindows = window.platformInfo?.platform === 'win32'
-
 const visibleEntries = computed(() =>
   Object.entries(nodeTypeRegistry).filter(([type, entry]) => {
     if (entry.hideFromModal) return false
-    if (!isWindows && type === 'wsl-claude-terminal') return false
+    if (entry.requiresPlatformFeature && !platform.features[entry.requiresPlatformFeature]) return false
     if (entry.requiresAvailability && !terminalAvailability.value[entry.requiresAvailability]) return false
     return true
   })

@@ -12,15 +12,11 @@ import { registerImageNodeIpc } from './ipc/imageNode'
 import { registerWebToolsIpc } from './ipc/webTools'
 import { registerVulnReportIpc } from './ipc/vulnReport'
 import { attachRenderBridge } from './renderBridge'
+import { platform, unpackedAppPath } from './platform'
 
-const WSL_DISTRO = 'Debian'
 // bridge/ está listado em asarUnpack (precisa rodar como processo real, não
-// dentro do arquivo virtual .asar), então empacotado ele vive em
-// app.asar.unpacked/bridge, não em app.asar/../../bridge como o __dirname
-// relativo sugeriria.
-const BRIDGE_DIR = app.isPackaged
-  ? join(__dirname, '../../bridge').replace('app.asar', 'app.asar.unpacked')
-  : join(__dirname, '../../bridge')
+// dentro do arquivo virtual .asar)
+const BRIDGE_DIR = unpackedAppPath('bridge')
 
 // Traduz o path Windows (ex: C:\Users\x\dux-fleet\bridge) pro equivalente
 // dentro do WSL (/mnt/c/Users/x/dux-fleet/bridge) — BRIDGE_DIR é resolvido
@@ -130,10 +126,10 @@ function checkForUpdateBeforeLaunch() {
 let bridgeProcess = null
 
 function startBridge() {
-  if (process.platform === 'win32') {
+  if (platform.bridge.mode === 'wsl') {
     bridgeProcess = spawn('wsl.exe', [
       '-d',
-      WSL_DISTRO,
+      platform.bridge.distro,
       '--',
       'zsh',
       '-c',

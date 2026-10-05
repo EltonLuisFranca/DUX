@@ -463,7 +463,7 @@
 
             <button class="action-btn" :disabled="testDisabled" @click="testVoice">{{ testStatusLabel }}</button>
 
-            <div class="setting-row">
+            <div v-if="platform.features.lipSync" class="setting-row">
               <span class="setting-label">Sincronizar boca com a fala</span>
               <div class="segmented">
                 <button
@@ -572,6 +572,7 @@ import {
 import { duxiConfig, updateDuxiConfig, clearDuxiConversation } from '../store/duxiStore'
 import { listModels } from '../lib/ollamaClient'
 import { DEFAULT_DUXI_SYSTEM_PROMPT } from '../lib/duxiPrompt'
+import { platform } from '../lib/platform'
 import { isAuthenticated, user, login, logout } from '../store/authStore'
 import AppTooltip from './AppTooltip.vue'
 import { ttsEnabled, selectedVoiceId, AVAILABLE_VOICES, isSpeaking, isDownloadingVoice, lastError, speak } from '../store/ttsStore'

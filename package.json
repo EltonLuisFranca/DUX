@@ -41,12 +41,6 @@
       "bridge/**/*",
       "node_modules/nodejs-whisper/cpp/whisper.cpp/build/bin/**/*"
     ],
-    "extraResources": [
-      {
-        "from": "resources/rhubarb/linux",
-        "to": "rhubarb"
-      }
-    ],
     "win": {
       "target": "nsis",
       "extraResources": [
@@ -63,6 +57,12 @@
     "linux": {
       "target": [
         "pacman"
+      ],
+      "extraResources": [
+        {
+          "from": "resources/rhubarb/linux",
+          "to": "rhubarb"
+        }
       ],
       "category": "Development",
       "maintainer": "Elton Franca"

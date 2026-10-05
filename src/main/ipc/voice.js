@@ -3,6 +3,7 @@ import { join } from 'path'
 import { spawn } from 'child_process'
 import { existsSync, writeFileSync, unlinkSync, mkdirSync, renameSync, createWriteStream } from 'fs'
 import { pipeline } from 'stream/promises'
+import { platform, unpackedAppPath, vendoredBinaryPath } from '../platform'
 
 // Modelo fica em userData, não empacotado no instalador nem em node_modules —
 // é baixado sob demanda na primeira transcrição. O binário whisper-cli em si
@@ -10,13 +11,8 @@ import { pipeline } from 'stream/promises'
 // caminho de forma fixa relativa ao próprio node_modules, sem permitir
 // apontar pra outro lugar.
 //
-// Linux usa large-v3-turbo (~1.6GB): o "base" errava muito em português, e
-// aqui o whisper.cpp é compilado com Vulkan (npm run whisper:vulkan), então
-// roda na GPU e o modelo maior continua rápido. No Windows o whisper-server
-// vendorizado em resources/whisper/win é a build só-CPU, onde o turbo ficaria
-// lento demais pro ditado ao vivo — lá continua o base.
-const WHISPER_MODEL_NAME = process.platform === 'win32' ? 'base' : 'large-v3-turbo'
-const WHISPER_MODEL_FILE = `ggml-${WHISPER_MODEL_NAME}.bin`
+// Qual modelo cada plataforma usa (e por quê) está em shared/platformProfile.js.
+const WHISPER_MODEL_FILE = `ggml-${platform.whisper.model}.bin`
 const WHISPER_MODEL_URL = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${WHISPER_MODEL_FILE}`
 
 // Em dev, se o modelo já foi baixado pra pasta do projeto (resources/whisper/
@@ -56,12 +52,8 @@ async function ensureWhisperModel() {
 // inclui server/ incondicionalmente) — não precisa compilar nada novo, só
 // descobrir o binário e subir como processo filho, do mesmo jeito que o
 // bridge já faz.
-// mesmo padrão do BRIDGE_DIR em index.js: empacotado, o binário mora dentro
-// de app.asar.unpacked (nodejs-whisper está listado em asarUnpack, precisa
-// rodar como processo real), não dentro do arquivo virtual .asar.
-const WHISPER_CPP_ROOT = app.isPackaged
-  ? join(app.getAppPath(), 'node_modules/nodejs-whisper/cpp/whisper.cpp').replace('app.asar', 'app.asar.unpacked')
-  : join(app.getAppPath(), 'node_modules/nodejs-whisper/cpp/whisper.cpp')
+// nodejs-whisper está listado em asarUnpack (precisa rodar como processo real)
+const WHISPER_CPP_ROOT = unpackedAppPath('node_modules/nodejs-whisper/cpp/whisper.cpp')
 
 // No Linux, nodejs-whisper compila o whisper.cpp sob demanda na primeira
 // transcrição (precisa de cmake + gcc, que a máquina de dev/o usuário Linux
@@ -73,14 +65,15 @@ const WHISPER_CPP_ROOT = app.isPackaged
 // (ggml-org/whisper.cpp, release v1.9.1 — mesma versão vendorizada pelo
 // nodejs-whisper, então o formato do modelo ggml bate certinho) vai
 // vendorizada em resources/whisper/win e embutida no instalador via
-// build.win.extraResources no package.json, em vez de depender de compilação.
+// build.win.extraResources no package.json, em vez de depender de compilação
+// (platform.whisper.server === 'bundled').
 function resolveWhisperServerBin() {
-  const execName = process.platform === 'win32' ? 'whisper-server.exe' : 'whisper-server'
+  const execName = `whisper-server${platform.exeSuffix}`
 
-  const bundled = app.isPackaged
-    ? join(process.resourcesPath, 'whisper', execName)
-    : join(app.getAppPath(), 'resources', 'whisper', 'win', execName)
-  if (process.platform === 'win32' && existsSync(bundled)) return bundled
+  if (platform.whisper.server === 'bundled') {
+    const bundled = vendoredBinaryPath('whisper', 'whisper-server')
+    if (existsSync(bundled)) return bundled
+  }
 
   // Mesma lógica de busca que o nodejs-whisper usa internamente pro
   // whisper-cli (WhisperHelper.js: getExecutablePath) — CMake multi-config
@@ -215,7 +208,7 @@ export function registerVoiceIpc() {
       await ensureWhisperModel()
       writeFileSync(tmpWavPath, Buffer.from(buffer))
       const transcript = await nodewhisper(tmpWavPath, {
-        modelName: WHISPER_MODEL_NAME,
+        modelName: platform.whisper.model,
         modelRootPath: WHISPER_MODEL_DIR,
         removeWavFileAfterTranscription: true,
         whisperOptions: {

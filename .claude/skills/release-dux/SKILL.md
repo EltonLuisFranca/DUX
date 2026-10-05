@@ -282,11 +282,17 @@ cmd.exe /c "cd /d C:\Users\57224\dux-fleet && set GH_TOKEN=$GH_TOKEN && npm run 
   cmd.exe /c "rd /s /q C:\Users\57224\dux-fleet\dist\win-unpacked.tmp 2>nul"
   ```
 
-## 3. Build e publique também o instalador customizado (sempre, é o padrão)
+## 3. Instalador customizado — PAUSADO (pule esta etapa)
 
-Este projeto tem **dois instaladores Windows** e os dois são publicados em
-toda release, com papéis diferentes — não pule esta etapa nem substitua o
-NSIS por ela:
+**Por enquanto o instalador customizado não é gerado nem publicado** —
+desde a v1.2.63 a release Windows sai só com o NSIS do passo 2 (`DUX
+Setup X.Y.Z.exe`), que serve tanto pro autoupdate quanto pra quem baixa
+manualmente uma instalação nova. O código em `installer/` continua no
+repo (e o `version` dele continua sendo sincronizado no passo 2) pra poder
+voltar no futuro; só retome esta etapa se o usuário pedir explicitamente.
+
+O que vale quando ele voltar: o projeto tem **dois instaladores Windows**,
+com papéis diferentes — o customizado nunca substitui o NSIS:
 
 - **`DUX Setup X.Y.Z.exe`** (NSIS, gerado no passo 2 acima): é o que o
   `electron-updater` (`autoUpdater` em `src/main/index.js`) baixa e roda
@@ -417,11 +423,12 @@ fluxo Linux (a marca "Latest" pode não ter sido recalculada).
   antes de subir ele.
 - **O manifest de auto-update no Windows é `latest.yml`** (sem sufixo
   `-linux`) — não confundir com o do Linux.
-- **Nunca publique só um dos dois instaladores Windows.** O NSIS
+- **Nunca publique o instalador customizado sem o NSIS.** O NSIS
   (`DUX Setup X.Y.Z.exe`) é infraestrutura do `electron-updater` — troque
   ele só pelo customizado e o autoupdate silencioso do app instalado para
-  de funcionar sem nenhum erro visível. O customizado
-  (`Instalar DUX X.Y.Z.exe`, de `installer/`) é a UI de instalação nova
-  que o usuário vê ao baixar da página de releases. São públicos
-  diferentes (autoupdate vs. instalação manual), não uma substituição um
-  do outro.
+  de funcionar sem nenhum erro visível. Hoje o customizado está pausado
+  (ver passo 3) e a release Windows leva só o NSIS, o que é o esperado.
+  Quando ele voltar, o customizado (`Instalar DUX X.Y.Z.exe`, de
+  `installer/`) é a UI de instalação nova que o usuário vê ao baixar da
+  página de releases — públicos diferentes (autoupdate vs. instalação
+  manual), não uma substituição um do outro.
