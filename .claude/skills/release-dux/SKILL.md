@@ -417,6 +417,16 @@ fluxo Linux (a marca "Latest" pode não ter sido recalculada).
   não-draft** — só cria/atualiza drafts. Se a tag já tem release pública
   (comum quando o Linux saiu primeiro), suba manualmente com
   `gh release upload ... --clobber`.
+- **Tag nova + `releaseType: release` pode falhar com 422** ("Published
+  releases must have a valid tag"): os dois uploads (`.exe` e
+  `.blockmap`) tentam criar a release em paralelo, um cria release+tag e o
+  outro é recusado — o build aborta antes de gerar o `latest.yml` e a
+  release fica só com o `.blockmap`. O `.exe` já está pronto em `dist/`:
+  copie pra `DUX-Setup-X.Y.Z.exe` (hífen, sem espaço — assim o `gh` não
+  renomeia e o `.blockmap` já publicado continua batendo), gere o
+  `latest.yml` à mão (`sha512` = `openssl dgst -sha512 -binary <exe> |
+  base64 -w0`, `size` = `stat -c %s <exe>`) e suba os dois com
+  `gh release upload ... --clobber`.
 - **Nomes de asset por upload manual viram ponto, não hífen**
   (`gh release upload` normaliza espaço → `.`; `electron-builder` usa
   `-`). Sempre confira o nome real pós-upload e corrija o `latest.yml`
