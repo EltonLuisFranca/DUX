@@ -19,7 +19,10 @@ function runDocker(args, host) {
       fullArgs,
       { maxBuffer: 10 * 1024 * 1024, timeout: 10_000 },
       (error, stdout, stderr) => {
-        const timedOut = Boolean(error?.killed && error.signal)
+        // só `killed` — o CLI do docker trata SIGTERM e sai com código normal
+        // (signal vem null), então exigir `signal` aqui fazia o timeout cair
+        // no genérico "docker indisponível" com stderr vazio.
+        const timedOut = Boolean(error?.killed)
         resolve({
           ok: !error,
           stdout: stdout || '',
@@ -31,7 +34,11 @@ function runDocker(args, host) {
 }
 
 async function listContainers(host) {
-  const result = await runDocker(['ps', '-a', '--format', '{{json .}}'], host)
+  // --size=false explícito: `{{json .}}` inclui o campo Size, e aí o CLI pede
+  // `containers/json?size=1` — o daemon calcula o uso de disco de cada
+  // container (snapshotter.Usage), o que com imagens grandes e cache frio passa
+  // fácil dos 10s do timeout. Ninguém usa Size, então nem pedimos.
+  const result = await runDocker(['ps', '-a', '--size=false', '--format', '{{json .}}'], host)
   if (!result.ok) {
     return { valid: false, error: result.stderr.trim() || 'docker indisponível' }
   }
