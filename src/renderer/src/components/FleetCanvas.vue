@@ -154,6 +154,11 @@
         <DockerNode v-bind="nodeProps" />
       </NodeModalWrapper>
     </template>
+    <template #node-database="nodeProps">
+      <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
+        <DatabaseNode v-bind="nodeProps" />
+      </NodeModalWrapper>
+    </template>
     <template #node-credential-test="nodeProps">
       <NodeModalWrapper :id="nodeProps.id" :title="nodeTitle(nodeProps)">
         <CredentialTestNode v-bind="nodeProps" />
@@ -270,6 +275,7 @@ import GitNode from './GitNode.vue'
 import ImageNode from './ImageNode.vue'
 import HttpNode from './HttpNode.vue'
 import DockerNode from './DockerNode.vue'
+import DatabaseNode from './DatabaseNode.vue'
 import CredentialTestNode from './CredentialTestNode.vue'
 import PortScanNode from './PortScanNode.vue'
 import LoadTestNode from './LoadTestNode.vue'

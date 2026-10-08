@@ -5,6 +5,7 @@ import OllamaCreateForm from '../components/nodeCreate/OllamaCreateForm.vue'
 import OllamaSettings from '../components/nodeSettings/OllamaSettings.vue'
 import DuxBanSettings from '../components/nodeSettings/DuxBanSettings.vue'
 import DockerSettings from '../components/nodeSettings/DockerSettings.vue'
+import DatabaseSettings from '../components/nodeSettings/DatabaseSettings.vue'
 import GitCreateForm from '../components/nodeCreate/GitCreateForm.vue'
 import ImageCreateForm from '../components/nodeCreate/ImageCreateForm.vue'
 import HttpCreateForm from '../components/nodeCreate/HttpCreateForm.vue'
@@ -28,7 +29,8 @@ import {
   TECH_FINGERPRINT_ICON,
   VULN_SCAN_ICON,
   DNS_WHOIS_ICON,
-  NETWORK_DEVICE_SCAN_ICON
+  NETWORK_DEVICE_SCAN_ICON,
+  DATABASE_ICON
 } from './nodeIcons'
 
 // registro de tipos de node: cada tipo novo entra aqui com seu próprio
@@ -161,6 +163,28 @@ export const nodeTypeRegistry = {
     createData: () => ({ name: 'Docker', host: '' }),
     settingsComponent: DockerSettings,
     icon: DOCKER_ICON
+  },
+  database: {
+    label: 'Banco de Dados',
+    description: 'Conecta num PostgreSQL ou MySQL/MariaDB: explora tabelas, roda queries (leitura e escrita) e vê o resultado em grade, sem sair do canvas.',
+    category: 'tools',
+    // createData (não createForm): o node nasce com a config vazia e um
+    // connectionId próprio; a conexão (host/user/senha) é preenchida na
+    // sidebar de settings, onde dá pra testar e salvar a senha no cofre local.
+    // A senha NUNCA entra no node.data (que sincroniza pro backend) — só o
+    // connectionId opaco, que indexa o cofre em ~/.dux (ver bridge/dbVault.js).
+    createData: () => ({
+      name: 'Banco de Dados',
+      engine: 'postgres',
+      host: 'localhost',
+      port: 5432,
+      user: '',
+      database: '',
+      ssl: false,
+      connectionId: crypto.randomUUID()
+    }),
+    settingsComponent: DatabaseSettings,
+    icon: DATABASE_ICON
   },
   'credential-test': {
     label: 'Força Bruta de Credenciais',

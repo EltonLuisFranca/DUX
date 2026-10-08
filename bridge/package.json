@@ -12,7 +12,9 @@
   "type": "commonjs",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "mysql2": "^3.11.5",
     "node-pty": "^1.1.0",
+    "pg": "^8.13.1",
     "ws": "^8.21.3",
     "zod": "^4.5.3"
   }

@@ -11,6 +11,8 @@ const claudeAccountUsage = require('./claudeAccountUsage')
 const { resolveCwd, isDirectory, isFile, listSubdirectories, listDirEntries } = require('./fsHelpers')
 const { getGitInfo } = require('./gitStatus')
 const { listContainers, containerAction, containerLogs } = require('./dockerStatus')
+const dbClient = require('./dbClient')
+const dbVault = require('./dbVault')
 const { createRunner: createCredentialTestRunner } = require('./credentialTest')
 const { createRunner: createPortScanRunner } = require('./portScan')
 const { createRunner: createLoadTestRunner } = require('./loadTest')
@@ -315,6 +317,38 @@ function createConnectionHandler({ agentPort }) {
       } else if (msg.type === 'dockerLogs') {
         containerLogs(msg.containerId, { tail: msg.tail, host: msg.host }).then((info) => {
           ws.send(JSON.stringify({ type: 'dockerLogsResult', requestId: msg.requestId, ...info }))
+        })
+      } else if (msg.type === 'dbSaveCredential') {
+        const result = dbVault.setPassword(msg.connectionId, msg.password)
+        ws.send(JSON.stringify({ type: 'dbCredentialSaved', requestId: msg.requestId, ...result }))
+      } else if (msg.type === 'dbCredentialStatus') {
+        ws.send(
+          JSON.stringify({
+            type: 'dbCredentialStatusResult',
+            requestId: msg.requestId,
+            exists: dbVault.hasPassword(msg.connectionId)
+          })
+        )
+      } else if (msg.type === 'dbTestConnection') {
+        // msg.password (opcional) vence o cofre: deixa testar uma senha recém-
+        // digitada antes de salvá-la. Sem ele, usa a senha local do cofre.
+        const password = msg.password != null ? msg.password : dbVault.getPassword(msg.config?.connectionId)
+        dbClient.testConnection(msg.config || {}, password).then((info) => {
+          ws.send(JSON.stringify({ type: 'dbTestConnectionResult', requestId: msg.requestId, ...info }))
+        })
+      } else if (msg.type === 'dbQuery') {
+        const password = msg.password != null ? msg.password : dbVault.getPassword(msg.config?.connectionId)
+        dbClient.runQuery(msg.config || {}, password, msg.sql).then((info) => {
+          ws.send(JSON.stringify({ type: 'dbQueryResult', requestId: msg.requestId, ...info }))
+        })
+      } else if (msg.type === 'dbSchema') {
+        const password = msg.password != null ? msg.password : dbVault.getPassword(msg.config?.connectionId)
+        dbClient.fetchSchema(msg.config || {}, password).then((info) => {
+          ws.send(JSON.stringify({ type: 'dbSchemaResult', requestId: msg.requestId, ...info }))
+        })
+      } else if (msg.type === 'dbDisconnect') {
+        dbClient.closeConnection(msg.connectionId).then(() => {
+          ws.send(JSON.stringify({ type: 'dbDisconnectResult', requestId: msg.requestId, ok: true }))
         })
       } else if (msg.type === 'credentialTestStart') {
         const requestId = msg.requestId

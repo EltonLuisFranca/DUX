@@ -22,6 +22,11 @@ export const IMAGE_ICON =
 export const HTTP_ICON =
   '<path d="M3 6.5h14M3 13.5h14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 2.5L6 17.5M14 2.5l-2 15" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'
 
+// cilindro de banco de dados (elipse no topo + laterais + duas linhas de
+// "disco") — mesmo estilo stroke=currentColor dos outros ícones
+export const DATABASE_ICON =
+  '<ellipse cx="10" cy="4.8" rx="6.3" ry="2.3" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M3.7 4.8v10.4c0 1.3 2.8 2.3 6.3 2.3s6.3-1 6.3-2.3V4.8" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M3.7 10c0 1.3 2.8 2.3 6.3 2.3s6.3-1 6.3-2.3" stroke="currentColor" stroke-width="1.2" fill="none"/>'
+
 // pilha de caixas (não a baleia do Docker, que é marca registrada) — mesmo
 // estilo stroke=currentColor dos outros ícones deste registry
 export const DOCKER_ICON =

@@ -450,6 +450,60 @@ export function watchAccountUsage(onUpdate) {
   }
 }
 
+// ---- Node de Banco de Dados (bridge/dbClient.js + dbVault.js) ----
+// Mesmo padrão request/response de uma conexão por chamada das funções docker
+// acima. A senha fica só no cofre local do bridge (dbVault): o `config` que
+// trafega aqui e sincroniza no workspace nunca a inclui — só o connectionId
+// opaco que indexa o cofre. `password` inline é opcional e só pra testar uma
+// senha recém-digitada antes de salvar.
+function dbRequest(message, resultType, fallback, timeoutMs = 15000) {
+  return new Promise((resolve) => {
+    let settled = false
+    const ws = new WebSocket(BRIDGE_URL)
+
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      resolve(result)
+      ws.close()
+    }
+
+    const timeout = setTimeout(() => finish({ ...fallback, error: 'timeout' }), timeoutMs)
+
+    ws.onopen = () => ws.send(JSON.stringify(message))
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data)
+      if (msg.type === resultType) finish(msg)
+    }
+    ws.onerror = () => finish({ ...fallback, error: 'connection' })
+  })
+}
+
+export function dbSaveCredential(connectionId, password) {
+  return dbRequest({ type: 'dbSaveCredential', connectionId, password }, 'dbCredentialSaved', { ok: false })
+}
+
+export function dbCredentialStatus(connectionId) {
+  return dbRequest({ type: 'dbCredentialStatus', connectionId }, 'dbCredentialStatusResult', { exists: false })
+}
+
+export function dbTestConnection(config, password) {
+  return dbRequest({ type: 'dbTestConnection', config, password }, 'dbTestConnectionResult', { ok: false })
+}
+
+export function dbQuery(config, sql, password) {
+  return dbRequest({ type: 'dbQuery', config, sql, password }, 'dbQueryResult', { ok: false }, 60000)
+}
+
+export function dbSchema(config, password) {
+  return dbRequest({ type: 'dbSchema', config, password }, 'dbSchemaResult', { ok: false })
+}
+
+export function dbDisconnect(connectionId) {
+  return dbRequest({ type: 'dbDisconnect', connectionId }, 'dbDisconnectResult', { ok: false }, 5000)
+}
+
 export function linkNoteToAgent(sessionId, path) {
   sendControlMessage({ type: 'noteLink', sessionId, path })
 }
