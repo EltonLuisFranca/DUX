@@ -2,8 +2,16 @@ import { ipcMain, app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, renameSync, copyFileSync } from 'fs'
 
-const WORKSPACES_FILE = join(app.getPath('userData'), 'workspaces.json')
-const TMP_FILE = `${WORKSPACES_FILE}.tmp`
+// Resolve o path só na primeira vez que é usado (lazy) — NÃO no import deste
+// módulo. app.getPath('userData') chamado antes do 'ready' pode devolver um
+// diretório diferente no Windows (o nome do app ainda não foi finalizado);
+// resolvendo sob demanda, sempre pega o userData definitivo (os handlers só
+// rodam depois que a janela abriu, ou seja, bem depois do ready).
+let workspacesFile = null
+function getWorkspacesFile() {
+  if (!workspacesFile) workspacesFile = join(app.getPath('userData'), 'workspaces.json')
+  return workspacesFile
+}
 
 // Se o parse falhar, o arquivo existe mas está corrompido (ex: processo
 // morto no meio de uma escrita antiga, antes do rename atômico abaixo
@@ -14,14 +22,15 @@ const TMP_FILE = `${WORKSPACES_FILE}.tmp`
 // sobrescrever, guarda uma cópia do jeito que estava pra investigar/recuperar
 // depois.
 function loadWorkspacesFromDisk() {
-  if (!existsSync(WORKSPACES_FILE)) return null
+  const file = getWorkspacesFile()
+  if (!existsSync(file)) return null
   try {
-    return JSON.parse(readFileSync(WORKSPACES_FILE, 'utf-8'))
+    return JSON.parse(readFileSync(file, 'utf-8'))
   } catch (err) {
     console.error('[workspaces] failed to parse, arquivo corrompido — fazendo backup em vez de sobrescrever', err)
     try {
-      const backupPath = `${WORKSPACES_FILE}.corrupted-${Date.now()}.json`
-      copyFileSync(WORKSPACES_FILE, backupPath)
+      const backupPath = `${file}.corrupted-${Date.now()}.json`
+      copyFileSync(file, backupPath)
       console.error('[workspaces] backup do arquivo corrompido salvo em', backupPath)
     } catch (backupErr) {
       console.error('[workspaces] failed to back up corrupted file', backupErr)
@@ -36,11 +45,25 @@ function loadWorkspacesFromDisk() {
 // de ficar com um JSON pela metade. writeFileSync direto no destino final
 // (como era antes) deixava exatamente essa janela aberta.
 function saveWorkspacesToDisk(data) {
+  const file = getWorkspacesFile()
+  const tmpFile = `${file}.tmp`
+  const json = JSON.stringify(data, null, 2)
   try {
-    writeFileSync(TMP_FILE, JSON.stringify(data, null, 2))
-    renameSync(TMP_FILE, WORKSPACES_FILE)
+    writeFileSync(tmpFile, json)
+    renameSync(tmpFile, file)
   } catch (err) {
-    console.error('[workspaces] failed to save', err)
+    // No Windows, renomear por cima de um arquivo existente pode falhar quando
+    // o destino está travado (antivírus escaneando a escrita recém-feita,
+    // OneDrive sincronizando, handle aberto). Antes disso o erro era só logado
+    // e o workspaces.json NUNCA era atualizado — a cada boot carregava vazio e
+    // o usuário "perdia tudo". Fallback: grava direto no destino. Perde a
+    // atomicidade do rename, mas gravar algo é muito melhor que não gravar nada.
+    console.error('[workspaces] rename atômico falhou, tentando escrita direta', err)
+    try {
+      writeFileSync(file, json)
+    } catch (err2) {
+      console.error('[workspaces] failed to save', err2)
+    }
   }
 }
 

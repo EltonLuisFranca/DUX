@@ -119,4 +119,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   height: 100% !important;
   min-height: 0;
 }
+
+/* no modal o node ocupa a tela toda: os adornos de canvas (handles de
+   conexão, alça de resize e a toolbar flutuante) ficam meio pra fora das
+   bordas do node e, com overflow:auto no container, geram scrollbars
+   fantasma (eixo x e y). Nada disso faz sentido em fullscreen — esconde. */
+.node-modal-content.is-modal :deep(.shell-handle),
+.node-modal-content.is-modal :deep(.resize-handle),
+.node-modal-content.is-modal :deep(.vue-flow__handle),
+.node-modal-content.is-modal :deep(.node-toolbar) {
+  display: none !important;
+}
 </style>

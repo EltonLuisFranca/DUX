@@ -1,6 +1,5 @@
 import TerminalSettings from '../components/nodeSettings/TerminalSettings.vue'
 import TerminalCreateForm from '../components/nodeCreate/TerminalCreateForm.vue'
-import BrowserCreateForm from '../components/nodeCreate/BrowserCreateForm.vue'
 import OllamaCreateForm from '../components/nodeCreate/OllamaCreateForm.vue'
 import OllamaSettings from '../components/nodeSettings/OllamaSettings.vue'
 import DuxBanSettings from '../components/nodeSettings/DuxBanSettings.vue'
@@ -137,9 +136,16 @@ export const nodeTypeRegistry = {
   },
   browser: {
     label: 'Navegador',
-    description: 'Uma página web dentro do canvas — abra o preview do seu projeto ali.',
+    description: 'Um navegador com abas dentro do canvas — página inicial em branco, barra de navegação, favoritos e múltiplas abas.',
     category: 'tools',
-    createForm: BrowserCreateForm,
+    // abre direto numa aba em branco (sem pedir URL antes) — o usuário navega
+    // pela barra. tabs/favorites ficam no node.data e sincronizam.
+    createData: () => ({
+      name: 'Navegador',
+      tabs: [{ id: crypto.randomUUID(), url: '', title: '' }],
+      activeTabId: null,
+      favorites: []
+    }),
     icon: BROWSER_ICON
   },
   git: {

@@ -22,7 +22,8 @@ contextBridge.exposeInMainWorld('workspaceStore', {
 
 contextBridge.exposeInMainWorld('browserNodeAPI', {
   saveScreenshot: (dataUrl, defaultName) =>
-    ipcRenderer.invoke('browser-node:save-screenshot', { dataUrl, defaultName })
+    ipcRenderer.invoke('browser-node:save-screenshot', { dataUrl, defaultName }),
+  downloadMedia: (url, pageUrl) => ipcRenderer.invoke('browser-node:download-media', { url, pageUrl })
 })
 
 contextBridge.exposeInMainWorld('authStore', {
