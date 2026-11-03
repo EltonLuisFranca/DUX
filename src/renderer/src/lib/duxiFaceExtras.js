@@ -1,6 +1,6 @@
 // Desenhos extras do rosto da Duxi (DuxiBot.vue): caras e gestos das reações
 // ao app (comemorar, erro, buscando, escrevendo, confusa) e das ações de
-// quando está ociosa (chiclete, assobio, alongamento, cochilo). Funções puras
+// quando está ociosa (chiclete, assobio, música, alongamento, cochilo). Funções puras
 // de canvas — recebem o ctx e a geometria do frame (`g`, montada em
 // drawRobotFace) e não guardam estado; quem decide QUANDO e com que
 // intensidade desenhar é o DuxiBot.
@@ -346,6 +346,127 @@ export function drawWhistle(ctx, g, amount, age) {
     const y = my - g.boxH * (0.1 + p * 0.65)
     ctx.globalAlpha = amount * Math.sin(p * Math.PI)
     ctx.fillText(k % 2 ? '♫' : '♪', x, y)
+  }
+  ctx.restore()
+}
+
+// --- música: fones de ouvido descem do alto, ela balança no ritmo e saem
+// notinhas (música imaginária, ação de ociosa) ou barrinhas de áudio (música
+// tocando de verdade no PC). `drop` (0..1) é o quanto os fones ainda estão
+// acima da cabeça (1 = lá em cima, 0 = encaixados); `pulse` (0..1) incha as
+// conchas na batida.
+export const MUSIC_BPS = 1.9 // batidas por segundo (~114 bpm)
+
+export function musicBeat(age) {
+  return Math.pow(Math.abs(Math.sin(age * Math.PI * MUSIC_BPS)), 3)
+}
+
+// mesmo formato do roundRectPath do DuxiBot — sem depender de ctx.roundRect
+function pillPath(ctx, x, y, w, h) {
+  const r = Math.min(w, h) / 2
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.arcTo(x + w, y, x + w, y + h, r)
+  ctx.arcTo(x + w, y + h, x, y + h, r)
+  ctx.arcTo(x, y + h, x, y, r)
+  ctx.arcTo(x, y, x + w, y, r)
+  ctx.closePath()
+}
+
+function headphoneReach(g) {
+  return g.boxW / 2 + g.boxH * 0.03
+}
+
+export function drawHeadphones(ctx, g, amount, drop, pulse) {
+  const dy = -drop * g.boxH * 0.9
+  const cupW = g.boxH * 0.16
+  const cupH = g.boxH * 0.36 * (1 + 0.06 * pulse)
+  const cupY = g.oy + g.boxH * 0.5 + dy
+  const reach = headphoneReach(g)
+  ctx.save()
+  ctx.globalAlpha *= amount
+  ctx.lineCap = 'round'
+  // arco por cima do casco
+  ctx.strokeStyle = '#1f2937'
+  ctx.lineWidth = g.boxH * 0.065
+  ctx.beginPath()
+  ctx.ellipse(g.cx, cupY, reach, g.boxH * 0.62, 0, Math.PI * 1.04, Math.PI * 1.96)
+  ctx.stroke()
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)'
+  ctx.lineWidth = g.boxH * 0.015
+  ctx.beginPath()
+  ctx.ellipse(g.cx, cupY, reach, g.boxH * 0.62, 0, Math.PI * 1.2, Math.PI * 1.45)
+  ctx.stroke()
+  // conchas laranja com almofada escura do lado de dentro
+  for (const sign of [-1, 1]) {
+    const x = g.cx + sign * reach
+    ctx.shadowBlur = g.boxH * 0.06
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.35)'
+    ctx.fillStyle = '#1f2937'
+    pillPath(ctx, x - cupW / 2 - sign * cupW * 0.18, cupY - cupH / 2, cupW, cupH)
+    ctx.fill()
+    ctx.shadowBlur = 0
+    ctx.fillStyle = '#f97316'
+    pillPath(ctx, x - cupW / 2 + sign * cupW * 0.12, cupY - cupH * 0.44, cupW, cupH * 0.88)
+    ctx.fill()
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)'
+    ctx.beginPath()
+    ctx.ellipse(x + sign * cupW * 0.12 - cupW * 0.15, cupY - cupH * 0.22, cupW * 0.12, cupH * 0.12, 0, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+// notinhas saindo das conchas, alternando lado, subindo e balançando
+export function drawMusicNotes(ctx, g, amount, age) {
+  const reach = g.boxW / 2 + g.boxH * 0.1
+  ctx.save()
+  ctx.font = `700 ${g.boxH * 0.22}px system-ui, sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#ffffff'
+  ctx.shadowBlur = g.boxH * 0.06
+  ctx.shadowColor = 'rgba(249, 115, 22, 0.7)'
+  // uma nota nova a cada meia batida, cada uma vive 1.4s
+  const every = 1 / MUSIC_BPS
+  const last = Math.floor(age / every)
+  for (let k = Math.max(0, last - 3); k <= last; k++) {
+    const t = age - k * every
+    if (t < 0 || t > 1.4) continue
+    const p = t / 1.4
+    const sign = k % 2 ? 1 : -1
+    const x = g.cx + sign * (reach + g.boxH * p * 0.25) + Math.sin(t * 7 + k) * g.boxH * 0.04
+    const y = g.oy + g.boxH * (0.4 - p * 0.75)
+    ctx.globalAlpha = amount * Math.sin(p * Math.PI)
+    ctx.fillText(k % 3 === 0 ? '♫' : '♪', x, y)
+  }
+  ctx.restore()
+}
+
+// barrinhas de áudio saindo das conchas pros dois lados, espelhadas: grave
+// colado no fone, agudo mais longe. `levels` = faixas 0..1 (shared/audioBands)
+export function drawAudioBars(ctx, g, amount, levels) {
+  const reach = headphoneReach(g)
+  const barW = g.boxH * 0.045
+  const gap = g.boxH * 0.065
+  const y = g.oy + g.boxH * 0.5
+  ctx.save()
+  ctx.globalAlpha *= amount
+  ctx.lineCap = 'round'
+  ctx.lineWidth = barW
+  ctx.strokeStyle = '#fb923c'
+  ctx.shadowBlur = g.boxH * 0.08
+  ctx.shadowColor = 'rgba(249, 115, 22, 0.75)'
+  for (const sign of [-1, 1]) {
+    levels.forEach((level, i) => {
+      const x = g.cx + sign * (reach + g.boxH * 0.15 + i * gap)
+      // vai afinando pra longe do fone, como uma onda se espalhando
+      const half = g.boxH * (0.03 + 0.26 * level * (1 - (i / levels.length) * 0.35))
+      ctx.beginPath()
+      ctx.moveTo(x, y - half)
+      ctx.lineTo(x, y + half)
+      ctx.stroke()
+    })
   }
   ctx.restore()
 }

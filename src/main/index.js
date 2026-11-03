@@ -11,6 +11,7 @@ import { registerBrowserNodeIpc } from './ipc/browserNode'
 import { registerImageNodeIpc } from './ipc/imageNode'
 import { registerWebToolsIpc } from './ipc/webTools'
 import { registerVulnReportIpc } from './ipc/vulnReport'
+import { registerSystemAudioIpc, attachSystemAudioLoopback } from './ipc/systemAudio'
 import { attachRenderBridge } from './renderBridge'
 import { platform, unpackedAppPath } from './platform'
 
@@ -53,6 +54,7 @@ registerBrowserNodeIpc()
 registerImageNodeIpc()
 registerVulnReportIpc()
 registerWebToolsIpc()
+registerSystemAudioIpc()
 
 let mainWindowRef = null
 
@@ -201,6 +203,7 @@ function createWindow() {
   // en-US como fallback pra termos técnicos/código colados ali — sem isso o
   // Electron detecta o idioma pelo locale do SO, o que nem sempre bate.
   win.webContents.session.setSpellCheckerLanguages(['pt-BR', 'en-US'])
+  attachSystemAudioLoopback(win)
 
   // Electron não tem menu de contexto nativo por padrão — sem este handler,
   // botão direito em qualquer campo editável (ex: o node de Nota) não mostra

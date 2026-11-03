@@ -23,7 +23,11 @@ const PROFILES = {
       // node "Terminal WSL · Claude Code" só faz sentido com um host Windows
       wslClaudeTerminal: false
     },
-    duxiDefaults: { wakeWordEnabled: true }
+    duxiDefaults: { wakeWordEnabled: true },
+    // de onde vem o áudio do PC pra Duxi reagir a música (ver
+    // main/ipc/systemAudio.js): monitor da saída padrão via parec
+    // (PulseAudio/PipeWire) — o loopback do Chromium não cobre Linux
+    systemAudio: 'pulse-monitor'
   },
   win32: {
     resourcesDir: 'win',
@@ -42,7 +46,9 @@ const PROFILES = {
     },
     // whisper só-CPU + modelo menor: ouvir o nome o tempo todo custa CPU
     // contínuo e erra o "Duxi" com frequência — fica opt-in
-    duxiDefaults: { wakeWordEnabled: false }
+    duxiDefaults: { wakeWordEnabled: false },
+    // loopback do WASAPI via getDisplayMedia
+    systemAudio: 'loopback'
   }
 }
 

@@ -49,6 +49,22 @@ contextBridge.exposeInMainWorld('lipSyncAPI', {
   analyze: (buffer) => ipcRenderer.invoke('lipsync:analyze', { buffer })
 })
 
+contextBridge.exposeInMainWorld('systemAudioAPI', {
+  armLoopback: () => ipcRenderer.invoke('system-audio:arm-loopback'),
+  start: () => ipcRenderer.invoke('system-audio:start'),
+  stop: () => ipcRenderer.invoke('system-audio:stop'),
+  onFrame: (callback) => {
+    const listener = (_event, frame) => callback(frame)
+    ipcRenderer.on('system-audio:frame', listener)
+    return () => ipcRenderer.removeListener('system-audio:frame', listener)
+  },
+  onError: (callback) => {
+    const listener = (_event, message) => callback(message)
+    ipcRenderer.on('system-audio:error', listener)
+    return () => ipcRenderer.removeListener('system-audio:error', listener)
+  }
+})
+
 contextBridge.exposeInMainWorld('imageNodeAPI', {
   openFile: () => ipcRenderer.invoke('image-node:open-file')
 })

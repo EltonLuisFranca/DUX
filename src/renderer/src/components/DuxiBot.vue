@@ -10,7 +10,7 @@
         <canvas ref="canvasEl" class="face-canvas"></canvas>
         <!-- desligada = cochilando: "zZz" subindo do canto de cima da cabeça -->
         <Transition name="zzz-fade">
-          <div v-if="duxiState === 'off'" class="zzz" aria-hidden="true">
+          <div v-if="duxiState === 'off' && !systemMusicPlaying" class="zzz" aria-hidden="true">
             <span>z</span>
             <span>z</span>
             <span>Z</span>
@@ -110,6 +110,11 @@ import {
   drawGum,
   GUM_POP_AT,
   drawWhistle,
+  drawHeadphones,
+  drawMusicNotes,
+  drawAudioBars,
+  musicBeat,
+  MUSIC_BPS,
   drawNapMarks
 } from '../lib/duxiFaceExtras'
 import {
@@ -136,6 +141,7 @@ import {
   chooseDuxiOption,
   toggleDuxiMic
 } from '../store/duxiStore'
+import { systemAudio, systemMusicPlaying } from '../store/systemAudioStore'
 
 // Só a parte visual da Duxi (rosto + texto da última troca), montada dentro
 // da barra do topo (ZoomControls). O cérebro — mic, modelo, voz — é um
@@ -322,6 +328,9 @@ const DOUBLE_BLINK_GAP = 0.09
 // - gum: bolha de chiclete crescendo até estourar
 // - peek: espia os cantos (barra de baixo, canvas), curiosa
 // - whistle: assobia com notinhas subindo
+// - music: põe fones de ouvido e curte uma música, balançando no ritmo
+// (com "Reagir à música do PC" ligada, os fones também vêm sozinhos quando o
+// PC toca música de verdade — ver pcMusicAmt — e aí não sorteia ação nenhuma)
 // - stretch: mãozinhas pra cima, se esticando
 // - nap: (só cansada) cabeceia de sono, acorda assustada e olha em volta
 // Ociosa por muito tempo, vai ficando cansada/desanimada (pálpebras caídas,
@@ -329,7 +338,7 @@ const DOUBLE_BLINK_GAP = 0.09
 // reanima.
 const IDLE_MIN_GAP = 18 // s
 const IDLE_MAX_GAP = 45
-const IDLE_ACTIONS = { coffee: 4.4, gum: 3.4, peek: 4.2, whistle: 4.4, stretch: 3.2, nap: 5.6 }
+const IDLE_ACTIONS = { coffee: 4.4, gum: 3.4, peek: 4.2, whistle: 4.4, music: 6.5, stretch: 3.2, nap: 5.6 }
 const COFFEE_DURATION = IDLE_ACTIONS.coffee
 const TIRED_AFTER = 120 // s ociosa até começar a cansar
 const TIRED_RAMP = 20 // s até ficar cansada de todo
@@ -339,6 +348,12 @@ let nextIdleAt = Infinity
 let idleAction = null // { type, start }
 let recentIdle = [] // últimas ações, pra não repetir
 let tiredAmount = 0
+// música tocando de verdade no PC (systemAudioStore): fones enquanto durar,
+// pulando no grave e com barrinhas de áudio no lugar das notinhas
+let pcMusicAmt = 0 // 0..1, suavizado — põe/tira os fones
+let bassFast = 0
+let bassSlow = 0
+let barLevels = []
 let nextSighAt = Infinity
 let sighStart = -1
 
@@ -347,7 +362,7 @@ function randomBetween(min, max) {
 }
 
 function pickIdleAction(tired) {
-  const pool = tired > 0.5 ? ['coffee', 'nap', 'stretch'] : ['coffee', 'gum', 'peek', 'whistle', 'stretch']
+  const pool = tired > 0.5 ? ['coffee', 'nap', 'stretch'] : ['coffee', 'gum', 'peek', 'whistle', 'music', 'stretch']
   const fresh = pool.filter((type) => !recentIdle.includes(type))
   const choices = fresh.length ? fresh : pool
   const type = choices[Math.floor(Math.random() * choices.length)]
@@ -677,8 +692,10 @@ function drawRobotFace() {
 
   // ociosa: ouvindo sem voz, sem estar tonta, acenando, reagindo ou sendo
   // arrastada
-  const idleNow =
-    duxiState.value === 'passive' &&
+  // em repouso = ouvindo ou desligada, sem nada acontecendo; ociosa = em
+  // repouso ouvindo (as ações de ociosa não rodam desligada)
+  const restingNow =
+    (duxiState.value === 'passive' || isOff) &&
     !hearingVoice.value &&
     !dizzyNow &&
     !reactionOn &&
@@ -686,6 +703,23 @@ function drawRobotFace() {
     !dragTarget &&
     dragLen < 1 &&
     nowMs - duxiGreetAt.value > GREET_DELAY_MS + GREET_MS
+  const idleNow = restingNow && duxiState.value === 'passive'
+  const pcMusicOn = systemMusicPlaying.value && restingNow
+  pcMusicAmt += ((pcMusicOn ? 1 : 0) - pcMusicAmt) * 0.06
+  const pcVibe = window01(pcMusicAmt, 0.6, 1)
+  // batida: grave subindo acima da própria média recente
+  const bands = systemAudio.bands
+  const bass = ((bands[0] ?? 0) + (bands[1] ?? 0)) / 2
+  bassFast += (bass - bassFast) * 0.5
+  bassSlow += (bass - bassSlow) * 0.04
+  const kick = Math.min(1, Math.max(0, (bassFast - bassSlow) * 4)) * pcVibe
+  if (barLevels.length !== bands.length) barLevels = bands.map(() => 0)
+  barLevels = barLevels.map((cur, i) => {
+    const target = bands[i] * pcVibe
+    return cur + (target - cur) * (target > cur ? 0.55 : 0.18)
+  })
+  // curtindo música não cansa
+  if (pcMusicOn && idleSince !== null) idleSince = clock
   if (idleNow && idleSince === null) {
     idleSince = clock
     nextIdleAt = clock + randomBetween(IDLE_MIN_GAP, IDLE_MAX_GAP)
@@ -696,7 +730,7 @@ function drawRobotFace() {
     idleAction = null
     sighStart = -1
   }
-  if (idleSince !== null && !idleAction && clock >= nextIdleAt) {
+  if (idleSince !== null && !idleAction && clock >= nextIdleAt && !pcMusicOn) {
     idleAction = { type: pickIdleAction(tiredAmount), start: clock }
   }
   let idleT = idleAction ? clock - idleAction.start : -1
@@ -712,9 +746,19 @@ function drawRobotFace() {
   const gumT = act === 'gum' ? idleT : -1
   const peekT = act === 'peek' ? idleT : -1
   const whistleT = act === 'whistle' ? idleT : -1
+  const musicT = act === 'music' ? idleT : -1
   const stretchT = act === 'stretch' ? idleT : -1
   const napT = act === 'nap' ? idleT : -1
   const whistleAmt = whistleT >= 0 ? window01(whistleT, 0, 0.3) * (1 - window01(whistleT, 4.0, 4.4)) : 0
+  // música: fones descem (0-0.7s), curte de olhos fechados, fones sobem e saem
+  const musicDrop = musicT >= 0 ? 1 - window01(musicT, 0, 0.7) + window01(musicT, 5.7, 6.4) : 1
+  const musicAmt = musicT >= 0 ? window01(musicT, 0, 0.25) * (1 - window01(musicT, 6.1, 6.5)) : 0
+  const musicVibe = musicT >= 0 ? window01(musicT, 0.6, 1.0) * (1 - window01(musicT, 5.4, 5.8)) : 0
+  const beat = musicVibe > 0 ? musicBeat(musicT) : 0
+  // fones: ação de ociosa ou música do PC, o que estiver mais "pra dentro"
+  const phonesAmt = Math.max(musicAmt, Math.min(1, pcMusicAmt * 3))
+  const phonesDrop = Math.min(musicDrop, 1 - pcMusicAmt)
+  const phonesPulse = Math.max(beat * musicVibe, kick)
   const stretchAmt = stretchT >= 0 ? window01(stretchT, 0.15, 0.9) * (1 - window01(stretchT, 2.3, 3.1)) : 0
   const napNod = napT >= 0 ? window01(napT, 0, 1.8) * (1 - window01(napT, 2.2, 2.32)) : 0
   const napStartle = napT >= 0 ? window01(napT, 2.2, 2.32) * (1 - window01(napT, 3.0, 3.6)) : 0
@@ -821,7 +865,7 @@ function drawRobotFace() {
   const happyBurst =
     activatedAge < BURST_HAPPY_MS ? window01(activatedAge, 60, 260) * (1 - window01(activatedAge, BURST_HAPPY_MS - 300, BURST_HAPPY_MS)) : 0
   const happyWave = greeting ? window01(greetAge, 60, 260) * (1 - window01(greetAge, GREET_MS - 500, GREET_MS - 200)) : 0
-  const happyAmount = Math.max(happyBurst, happyWave, stretchAmt)
+  const happyAmount = Math.max(happyBurst, happyWave, stretchAmt, musicVibe, pcVibe)
 
   // geometria pros desenhos extras (lib/duxiFaceExtras)
   const g = { cx, cy, ox, oy, boxW, boxH, eyeD, eyeW, eyeGapX, eyeY, lookOffsetX, shellColor, clock }
@@ -835,11 +879,18 @@ function drawRobotFace() {
   // balanço (assobio), esticada (alongamento), cabeceando (cochilo), susto
   const hop =
     (celebrateAmt > 0.01 && reactionAge < 1.5 ? Math.abs(Math.sin(reactionAge * Math.PI * 2.4)) * (1 - reactionAge / 1.5) * 0.16 : 0) +
-    napStartle * 0.06
+    napStartle * 0.06 +
+    beat * 0.035 * musicVibe +
+    kick * 0.04
   const bodyX =
     (errorAmt > 0.01 ? Math.sin(reactionAge * 40) * Math.exp(-reactionAge * 5) * 0.035 * errorAmt : 0) +
     (peekT >= 0 ? (peekT < 1.2 ? -1 : peekT < 2.4 ? 1 : 0) * 0.03 * window01(peekT, 0, 0.4) * (1 - window01(peekT, 3.2, 4)) : 0)
-  const tilt = -0.14 * confusedAmt + Math.sin(clock * 3) * 0.05 * whistleAmt + 0.06 * napNod
+  const tilt =
+    -0.14 * confusedAmt +
+    Math.sin(clock * 3) * 0.05 * whistleAmt +
+    0.06 * napNod +
+    Math.sin(musicT * Math.PI * (MUSIC_BPS / 2)) * 0.08 * musicVibe + // um lado a cada 2 batidas
+    Math.sin(clock * 2.2) * 0.06 * pcVibe
   const stretchX = 1 - 0.05 * stretchAmt
   const stretchY = 1 + 0.1 * stretchAmt - 0.04 * napNod
 
@@ -937,7 +988,7 @@ function drawRobotFace() {
     }
     ctx.restore()
 
-    if (tiredAmount > 0.05 && currentAperture <= 0.01 && gumT < 0 && whistleAmt < 0.05) paintTiredMouth()
+    if (tiredAmount > 0.05 && currentAperture <= 0.01 && gumT < 0 && whistleAmt < 0.05 && phonesAmt < 0.05) paintTiredMouth()
     if (celebrateAmt > 0.01) drawStarEyes(ctx, g, celebrateAmt)
     if (errorAmt > 0.01) {
       drawXEyes(ctx, g, errorAmt)
@@ -947,6 +998,9 @@ function drawRobotFace() {
     if (writeAmt > 0.01) drawWritingHand(ctx, g, writeAmt, reactionAge)
     if (gumT >= 0) drawGum(ctx, g, gumT)
     if (whistleAmt > 0.01) drawWhistle(ctx, g, whistleAmt, whistleT)
+    if (musicVibe > 0.01) drawMusicNotes(ctx, g, musicVibe, musicT)
+    if (pcVibe > 0.01) drawAudioBars(ctx, g, pcVibe, barLevels)
+    if (phonesAmt > 0.01) drawHeadphones(ctx, g, phonesAmt, phonesDrop, phonesPulse)
     if (coffeeT >= 0) paintCoffee()
     if (dizzyAmount > 0.02) paintDizzy()
     ctx.restore()

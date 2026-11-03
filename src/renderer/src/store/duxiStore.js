@@ -46,6 +46,8 @@ const DEFAULT_CONFIG = {
   voiceOutputEnabled: true,
   lipSyncEnabled: true,
   wakeWordEnabled: platform.duxiDefaults.wakeWordEnabled,
+  // escuta o áudio do PC e põe os fones quando tem música (systemAudioStore)
+  musicReactEnabled: false,
   messages: [],
   // histórico só pra exibir (ícone de histórico na barra) — bem mais longo
   // que `messages`, que é o contexto mandado pro modelo (MAX_HISTORY)
