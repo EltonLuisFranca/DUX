@@ -17,6 +17,7 @@
       <span class="usage-ring-label">{{ item.short }}</span>
 
       <div v-if="openKey === item.key" class="usage-menu">
+        <div v-if="focusedProfileLabel" class="usage-profile">{{ focusedProfileLabel }}</div>
         <div class="usage-row-head">
           <span>{{ item.label }}</span>
           <span>{{ item.data.percent }}%</span>
@@ -29,7 +30,10 @@
           />
         </div>
         <div class="usage-reset">Reseta {{ formatReset(item.data.resetsAt) }}</div>
-        <div v-if="usageError" class="usage-stale">Não foi possível atualizar agora — mostrando o último valor.</div>
+        <div v-if="usageError === 'expired'" class="usage-stale">
+          Login deste perfil está parado — abra um terminal nele pra renovar. Mostrando o último valor.
+        </div>
+        <div v-else-if="usageError" class="usage-stale">Não foi possível atualizar agora — mostrando o último valor.</div>
       </div>
     </div>
   </div>
@@ -37,7 +41,8 @@
 
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { session, usageError, week } from '../store/accountUsageStore'
+import { focusedProfileLabel, session, usageError, week } from '../store/accountUsageStore'
+import { formatReset, usageColor, usageSeverity } from '../lib/claudeUsageFormat'
 
 const openKey = ref(null)
 let closeTimer = null
@@ -130,28 +135,12 @@ const items = computed(() =>
   ].filter(Boolean)
 )
 
-function severity(percent) {
-  if (percent >= 90) return 'danger'
-  if (percent >= 70) return 'warn'
-  return ''
-}
+const severity = usageSeverity
 
 function ringStyle(percent) {
   const clamped = Math.min(100, Math.max(0, percent))
-  const color = clamped >= 90 ? '#ef4444' : clamped >= 70 ? '#d97706' : '#10b981'
   const deg = clamped * 3.6
-  return { background: `conic-gradient(${color} ${deg}deg, var(--color-border) ${deg}deg)` }
-}
-
-function formatReset(iso) {
-  if (!iso) return '—'
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return '—'
-  const now = new Date()
-  if (date.toDateString() === now.toDateString()) {
-    return `às ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-  }
-  return date.toLocaleString('pt-BR', { weekday: 'short', hour: '2-digit', minute: '2-digit' })
+  return { background: `conic-gradient(${usageColor(clamped)} ${deg}deg, var(--color-border) ${deg}deg)` }
 }
 
 // Delay no fechamento pra tolerar o "vão" entre o anel e o popover (que abre
@@ -278,6 +267,15 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border);
   border-radius: 10px;
   box-shadow: 0 4px 16px var(--color-shadow);
+}
+
+.usage-profile {
+  margin-bottom: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-tertiary);
 }
 
 .usage-row-head {

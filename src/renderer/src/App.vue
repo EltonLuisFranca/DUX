@@ -2,28 +2,29 @@
   <div class="window-shell">
     <TitleBar title="DUX" />
     <div class="canvas-area">
+      <SettingsSidebar />
       <div class="canvas-stack">
         <div v-for="ws in workspaces" :key="ws.id" v-show="ws.id === activeWorkspaceId" class="canvas-slot">
           <FleetCanvas :workspace="ws" />
         </div>
-        <button class="settings-corner" title="Configurações" @click="toggleSettings">
-          <svg
-            viewBox="0 0 24 24"
-            width="16"
-            height="16"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
-            <path
-              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
-            />
-          </svg>
-        </button>
         <div class="user-badge-corner">
+          <button class="settings-corner" :class="{ active: settingsSidebarOpen }" title="Configurações (Ctrl+,)" @click="toggleSettings">
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+              />
+            </svg>
+          </button>
           <UserBadge />
           <RoomPresenceBadge />
         </div>
@@ -31,7 +32,6 @@
         <DuxiTopBar />
       </div>
       <NodeSettingsSidebar />
-      <SettingsSidebar />
     </div>
     <AddNodeModal />
     <ConfirmDeleteNodeModal />
@@ -55,7 +55,7 @@ import RoomPresenceBadge from './components/RoomPresenceBadge.vue'
 import ClaudeUsageDock from './components/ClaudeUsageDock.vue'
 import RoomInviteModal from './components/RoomInviteModal.vue'
 import { workspaces, activeWorkspaceId, switchWorkspace, flushPersist } from './store/flowStore'
-import { toggleSettings } from './store/themeStore'
+import { settingsSidebarOpen, toggleSettings } from './store/themeStore'
 
 function goToWorkspace(direction) {
   const currentIndex = workspaces.value.findIndex((w) => w.id === activeWorkspaceId.value)
@@ -100,10 +100,6 @@ onBeforeUnmount(() => {
 }
 
 .settings-corner {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 30;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -120,6 +116,11 @@ onBeforeUnmount(() => {
 .settings-corner:hover {
   background: var(--color-hover);
   color: var(--color-text-primary);
+}
+
+.settings-corner.active {
+  border-color: #3b82f6;
+  color: #3b82f6;
 }
 
 .user-badge-corner {

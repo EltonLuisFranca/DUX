@@ -1,523 +1,78 @@
 <template>
-  <div
-    class="sidebar"
-    :class="{ open: settingsSidebarOpen, resizing }"
+  <aside
+    ref="rootRef"
+    class="settings-sidebar"
+    :class="{ open: settingsSidebarOpen, resizing, compact: isCompact }"
     :style="{ width: settingsSidebarOpen ? `${width}px` : '0' }"
+    aria-label="Configurações"
   >
     <div v-if="settingsSidebarOpen" class="sidebar-content" :style="{ width: `${width}px` }">
-      <div class="sidebar-header">
-        <span class="sidebar-title">Configurações</span>
-        <button class="close-btn" title="Fechar (Ctrl+,)" @click="closeSettings">
-          <svg viewBox="0 0 16 16" width="12" height="12">
-            <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      <header class="sidebar-header">
+        <div class="header-top">
+          <span class="sidebar-title">Configurações</span>
+          <button class="close-btn" title="Fechar (Ctrl+,)" @click="closeSettings">
+            <svg viewBox="0 0 16 16" width="12" height="12">
+              <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <label class="search">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <circle cx="7" cy="7" r="4.5" />
+            <path d="M10.5 10.5L14 14" />
           </svg>
-        </button>
-      </div>
+          <input
+            ref="searchInput"
+            v-model="query"
+            class="search-input"
+            type="text"
+            placeholder="Buscar configurações"
+            spellcheck="false"
+            @keydown.enter="selectFirstMatch"
+            @keydown.down.prevent="focusNav"
+          />
+          <button v-if="query" class="search-clear" title="Limpar busca" @click="clearSearch">
+            <svg viewBox="0 0 16 16" width="10" height="10">
+              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            </svg>
+          </button>
+        </label>
+      </header>
 
       <div class="sidebar-main">
-        <div class="category-panel">
-          <section v-if="activeCategory === 'account'" class="settings-section">
-            <div v-if="isAuthenticated" class="account-profile">
-              <img v-if="user?.avatar" class="account-avatar" :src="user.avatar" alt="" />
-              <div v-else class="account-avatar account-avatar-fallback">
-                {{ (user?.firstname || '?').charAt(0).toUpperCase() }}
-              </div>
-              <div class="account-info">
-                <span class="account-name">{{ [user?.firstname, user?.lastname].filter(Boolean).join(' ') || 'Conectado' }}</span>
-                <span class="account-email">{{ user?.email }}</span>
-              </div>
-            </div>
-            <button v-if="isAuthenticated" class="action-btn" @click="logout">Sair</button>
-            <template v-else>
-              <p class="setting-hint">Conecte sua conta Google pra sincronizar workspaces entre máquinas.</p>
-              <button class="action-btn primary" @click="login">Entrar com Google</button>
-            </template>
-          </section>
+        <nav ref="navRef" class="category-nav" aria-label="Categorias">
+          <template v-for="section in visibleSections" :key="section.label">
+            <span class="nav-section">{{ section.label }}</span>
+            <button
+              v-for="cat in section.items"
+              :key="cat.id"
+              class="nav-item"
+              :class="{ active: activeId === cat.id }"
+              :title="isCompact ? cat.label : undefined"
+              :aria-current="activeId === cat.id ? 'page' : undefined"
+              @click="selectCategory(cat.id)"
+            >
+              <component :is="cat.icon" class="nav-icon" />
+              <span class="nav-label">{{ cat.label }}</span>
+              <span v-if="cat.alert?.value" class="nav-alert" :title="cat.alert.value" />
+            </button>
+          </template>
+          <p v-if="!visibleSections.length" class="nav-empty">Nada encontrado pra "{{ query }}".</p>
 
-          <section v-else-if="activeCategory === 'appearance'" class="settings-section">
-            <div class="setting-row">
-              <span class="setting-label">Tema</span>
-              <div class="segmented">
-                <button class="segmented-btn" :class="{ active: theme === 'dark' }" @click="setTheme('dark')">
-                  Escuro
-                </button>
-                <button class="segmented-btn" :class="{ active: theme === 'light' }" @click="setTheme('light')">
-                  Claro
-                </button>
-              </div>
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">Estilo dos nodes</span>
-              <div class="segmented">
-                <button
-                  class="segmented-btn"
-                  :class="{ active: nodeStyleVariant === 'structured' }"
-                  @click="setNodeStyleVariant('structured')"
-                >
-                  Estruturado
-                </button>
-                <button
-                  class="segmented-btn"
-                  :class="{ active: nodeStyleVariant === 'compact' }"
-                  @click="setNodeStyleVariant('compact')"
-                >
-                  Compacto
-                </button>
-              </div>
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">
-                Sombra dos nodes ({{ nodeShadowIntensity === 0 ? 'desligada' : `${nodeShadowIntensity}%` }})
-              </span>
-              <input
-                type="range"
-                class="range-input"
-                min="0"
-                max="100"
-                step="5"
-                :value="nodeShadowIntensity"
-                @input="setNodeShadowIntensity(Number($event.target.value))"
-              />
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">Fundo do canvas</span>
-              <div class="bg-variant-grid">
-                <button
-                  v-for="v in CANVAS_VARIANTS"
-                  :key="v.value"
-                  class="bg-variant-btn"
-                  :class="{ active: canvasVariant === v.value }"
-                  @click="setCanvasVariant(v.value)"
-                >
-                  <svg class="bg-variant-preview" viewBox="0 0 48 48" width="44" height="44">
-                    <rect x="0" y="0" width="48" height="48" rx="6" :fill="v.value === 'none' ? 'none' : 'currentColor'" fill-opacity="0.06" />
-                    <template v-if="v.value === 'dots'">
-                      <circle v-for="p in DOT_PREVIEW_POINTS" :key="p.join(',')" :cx="p[0]" :cy="p[1]" r="2" fill="currentColor" />
-                    </template>
-                    <path
-                      v-else-if="v.value === 'lines'"
-                      d="M12 0V48M36 0V48M0 12H48M0 36H48"
-                      stroke="currentColor"
-                      stroke-width="1.2"
-                      fill="none"
-                    />
-                    <template v-else-if="v.value === 'cross'">
-                      <path
-                        v-for="p in DOT_PREVIEW_POINTS"
-                        :key="p.join(',')"
-                        :d="`M${p[0] - 3} ${p[1]} H${p[0] + 3} M${p[0]} ${p[1] - 3} V${p[1] + 3}`"
-                        stroke="currentColor"
-                        stroke-width="1.4"
-                        stroke-linecap="round"
-                      />
-                    </template>
-                    <path
-                      v-else-if="v.value === 'grid'"
-                      d="M0 0H48V48H0V0ZM16 0V48M32 0V48M0 16H48M0 32H48"
-                      stroke="currentColor"
-                      stroke-width="1.2"
-                      fill="none"
-                    />
-                    <path
-                      v-else-if="v.value === 'diagonal'"
-                      d="M-8 8L8 -8M-8 24L24 -8M-8 40L40 -8M8 56L56 8M24 56L56 24M40 56L56 40"
-                      stroke="currentColor"
-                      stroke-width="1.4"
-                    />
-                    <template v-else-if="v.value === 'checkerboard'">
-                      <rect x="0" y="0" width="16" height="16" fill="currentColor" fill-opacity="0.35" />
-                      <rect x="16" y="16" width="16" height="16" fill="currentColor" fill-opacity="0.35" />
-                      <rect x="32" y="0" width="16" height="16" fill="currentColor" fill-opacity="0.35" />
-                      <rect x="0" y="32" width="16" height="16" fill="currentColor" fill-opacity="0.35" />
-                      <rect x="32" y="32" width="16" height="16" fill="currentColor" fill-opacity="0.35" />
-                    </template>
-                    <path
-                      v-else
-                      d="M12 12L36 36M36 12L12 36"
-                      stroke="currentColor"
-                      stroke-width="1.4"
-                      stroke-linecap="round"
-                      opacity="0.5"
-                    />
-                  </svg>
-                  <span class="bg-variant-label">{{ v.label }}</span>
-                </button>
-              </div>
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">Cor de fundo do canvas</span>
-              <div class="color-row">
-                <AppTooltip label="Cor de fundo">
-                  <label class="color-swatch" :style="{ background: canvasBgColor || 'var(--color-bg-app)' }">
-                    <input
-                      type="color"
-                      class="color-input"
-                      :value="canvasBgColor || '#1e1e22'"
-                      @input="setCanvasBgColor($event.target.value)"
-                    />
-                  </label>
-                </AppTooltip>
-                <button class="action-btn reset-color-btn" :disabled="!canvasBgColor" @click="setCanvasBgColor(null)">
-                  Automático (tema)
-                </button>
-              </div>
-            </div>
-
-            <template v-if="canvasVariant !== 'none'">
-              <div class="setting-row">
-                <span class="setting-label">Cor do padrão</span>
-                <div class="color-row">
-                  <AppTooltip label="Cor do padrão">
-                    <label class="color-swatch" :style="{ background: resolvedCanvasPatternColor }">
-                      <input
-                        type="color"
-                        class="color-input"
-                        :value="resolvedCanvasPatternColor"
-                        @input="setCanvasPatternColor($event.target.value)"
-                      />
-                    </label>
-                  </AppTooltip>
-                  <button
-                    class="action-btn reset-color-btn"
-                    :disabled="!canvasPatternColor"
-                    @click="setCanvasPatternColor(null)"
-                  >
-                    Automático (tema)
-                  </button>
-                </div>
-              </div>
-
-              <div class="setting-row">
-                <span class="setting-label">Espaçamento ({{ canvasGap }}px)</span>
-                <input
-                  type="range"
-                  class="range-input"
-                  min="8"
-                  max="80"
-                  step="2"
-                  :value="canvasGap"
-                  @input="setCanvasGap(Number($event.target.value))"
-                />
-              </div>
-
-              <div v-if="canvasVariant !== 'checkerboard'" class="setting-row">
-                <span class="setting-label">Tamanho {{ canvasVariant === 'dots' ? 'do ponto' : 'da linha' }} ({{ canvasPatternSize }}px)</span>
-                <input
-                  type="range"
-                  class="range-input"
-                  min="1"
-                  :max="canvasVariant === 'dots' ? 10 : 4"
-                  step="1"
-                  :value="canvasPatternSize"
-                  @input="setCanvasPatternSize(Number($event.target.value))"
-                />
-              </div>
-            </template>
-
-            <div class="setting-row">
-              <span class="setting-label">Encaixe magnético</span>
-              <div class="segmented">
-                <button class="segmented-btn" :class="{ active: snapEnabled }" @click="setSnapEnabled(true)">
-                  Ativado
-                </button>
-                <button class="segmented-btn" :class="{ active: !snapEnabled }" @click="setSnapEnabled(false)">
-                  Desativado
-                </button>
-              </div>
-            </div>
-
-            <div class="setting-divider" />
-
-            <span class="subsection-title">Conexões entre nodes</span>
-
-            <div class="edge-style-grid">
-              <button
-                v-for="style in EDGE_STYLES"
-                :key="style.value"
-                class="edge-style-btn"
-                :class="{ active: edgeStyle === style.value }"
-                @click="setEdgeStyle(style.value)"
-              >
-                <svg class="edge-style-preview" viewBox="0 0 64 32" width="64" height="32">
-                  <path :d="EDGE_PREVIEW_PATHS[style.value]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-                  <circle cx="6" cy="8" r="3" fill="currentColor" />
-                  <circle cx="58" cy="24" r="3" fill="currentColor" />
-                </svg>
-                <span class="edge-style-label">{{ style.label }}</span>
-              </button>
-            </div>
-          </section>
-
-          <section v-else-if="activeCategory === 'voice'" class="settings-section">
-            <span class="subsection-title">Microfone</span>
-
-            <div class="setting-row">
-              <span class="setting-label">Dispositivo</span>
-              <select
-                class="select-input"
-                :value="selectedMicrophoneId"
-                @change="selectedMicrophoneId = $event.target.value"
-              >
-                <option value="">Padrão do sistema</option>
-                <option v-for="mic in availableMicrophones" :key="mic.deviceId" :value="mic.deviceId">
-                  {{ mic.label }}
-                </option>
-              </select>
-            </div>
-
-            <p class="setting-hint">
-              Usado pela Duxi. Se o microfone
-              escolhido for desconectado, a captura volta pro padrão do sistema.
-            </p>
-
-            <div class="setting-divider" />
-
-            <span class="subsection-title">Leitura em voz</span>
-
-            <div class="setting-row">
-              <span class="setting-label">Ler respostas do agente</span>
-              <div class="segmented">
-                <button class="segmented-btn" :class="{ active: ttsEnabled }" @click="ttsEnabled = true">
-                  Ativado
-                </button>
-                <button class="segmented-btn" :class="{ active: !ttsEnabled }" @click="ttsEnabled = false">
-                  Desativado
-                </button>
-              </div>
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">Voz</span>
-              <select
-                class="select-input"
-                :value="selectedVoiceId"
-                @change="selectedVoiceId = $event.target.value"
-              >
-                <option v-for="voice in AVAILABLE_VOICES" :key="voice.id" :value="voice.id">{{ voice.label }}</option>
-              </select>
-            </div>
-
-            <button class="action-btn" :disabled="testDisabled" @click="testVoice">{{ testStatusLabel }}</button>
-
-            <p v-if="lastError" class="setting-hint setting-error">Erro: {{ lastError }}</p>
-
-            <p class="setting-hint">
-              O catálogo oficial do Piper TTS só tem vozes masculinas em português. A "Dii" é uma
-              voz feminina treinada pela comunidade (OpenVoiceOS) e baixada de um repositório à
-              parte na primeira vez que for selecionada.
-            </p>
-
-            <div class="setting-divider" />
-
-            <span class="subsection-title">Notificação sonora</span>
-
-            <div class="setting-row">
-              <span class="setting-label">Som ao terminar resposta</span>
-              <div class="segmented">
-                <button
-                  class="segmented-btn"
-                  :class="{ active: notificationSoundEnabled }"
-                  @click="notificationSoundEnabled = true"
-                >
-                  Ativado
-                </button>
-                <button
-                  class="segmented-btn"
-                  :class="{ active: !notificationSoundEnabled }"
-                  @click="notificationSoundEnabled = false"
-                >
-                  Desativado
-                </button>
-              </div>
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">Som</span>
-              <select
-                class="select-input"
-                :value="selectedSoundId"
-                :disabled="!notificationSoundEnabled"
-                @change="selectedSoundId = $event.target.value"
-              >
-                <option v-for="sound in AVAILABLE_SOUNDS" :key="sound.id" :value="sound.id">{{ sound.label }}</option>
-              </select>
-            </div>
-
-            <button class="action-btn" @click="testNotificationSound">Testar som selecionado</button>
-
-            <p class="setting-hint">
-              Toca quando o agente termina de responder num terminal — só funciona com a leitura
-              em voz (acima) desativada.
-            </p>
-          </section>
-
-          <section v-else-if="activeCategory === 'duxi'" class="settings-section">
-            <span class="subsection-title">Conexão com o modelo</span>
-
-            <div class="setting-row">
-              <span class="setting-label">Endereço do Ollama</span>
-              <input
-                class="text-input"
-                type="text"
-                placeholder="http://localhost:11434"
-                :value="duxiConfig.host"
-                @change="onDuxiHostChange($event.target.value)"
-              />
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">Token de autenticação</span>
-              <input
-                class="text-input"
-                type="password"
-                placeholder="Bearer token, se o servidor exigir"
-                :value="duxiConfig.token"
-                @change="onDuxiTokenChange($event.target.value)"
-              />
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">Modelo</span>
-              <select
-                class="select-input"
-                :value="duxiConfig.model"
-                :disabled="duxiModelsStatus === 'checking'"
-                @change="updateDuxiConfig({ model: $event.target.value })"
-              >
-                <option v-if="!duxiConfig.model" value="" disabled>Escolha um modelo</option>
-                <option v-if="duxiConfig.model && !duxiModels.includes(duxiConfig.model)" :value="duxiConfig.model">
-                  {{ duxiConfig.model }}
-                </option>
-                <option v-for="m in duxiModels" :key="m" :value="m">{{ m }}</option>
-              </select>
-              <p v-if="duxiModelsStatus === 'checking'" class="setting-hint">Buscando modelos...</p>
-              <p v-else-if="duxiModelsStatus === 'error'" class="setting-hint setting-error">
-                Não foi possível conectar em {{ duxiConfig.host }}. O Ollama está rodando?
-              </p>
-            </div>
-
-            <div class="setting-divider" />
-
-            <span class="subsection-title">Comportamento</span>
-
-            <div class="setting-row">
-              <span class="setting-label">Falar respostas em voz alta</span>
-              <div class="segmented">
-                <button
-                  class="segmented-btn"
-                  :class="{ active: duxiConfig.voiceOutputEnabled }"
-                  @click="updateDuxiConfig({ voiceOutputEnabled: true })"
-                >
-                  Ativado
-                </button>
-                <button
-                  class="segmented-btn"
-                  :class="{ active: !duxiConfig.voiceOutputEnabled }"
-                  @click="updateDuxiConfig({ voiceOutputEnabled: false })"
-                >
-                  Desativado
-                </button>
-              </div>
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">Ativar dizendo "Duxi"</span>
-              <div class="segmented">
-                <button
-                  class="segmented-btn"
-                  :class="{ active: duxiConfig.wakeWordEnabled }"
-                  @click="updateDuxiConfig({ wakeWordEnabled: true })"
-                >
-                  Ativado
-                </button>
-                <button
-                  class="segmented-btn"
-                  :class="{ active: !duxiConfig.wakeWordEnabled }"
-                  @click="updateDuxiConfig({ wakeWordEnabled: false })"
-                >
-                  Desativado
-                </button>
-              </div>
-            </div>
-
-            <p class="setting-hint">
-              Com a Duxi desligada, o microfone fica aberto só esperando o nome dela. Diga
-              "descansar Duxi" pra desligar de novo.
-            </p>
-
-            <div class="setting-row">
-              <span class="setting-label">Voz</span>
-              <select
-                class="select-input"
-                :value="selectedVoiceId"
-                :disabled="!duxiConfig.voiceOutputEnabled"
-                @change="selectedVoiceId = $event.target.value"
-              >
-                <option v-for="voice in AVAILABLE_VOICES" :key="voice.id" :value="voice.id">{{ voice.label }}</option>
-              </select>
-            </div>
-
-            <button class="action-btn" :disabled="testDisabled" @click="testVoice">{{ testStatusLabel }}</button>
-
-            <div v-if="platform.features.lipSync" class="setting-row">
-              <span class="setting-label">Sincronizar boca com a fala</span>
-              <div class="segmented">
-                <button
-                  class="segmented-btn"
-                  :class="{ active: duxiConfig.lipSyncEnabled }"
-                  @click="updateDuxiConfig({ lipSyncEnabled: true })"
-                >
-                  Ativado
-                </button>
-                <button
-                  class="segmented-btn"
-                  :class="{ active: !duxiConfig.lipSyncEnabled }"
-                  @click="updateDuxiConfig({ lipSyncEnabled: false })"
-                >
-                  Desativado
-                </button>
-              </div>
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">Prompt de sistema</span>
-              <textarea
-                class="text-input text-area"
-                rows="5"
-                :value="duxiConfig.systemPrompt || DEFAULT_DUXI_SYSTEM_PROMPT"
-                @change="updateDuxiConfig({ systemPrompt: $event.target.value })"
-              ></textarea>
-            </div>
-
-            <button class="action-btn" @click="clearDuxiConversation">Limpar conversa</button>
-
-            <p class="setting-hint">
-              A voz é a mesma da leitura de respostas em Voz e sons — trocar aqui troca lá. Clique na Duxi (barra do topo) para
-              ativar o microfone; botão direito abre esta aba.
-            </p>
-          </section>
-        </div>
-
-        <nav class="category-nav">
-          <button
-            v-for="cat in CATEGORIES"
-            :key="cat.id"
-            class="category-btn"
-            :class="{ active: activeCategory === cat.id }"
-            :title="cat.label"
-            @click="selectCategory(cat.id)"
-          >
-            <component :is="cat.icon" class="category-icon" />
-          </button>
+          <span class="sidebar-version">DUX v{{ version }}</span>
         </nav>
-      </div>
 
-      <div class="sidebar-footer">
-        <span class="sidebar-version">DUX v{{ version }}</span>
+        <main ref="panelRef" class="category-panel">
+          <template v-if="activeCategory">
+            <div class="panel-heading">
+              <h2 class="panel-title">{{ activeCategory.label }}</h2>
+              <p class="panel-description">{{ activeCategory.description }}</p>
+            </div>
+            <div class="panel-body">
+              <component :is="activeCategory.component" />
+            </div>
+          </template>
+        </main>
       </div>
     </div>
 
@@ -531,218 +86,244 @@
       <span class="resize-grip" />
       <Transition name="tip-fade">
         <div v-if="showTip" class="resize-tooltip">
-          <div class="tooltip-row"><kbd>Ctrl</kbd> + <kbd>,</kbd> fecha o painel</div>
-          <div class="tooltip-sub">Drag to resize</div>
+          <div class="tooltip-row"><kbd>Ctrl</kbd> + <kbd>,</kbd> abre/fecha o painel</div>
+          <div class="tooltip-sub">Arraste pra redimensionar</div>
         </div>
       </Transition>
     </div>
-  </div>
+  </aside>
 </template>
 
 <script setup>
-import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import {
-  theme,
-  setTheme,
-  nodeStyleVariant,
-  setNodeStyleVariant,
-  nodeShadowIntensity,
-  setNodeShadowIntensity,
-  canvasVariant,
-  setCanvasVariant,
-  CANVAS_VARIANTS,
-  canvasBgColor,
-  setCanvasBgColor,
-  canvasPatternColor,
-  setCanvasPatternColor,
-  resolvedCanvasPatternColor,
-  canvasGap,
-  setCanvasGap,
-  canvasPatternSize,
-  setCanvasPatternSize,
-  edgeStyle,
-  setEdgeStyle,
-  EDGE_STYLES,
-  snapEnabled,
-  setSnapEnabled,
-  settingsSidebarOpen,
-  settingsActiveCategory,
-  closeSettings
-} from '../store/themeStore'
-import { duxiConfig, updateDuxiConfig, clearDuxiConversation } from '../store/duxiStore'
-import { listModels } from '../lib/ollamaClient'
-import { DEFAULT_DUXI_SYSTEM_PROMPT } from '../lib/duxiPrompt'
-import { platform } from '../lib/platform'
-import { isAuthenticated, user, login, logout } from '../store/authStore'
-import AppTooltip from './AppTooltip.vue'
-import { ttsEnabled, selectedVoiceId, AVAILABLE_VOICES, isSpeaking, isDownloadingVoice, lastError, speak } from '../store/ttsStore'
-import { selectedMicrophoneId, availableMicrophones, refreshMicrophoneList } from '../store/voiceStore'
-import {
-  notificationSoundEnabled,
-  selectedSoundId,
-  AVAILABLE_SOUNDS,
-  playNotificationSound
-} from '../store/notificationSoundStore'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { settingsSidebarOpen, settingsActiveCategory, closeSettings, toggleSettings } from '../store/themeStore'
+import { claudeProfiles, usageByProfile } from '../store/claudeProfilesStore'
 import { useSidebarResize } from '../lib/useSidebarResize'
+import AccountSettings from './settings/AccountSettings.vue'
+import AppearanceSettings from './settings/AppearanceSettings.vue'
+import ClaudeAccountsSettings from './settings/ClaudeAccountsSettings.vue'
+import DuxiSettings from './settings/DuxiSettings.vue'
+import VoiceSettings from './settings/VoiceSettings.vue'
 
 // Ícones inline como render functions simples — evita mais um arquivo .vue
-// por ícone só pra 3 categorias.
+// por ícone.
 function icon(children) {
   return () =>
     h(
       'svg',
-      { viewBox: '0 0 16 16', width: 15, height: 15, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+      {
+        viewBox: '0 0 16 16',
+        width: 15,
+        height: 15,
+        fill: 'none',
+        stroke: 'currentColor',
+        'stroke-width': 1.4,
+        'stroke-linecap': 'round',
+        'stroke-linejoin': 'round'
+      },
       children
     )
 }
 
-const CATEGORIES = [
+// Aviso na navegação quando alguma conta Claude precisa de atenção (login
+// vencido/revogado) — dá pra ver sem abrir a aba.
+const claudeAlert = computed(() => {
+  const broken = claudeProfiles.value.filter((p) => {
+    const err = usageByProfile.value[p.id]?.error
+    return p.loggedIn && (err === 'expired' || err === 'unauthorized')
+  })
+  if (!broken.length) return null
+  return broken.length === 1 ? `"${broken[0].name}" precisa de atenção` : `${broken.length} contas precisam de atenção`
+})
+
+// Seções e categorias da navegação. Categoria nova = um componente em
+// settings/ + uma entrada aqui; `keywords` alimentam a busca (coloque os
+// nomes das opções que moram dentro dela).
+const SECTIONS = [
   {
-    id: 'account',
-    label: 'Conta',
-    // Silhueta de usuário: cabeça (círculo) + ombros (arco aberto por baixo).
-    icon: icon([h('circle', { cx: 8, cy: 5.3, r: 2.6 }), h('path', { d: 'M2.5 14c.5-3.3 2.8-5.1 5.5-5.1s5 1.8 5.5 5.1' })])
+    label: 'Geral',
+    items: [
+      {
+        id: 'account',
+        label: 'Conta DUX',
+        description: 'Login e sincronização de workspaces entre máquinas.',
+        component: AccountSettings,
+        keywords: ['google', 'login', 'entrar', 'sair', 'sincronizar', 'sync', 'workspace', 'usuário'],
+        // Silhueta de usuário: cabeça (círculo) + ombros (arco aberto por baixo).
+        icon: icon([h('circle', { cx: 8, cy: 5.3, r: 2.6 }), h('path', { d: 'M2.5 14c.5-3.3 2.8-5.1 5.5-5.1s5 1.8 5.5 5.1' })])
+      },
+      {
+        id: 'appearance',
+        label: 'Aparência',
+        description: 'Tema e visual dos nodes, do canvas e das conexões.',
+        component: AppearanceSettings,
+        keywords: [
+          'tema', 'escuro', 'claro', 'dark', 'light', 'sombra', 'fundo', 'canvas', 'padrão', 'grade', 'pontos',
+          'linhas', 'cruzes', 'xadrez', 'cor', 'espaçamento', 'encaixe', 'magnético', 'snap', 'conexões', 'edges',
+          'estilo', 'compacto', 'estruturado'
+        ],
+        // Sol: núcleo + raios — ícone universal de tema/aparência.
+        icon: icon([
+          h('circle', { cx: 8, cy: 8, r: 2.6 }),
+          h('path', {
+            d: 'M8 1.6v1.6M8 12.8v1.6M14.4 8h-1.6M3.2 8H1.6M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1M12.4 12.4l-1.1-1.1M4.7 4.7 3.6 3.6'
+          })
+        ])
+      }
+    ]
   },
   {
-    id: 'appearance',
-    label: 'Aparência',
-    // Sol: núcleo + raios — ícone universal de tema/aparência.
-    icon: icon([
-      h('circle', { cx: 8, cy: 8, r: 2.6 }),
-      h('path', {
-        d: 'M8 1.6v1.6M8 12.8v1.6M14.4 8h-1.6M3.2 8H1.6M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1M12.4 12.4l-1.1-1.1M4.7 4.7 3.6 3.6'
-      })
-    ])
+    label: 'Agentes',
+    items: [
+      {
+        id: 'claude',
+        label: 'Contas Claude',
+        description: 'Várias contas do Claude Code conectadas ao mesmo tempo, com o uso e os limites de cada uma.',
+        component: ClaudeAccountsSettings,
+        keywords: [
+          'claude', 'code', 'conta', 'contas', 'perfil', 'perfis', 'login', 'uso', 'limite', 'plano', 'sessão',
+          'semana', 'pro', 'max', 'créditos', 'capacidade', 'trocar', 'alternar'
+        ],
+        alert: claudeAlert,
+        // Duas pessoas: conta principal à frente, outra atrás.
+        icon: icon([
+          h('circle', { cx: 6, cy: 5.6, r: 2.3 }),
+          h('path', { d: 'M1.8 13.5c.4-2.8 2.1-4.3 4.2-4.3s3.8 1.5 4.2 4.3' }),
+          h('path', { d: 'M10.4 3.6a2.3 2.3 0 0 1 0 4.2M11.6 9.4c1.4.4 2.3 1.8 2.6 4.1' })
+        ])
+      },
+      {
+        id: 'duxi',
+        label: 'Duxi',
+        description: 'Assistente de voz do DUX: modelo, voz e comportamento.',
+        component: DuxiSettings,
+        keywords: ['ollama', 'modelo', 'token', 'voz', 'falar', 'música', 'prompt', 'sistema', 'boca', 'ativar', 'conversa'],
+        // Rostinho do robô: painel arredondado com dois olhos.
+        icon: icon([h('rect', { x: 2, y: 4, width: 12, height: 8.5, rx: 2.4 }), h('path', { d: 'M6.2 7.4v1.6M9.8 7.4v1.6' })])
+      }
+    ]
   },
   {
-    id: 'voice',
-    label: 'Voz e sons',
-    // Alto-falante com ondas sonoras.
-    icon: icon([
-      h('path', { d: 'M2.5 6.2h2.3L8.3 3v10L4.8 9.8H2.5z', 'stroke-linejoin': 'round' }),
-      h('path', { d: 'M11 5.6a3.4 3.4 0 0 1 0 4.8M13 3.6a6.3 6.3 0 0 1 0 8.8' })
-    ])
-  },
-  {
-    id: 'duxi',
-    label: 'Duxi',
-    // Rostinho do robô: painel arredondado com dois olhos.
-    icon: icon([
-      h('rect', { x: 2, y: 4, width: 12, height: 8.5, rx: 2.4 }),
-      h('path', { d: 'M6.2 7.4v1.6M9.8 7.4v1.6' })
-    ])
+    label: 'Sistema',
+    items: [
+      {
+        id: 'voice',
+        label: 'Voz e sons',
+        description: 'Microfone, leitura em voz das respostas e notificações sonoras.',
+        component: VoiceSettings,
+        keywords: ['microfone', 'mic', 'tts', 'piper', 'voz', 'som', 'sons', 'notificação', 'ler', 'leitura', 'áudio'],
+        // Alto-falante com ondas sonoras.
+        icon: icon([
+          h('path', { d: 'M2.5 6.2h2.3L8.3 3v10L4.8 9.8H2.5z', 'stroke-linejoin': 'round' }),
+          h('path', { d: 'M11 5.6a3.4 3.4 0 0 1 0 4.8M13 3.6a6.3 6.3 0 0 1 0 8.8' })
+        ])
+      }
+    ]
   }
 ]
 
-// aba ativa vive no themeStore — permite abrir direto numa aba de fora daqui
-const activeCategory = settingsActiveCategory
+const ALL_CATEGORIES = SECTIONS.flatMap((s) => s.items)
+
+// --- busca
+const query = ref('')
+const searchInput = ref(null)
+const navRef = ref(null)
+const panelRef = ref(null)
+
+function normalize(text) {
+  return text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+}
+
+function matches(cat, terms) {
+  const haystack = normalize([cat.label, cat.description, ...cat.keywords].join(' '))
+  return terms.every((t) => haystack.includes(t))
+}
+
+const visibleSections = computed(() => {
+  const terms = normalize(query.value).split(/\s+/).filter(Boolean)
+  if (!terms.length) return SECTIONS
+  return SECTIONS.map((s) => ({ ...s, items: s.items.filter((c) => matches(c, terms)) })).filter((s) => s.items.length)
+})
+
+const visibleCategories = computed(() => visibleSections.value.flatMap((s) => s.items))
+
+// a categoria ativa some do filtro → pula pra primeira que bate
+watch(visibleCategories, (list) => {
+  if (list.length && !list.some((c) => c.id === settingsActiveCategory.value)) {
+    settingsActiveCategory.value = list[0].id
+  }
+})
+
+function selectFirstMatch() {
+  if (visibleCategories.value.length) selectCategory(visibleCategories.value[0].id)
+}
+
+function clearSearch() {
+  query.value = ''
+  searchInput.value?.focus()
+}
+
+function focusNav() {
+  navRef.value?.querySelector('.nav-item.active, .nav-item')?.focus()
+}
+
+// --- categoria ativa (mora no themeStore, dá pra abrir direto numa aba de fora)
+const activeId = computed(() =>
+  ALL_CATEGORIES.some((c) => c.id === settingsActiveCategory.value) ? settingsActiveCategory.value : ALL_CATEGORIES[0].id
+)
+const activeCategory = computed(() => ALL_CATEGORIES.find((c) => c.id === activeId.value))
 
 function selectCategory(id) {
   settingsActiveCategory.value = id
 }
 
-// --- aba Duxi: lista os modelos do Ollama configurado pra escolher
-const duxiModels = ref([])
-const duxiModelsStatus = ref('idle') // idle | checking | ready | error
+watch(activeId, () => {
+  if (panelRef.value) panelRef.value.scrollTop = 0
+})
 
-async function refreshDuxiModels() {
-  const host = (duxiConfig.value.host || '').trim().replace(/\/+$/, '')
-  if (!host) return
-  duxiModelsStatus.value = 'checking'
-  try {
-    const { api, models } = await listModels(host, (duxiConfig.value.token || '').trim())
-    duxiModels.value = models
-    duxiModelsStatus.value = 'ready'
-    updateDuxiConfig({ api })
-    if (!duxiConfig.value.model && models.length) {
-      updateDuxiConfig({ model: models.includes('qwen3:8b') ? 'qwen3:8b' : models[0] })
-    }
-  } catch (err) {
-    console.error('[duxi] falha ao listar modelos', err)
-    duxiModels.value = []
-    duxiModelsStatus.value = 'error'
-  }
-}
+// --- largura (abre pela esquerda; handle na borda direita)
+const { width, resizing, showTip, startResize, handleTipEnter, handleTipLeave } = useSidebarResize({
+  defaultWidth: 560,
+  minWidth: 380,
+  maxWidth: 900,
+  storageKey: 'dux-settings-sidebar-width'
+})
 
-function onDuxiHostChange(value) {
-  updateDuxiConfig({ host: value.trim().replace(/\/+$/, '') })
-  refreshDuxiModels()
-}
+// estreito demais pra navegação com rótulos: vira trilho só de ícones
+const isCompact = computed(() => width.value < 500)
 
-function onDuxiTokenChange(value) {
-  updateDuxiConfig({ token: value.trim() })
-  refreshDuxiModels()
-}
-
-watch(
-  () => settingsSidebarOpen.value && activeCategory.value === 'duxi',
-  (showing) => {
-    if (showing) refreshDuxiModels()
-  },
-  { immediate: true }
-)
-
-watch(
-  () => settingsSidebarOpen.value && activeCategory.value === 'voice',
-  (showing) => {
-    if (showing) refreshMicrophoneList()
-  },
-  { immediate: true }
-)
 const version = window.appInfo?.version ?? '0.0.0'
 
-const testStatusLabel = computed(() => {
-  if (isDownloadingVoice.value) return 'Baixando voz (só na primeira vez)...'
-  if (isSpeaking.value) return 'Falando...'
-  return 'Testar voz selecionada'
-})
-
-const testDisabled = computed(() => isSpeaking.value || isDownloadingVoice.value)
-
-function testVoice() {
-  speak('Olá! Esta é a voz que vai ler as respostas do agente pra você.', { forceSpeak: true })
-}
-
-function testNotificationSound() {
-  playNotificationSound({ force: true })
-}
-
-// pontos de exemplo (grid 3x3) reaproveitados nos previews de "Pontos" e
-// "Cruzes" — só muda o que é desenhado em cada ponto (círculo vs. +)
-const DOT_PREVIEW_POINTS = [
-  [12, 12],
-  [24, 12],
-  [36, 12],
-  [12, 24],
-  [24, 24],
-  [36, 24],
-  [12, 36],
-  [24, 36],
-  [36, 36]
-]
-
-const EDGE_PREVIEW_PATHS = {
-  default: 'M6 8 C 30 8, 34 24, 58 24',
-  smoothstep: 'M6 8 H32 Q36 8 36 12 V20 Q36 24 40 24 H58',
-  step: 'M6 8 H32 V24 H58',
-  straight: 'M6 8 L58 24'
-}
-
-const { width, resizing, showTip, startResize, handleTipEnter, handleTipLeave } = useSidebarResize({
-  defaultWidth: 280,
-  minWidth: 240,
-  maxWidth: 420,
-  invert: true
-})
+// --- teclado
+const rootRef = ref(null)
 
 function onKeydown(event) {
   if (event.ctrlKey && event.key === ',') {
     event.preventDefault()
     event.stopPropagation()
-    closeSettings()
-  } else if (event.key === 'Escape' && settingsSidebarOpen.value) {
-    closeSettings()
+    const opening = !settingsSidebarOpen.value
+    toggleSettings()
+    if (opening) nextTick(() => searchInput.value?.focus())
+    return
   }
+
+  if (event.key !== 'Escape' || !settingsSidebarOpen.value) return
+  const target = event.target
+  const insideSidebar = rootRef.value?.contains(target)
+  // Esc num terminal (o Claude Code usa pra interromper) ou em qualquer coisa
+  // fora do painel não é pra fechar as configurações
+  if (!insideSidebar && target !== document.body) return
+
+  if (target === searchInput.value && query.value) {
+    query.value = ''
+    return
+  }
+  // outro campo do painel: o próprio campo trata o Esc (cancelar renomear etc.)
+  if (insideSidebar && target !== searchInput.value && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return
+  closeSettings()
 }
 
 onMounted(() => window.addEventListener('keydown', onKeydown, { capture: true }))
@@ -753,16 +334,20 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.sidebar {
+.settings-sidebar {
   position: relative;
   flex-shrink: 0;
   overflow: visible;
   background: var(--color-bg-surface-alt);
-  border-left: 1px solid var(--color-border);
-  transition: width 0.16s ease;
+  border-right: 1px solid var(--color-border);
+  transition: width 0.18s ease;
 }
 
-.sidebar.resizing {
+.settings-sidebar:not(.open) {
+  border-right: none;
+}
+
+.settings-sidebar.resizing {
   transition: none;
 }
 
@@ -770,23 +355,28 @@ onBeforeUnmount(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  box-sizing: border-box;
   overflow: hidden;
 }
 
+/* ---- header */
 .sidebar-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 10px;
   flex-shrink: 0;
-  height: 40px;
-  padding: 0 8px 0 14px;
+  padding: 12px 12px 12px 16px;
   border-bottom: 1px solid var(--color-border);
 }
 
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .sidebar-title {
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 650;
   color: var(--color-text-primary);
 }
 
@@ -794,11 +384,11 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
@@ -809,18 +399,55 @@ onBeforeUnmount(() => {
   color: var(--color-text-primary);
 }
 
-.sidebar-footer {
-  flex-shrink: 0;
-  padding: 8px 14px;
-  border-top: 1px solid var(--color-border);
-  text-align: right;
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  margin-right: 4px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-tertiary);
+  cursor: text;
 }
 
-.sidebar-version {
-  font-size: 10px;
+.search:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.15);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.search-input::placeholder {
   color: var(--color-text-tertiary);
 }
 
+.search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+/* ---- corpo: navegação + painel */
 .sidebar-main {
   flex: 1;
   min-height: 0;
@@ -828,19 +455,15 @@ onBeforeUnmount(() => {
 }
 
 .category-nav {
-  flex-shrink: 0;
-  width: 42px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 6px;
-  border-left: 1px solid var(--color-border);
+  flex-shrink: 0;
+  gap: 1px;
+  width: 184px;
+  padding: 10px 8px;
+  border-right: 1px solid var(--color-border);
   overflow-x: hidden;
   overflow-y: auto;
-  /* a scrollbar vertical (janela baixa) comia largura da coluna estreita e
-     os botões de 30px passavam a transbordar na horizontal — rola com a
-     roda do mouse, sem barra visível */
   scrollbar-width: none;
 }
 
@@ -848,382 +471,176 @@ onBeforeUnmount(() => {
   display: none;
 }
 
-.category-btn {
+.nav-section {
+  padding: 12px 10px 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
+}
+
+.nav-section:first-child {
+  padding-top: 4px;
+}
+
+.nav-item {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
+  gap: 10px;
+  height: 32px;
   flex-shrink: 0;
+  padding: 0 10px;
   border: none;
   border-radius: 7px;
   background: transparent;
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
+  font-size: 12.5px;
+  text-align: left;
   cursor: pointer;
 }
 
-.category-btn:hover {
+.nav-item:hover {
   background: var(--color-hover);
   color: var(--color-text-primary);
 }
 
-.category-btn.active {
+.nav-item:focus-visible {
+  outline: 2px solid rgb(59 130 246 / 0.5);
+  outline-offset: -2px;
+}
+
+.nav-item.active {
   background: rgb(59 130 246 / 0.14);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.nav-item.active .nav-icon {
   color: #3b82f6;
 }
 
-.category-icon {
+.nav-icon {
   flex-shrink: 0;
+}
+
+.nav-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-alert {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #d97706;
+}
+
+.nav-empty {
+  margin: 8px 10px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--color-text-tertiary);
+}
+
+.sidebar-version {
+  margin-top: auto;
+  padding: 12px 10px 2px;
+  font-size: 10.5px;
+  color: var(--color-text-tertiary);
+}
+
+/* trilho só de ícones quando o painel está estreito */
+.compact .category-nav {
+  width: 52px;
+  align-items: center;
+}
+
+.compact .nav-section {
+  width: 24px;
+  height: 1px;
+  margin: 8px 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-border-strong);
+  color: transparent;
+}
+
+.compact .nav-section:first-child {
+  display: none;
+}
+
+.compact .nav-item {
+  justify-content: center;
+  width: 36px;
+  padding: 0;
+}
+
+.compact .nav-label,
+.compact .nav-empty,
+.compact .sidebar-version {
+  display: none;
+}
+
+.compact .nav-alert {
+  position: absolute;
+  top: 6px;
+  right: 6px;
 }
 
 .category-panel {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  padding: 16px;
+  padding: 20px 20px 28px;
 }
 
-.settings-section {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.panel-heading {
+  margin-bottom: 20px;
 }
 
-.setting-divider {
-  height: 1px;
-  margin: 4px 0;
-  background: var(--color-border);
-}
-
-.subsection-title {
-  margin: 0 0 -4px;
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-tertiary);
-}
-
-.setting-row {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 7px;
-}
-
-.setting-label {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-}
-
-.select-input {
-  width: 100%;
-  height: 28px;
-  padding: 0 8px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 6px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  font-size: 11.5px;
-  cursor: pointer;
-  box-sizing: border-box;
-}
-
-/* campos de texto da aba Duxi — mesmo visual do .select-input */
-.text-input {
-  width: 100%;
-  height: 28px;
-  padding: 0 8px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 6px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  font-size: 11.5px;
-  font-family: inherit;
-  box-sizing: border-box;
-}
-
-.text-area {
-  height: auto;
-  padding: 6px 8px;
-  line-height: 1.45;
-  resize: vertical;
-}
-
-.select-input:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.setting-hint {
+.panel-title {
   margin: 0;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--color-text-tertiary);
-}
-
-.setting-error {
-  color: #ef4444;
-}
-
-.segmented {
-  display: flex;
-  padding: 2px;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 7px;
-}
-
-.segmented-btn {
-  flex: 1;
-  height: 26px;
-  padding: 0 8px;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 11.5px;
-  cursor: pointer;
-}
-
-.segmented-btn:hover {
+  font-size: 17px;
+  font-weight: 650;
   color: var(--color-text-primary);
 }
 
-.segmented-btn.active {
-  background: #3b82f6;
-  color: #fff;
-}
-
-.action-btn {
-  width: 100%;
-  height: 30px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 7px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
+.panel-description {
+  margin: 4px 0 0;
   font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.color-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.color-swatch {
-  position: relative;
-  display: flex;
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  border: 1px solid var(--color-border-strong);
-  overflow: hidden;
-  cursor: pointer;
-}
-
-.color-input {
-  position: absolute;
-  inset: -4px;
-  width: calc(100% + 8px);
-  height: calc(100% + 8px);
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  opacity: 0;
-}
-
-.reset-color-btn {
-  width: auto;
-  flex: 1;
-  height: 28px;
-  font-size: 11.5px;
-  font-weight: 500;
-}
-
-.reset-color-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.range-input {
-  width: 100%;
-  accent-color: #3b82f6;
-}
-
-.action-btn:hover:not(:disabled) {
-  background: var(--color-hover);
-}
-
-.action-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.action-btn.primary {
-  background: #3b82f6;
-  border-color: #3b82f6;
-  color: #fff;
-}
-
-.action-btn.primary:hover {
-  background: #2f6fdb;
-}
-
-.account-profile {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.account-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-}
-
-.account-avatar-fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #3b82f6;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.account-info {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  flex: 1;
-}
-
-.account-name {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.account-email {
-  font-size: 11px;
+  line-height: 1.5;
   color: var(--color-text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.edge-style-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.bg-variant-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.bg-variant-btn {
+.panel-body {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 4px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 8px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-secondary);
-  cursor: pointer;
+  gap: 22px;
 }
 
-.bg-variant-btn:hover {
-  color: var(--color-text-primary);
-  background: var(--color-hover);
-}
-
-.bg-variant-btn.active {
-  border-color: #3b82f6;
-  color: #3b82f6;
-  background: rgb(59 130 246 / 0.08);
-}
-
-.bg-variant-preview {
-  color: inherit;
-}
-
-.bg-variant-label {
-  font-size: 10px;
-  color: var(--color-text-secondary);
-  text-align: center;
-}
-
-.bg-variant-btn.active .bg-variant-label {
-  color: #3b82f6;
-}
-
-.edge-style-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 8px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 8px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-
-.edge-style-btn:hover {
-  color: var(--color-text-primary);
-  background: var(--color-hover);
-}
-
-.edge-style-btn.active {
-  border-color: #3b82f6;
-  color: #3b82f6;
-  background: rgb(59 130 246 / 0.08);
-}
-
-.edge-style-preview {
-  color: inherit;
-}
-
-.edge-style-label {
-  font-size: 11px;
-  color: var(--color-text-secondary);
-}
-
-.edge-style-btn.active .edge-style-label {
-  color: #3b82f6;
-}
-
+/* ---- resize (borda direita) */
 .resize-handle {
   position: absolute;
   top: 0;
-  left: -3px;
+  right: -3px;
   width: 6px;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: col-resize;
-  z-index: 1;
+  z-index: 2;
 }
 
 .resize-grip {
   position: relative;
-  left: 3px;
+  right: 3px;
   width: 3px;
   height: 35px;
   border-radius: 4px;
@@ -1231,7 +648,7 @@ onBeforeUnmount(() => {
 }
 
 .resize-handle:hover .resize-grip,
-.sidebar.resizing .resize-grip {
+.settings-sidebar.resizing .resize-grip {
   background: rgba(255, 255, 255, 0.35);
 }
 
@@ -1247,7 +664,7 @@ onBeforeUnmount(() => {
 
 .resize-tooltip {
   position: absolute;
-  right: 14px;
+  left: 14px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
@@ -1283,5 +700,146 @@ onBeforeUnmount(() => {
   font-family: inherit;
   font-size: 10.5px;
   color: var(--color-text-primary);
+}
+</style>
+
+<!-- Controles de formulário compartilhados por todos os painéis em
+components/settings/ — sem scoped de propósito (escopados pelo
+.settings-sidebar), pra cada painel novo não ter que redefinir input/botão. -->
+<style>
+.settings-sidebar .st-input,
+.settings-sidebar .st-select {
+  width: 100%;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 7px;
+  background: var(--color-bg-surface-alt);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.settings-sidebar .st-select {
+  width: auto;
+  min-width: 140px;
+  max-width: 220px;
+  cursor: pointer;
+}
+
+.settings-sidebar .st-input:focus,
+.settings-sidebar .st-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.15);
+}
+
+.settings-sidebar .st-select:disabled,
+.settings-sidebar .st-input:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.settings-sidebar .st-textarea {
+  height: auto;
+  padding: 8px 9px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.settings-sidebar .st-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 7px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.settings-sidebar .st-btn:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+.settings-sidebar .st-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.settings-sidebar .st-btn--primary {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #fff;
+}
+
+.settings-sidebar .st-btn--primary:hover:not(:disabled) {
+  background: #2f6fdb;
+}
+
+.settings-sidebar .st-btn--danger {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
+}
+
+.settings-sidebar .st-btn--danger:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.settings-sidebar .st-btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.settings-sidebar .st-btn--small {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 11.5px;
+}
+
+.settings-sidebar .st-btn--icon {
+  width: 30px;
+  padding: 0;
+}
+
+.settings-sidebar .st-range {
+  width: 100%;
+  accent-color: #3b82f6;
+}
+
+.settings-sidebar .st-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--color-text-tertiary);
+}
+
+.settings-sidebar .st-note {
+  margin: 0;
+  padding: 10px 14px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
+}
+
+.settings-sidebar .st-note--error,
+.settings-sidebar .st-error-text {
+  color: #ef4444;
+}
+
+.settings-sidebar .st-error-text {
+  margin: 0;
+  font-size: 11.5px;
 }
 </style>

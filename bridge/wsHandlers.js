@@ -8,6 +8,7 @@ const noteLink = require('./noteLink')
 const duxbanLink = require('./duxbanLink')
 const claudeUsage = require('./claudeUsage')
 const claudeAccountUsage = require('./claudeAccountUsage')
+const claudeProfiles = require('./claudeProfiles')
 const { resolveCwd, isDirectory, isFile, listSubdirectories, listDirEntries } = require('./fsHelpers')
 const { getGitInfo } = require('./gitStatus')
 const { listContainers, containerAction, containerLogs } = require('./dockerStatus')
@@ -127,6 +128,7 @@ function createConnectionHandler({ agentPort }) {
         // (~/.claude/projects/**) — Codex e os shells simples não têm nada
         // equivalente, então o indicador flutuante de uso não se aplica a eles.
         let isClaudeCommand = false
+        let claudeProfile = null
 
         try {
           if (msg.command === 'shell') {
@@ -192,6 +194,9 @@ function createConnectionHandler({ agentPort }) {
           } else {
             const command = ALLOWED_COMMANDS[msg.command] || ALLOWED_COMMANDS.claude
             isClaudeCommand = command === 'claude'
+            // perfil de conta (ver claudeProfiles.js) — só Claude Code entende
+            // CLAUDE_CONFIG_DIR; id desconhecido cai no perfil padrão
+            claudeProfile = isClaudeCommand ? claudeProfiles.resolveProfile(msg.claudeProfileId) : null
 
             // Só o Claude Code entende --mcp-config (Codex tem seu próprio
             // mecanismo de MCP, tratado à parte se algum dia precisar). O JSON
@@ -225,7 +230,8 @@ function createConnectionHandler({ agentPort }) {
               env: buildAgentEnv({
                 PATH: `${BIN_DIR}${path.delimiter}${process.env.PATH}`,
                 DUX_SESSION_ID: sessionId || '',
-                DUX_AGENT_PORT: String(agentPort)
+                DUX_AGENT_PORT: String(agentPort),
+                ...(claudeProfile ? claudeProfiles.envFor(claudeProfile.id) : {})
               })
             })
           }
@@ -244,6 +250,7 @@ function createConnectionHandler({ agentPort }) {
         if (sessionId && isClaudeCommand) {
           claudeUsage.startWatch(sessionId, {
             cwd,
+            configDir: claudeProfile?.configDir,
             onUsage: (info) => {
               if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'claudeUsage', ...info }))
@@ -294,6 +301,32 @@ function createConnectionHandler({ agentPort }) {
         claudeAccountUsage.subscribe(ws)
       } else if (msg.type === 'unwatchAccountUsage') {
         claudeAccountUsage.unsubscribe(ws)
+      } else if (msg.type === 'refreshAccountUsage') {
+        claudeAccountUsage.refresh(msg.profileId || claudeProfiles.DEFAULT_PROFILE_ID)
+      } else if (
+        msg.type === 'claudeProfileCreate' ||
+        msg.type === 'claudeProfileRename' ||
+        msg.type === 'claudeProfileDelete'
+      ) {
+        // A lista nova chega pra todo mundo via broadcast 'claudeProfiles'
+        // (profilesChanged); a resposta aqui é só pra quem pediu saber se deu
+        // certo e, no create, qual id nasceu.
+        try {
+          let profileId = msg.id || null
+          if (msg.type === 'claudeProfileCreate') {
+            profileId = claudeProfiles.createProfile({ name: msg.name, shareConfig: msg.shareConfig !== false })
+          } else if (msg.type === 'claudeProfileRename') {
+            claudeProfiles.renameProfile({ id: msg.id, name: msg.name })
+          } else {
+            claudeProfiles.deleteProfile({ id: msg.id })
+          }
+          claudeAccountUsage.profilesChanged()
+          ws.send(JSON.stringify({ type: 'claudeProfileResult', requestId: msg.requestId, ok: true, profileId }))
+        } catch (err) {
+          ws.send(
+            JSON.stringify({ type: 'claudeProfileResult', requestId: msg.requestId, ok: false, error: err.message })
+          )
+        }
       } else if (msg.type === 'checkPath') {
         const resolved = resolveCwd(msg.path)
         const valid = isDirectory(resolved)

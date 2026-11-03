@@ -2,8 +2,10 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
-const HOME = os.homedir()
-const PROJECTS_DIR = path.join(HOME, '.claude', 'projects')
+// pasta de config do perfil padrão — terminais em outro perfil (ver
+// claudeProfiles.js) passam a própria configDir no startWatch, já que a CLI
+// grava os transcripts dentro de $CLAUDE_CONFIG_DIR/projects
+const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.claude')
 
 const POLL_MS = 3000
 // Lê só a cauda do arquivo em vez do arquivo inteiro — transcripts de sessões
@@ -32,11 +34,11 @@ function encodeProjectDir(cwd) {
   return cwd.replace(/[^a-zA-Z0-9]/g, '-')
 }
 
-function projectDirFor(cwd) {
-  return path.join(PROJECTS_DIR, encodeProjectDir(cwd))
+function projectDirFor(configDir, cwd) {
+  return path.join(configDir, 'projects', encodeProjectDir(cwd))
 }
 
-// sessionId (do DUX) -> { timer, cwd, startedAt, lastFile, lastMtimeMs, lastPercent }
+// sessionId (do DUX) -> { timer, cwd, configDir, startedAt, lastFile, lastMtimeMs, lastPercent }
 const watches = new Map()
 
 function newestTranscript(dir, notBeforeMs) {
@@ -132,7 +134,7 @@ function tick(sessionId) {
   if (!watch) return
 
   if (!watch.lastFile) {
-    const found = newestTranscript(projectDirFor(watch.cwd), watch.startedAt - POLL_MS)
+    const found = newestTranscript(projectDirFor(watch.configDir, watch.cwd), watch.startedAt - POLL_MS)
     if (found) watch.lastFile = found.file
   }
   if (!watch.lastFile) return
@@ -153,10 +155,11 @@ function tick(sessionId) {
   watch.onUsage(info)
 }
 
-function startWatch(sessionId, { cwd, onUsage }) {
+function startWatch(sessionId, { cwd, configDir, onUsage }) {
   stopWatch(sessionId)
   const watch = {
     cwd,
+    configDir: configDir || DEFAULT_CONFIG_DIR,
     startedAt: Date.now(),
     lastFile: null,
     lastMtimeMs: null,

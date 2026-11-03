@@ -189,8 +189,14 @@ export function setSnapEnabled(value) {
 // pra empurrar o layout do canvas em vez de sobrepor como overlay.
 export const settingsSidebarOpen = ref(false)
 // aba ativa da sidebar — global pra dar pra abrir direto numa aba específica
-// de fora dela (ex: botão direito na Duxi abre em 'duxi')
-export const settingsActiveCategory = ref('account')
+// de fora dela (ex: botão direito na Duxi abre em 'duxi'); lembrada entre
+// sessões pra reabrir onde parou
+const SETTINGS_CATEGORY_STORAGE_KEY = 'dux-settings-category'
+export const settingsActiveCategory = ref(localStorage.getItem(SETTINGS_CATEGORY_STORAGE_KEY) || 'account')
+
+watchEffect(() => {
+  localStorage.setItem(SETTINGS_CATEGORY_STORAGE_KEY, settingsActiveCategory.value)
+})
 
 export function openSettings(category) {
   if (category) settingsActiveCategory.value = category

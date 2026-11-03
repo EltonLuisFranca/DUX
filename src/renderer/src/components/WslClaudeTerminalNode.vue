@@ -11,6 +11,7 @@
       <svg viewBox="0 0 20 20" width="12" height="12" v-html="TERMINAL_ICON"></svg>
     </template>
     <template #headerActions>
+      <ClaudeProfileChip v-if="isClaudeNode" :profile-id="data.claudeProfileId" @change="switchProfile" />
       <span v-if="connectedPeers.length" class="peer-count" :title="connectedPeers.map((a) => a.name).join(', ')">
         {{ connectedPeers.length }} agente{{ connectedPeers.length === 1 ? '' : 's' }}
       </span>
@@ -33,6 +34,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import NodeShell from './NodeShell.vue'
+import ClaudeProfileChip from './ClaudeProfileChip.vue'
 import { TERMINAL_ICON } from '../nodeTypes/nodeIcons'
 import { FitAddon } from '@xterm/addon-fit'
 import { useVueFlow } from '@vue-flow/core'
@@ -57,12 +59,22 @@ import {
 } from '../lib/duxbanOps'
 import { speak, ttsEnabled } from '../store/ttsStore'
 import { playNotificationSound } from '../store/notificationSoundStore'
+import { resolveClaudeProfile } from '../store/claudeProfilesStore'
 
 const props = defineProps({
   id: { type: String, required: true },
+  type: { type: String, default: '' },
   data: { type: Object, required: true },
   selected: { type: Boolean, default: false }
 })
+
+// Só os terminais de Claude Code têm perfil de conta (CLAUDE_CONFIG_DIR, ver
+// bridge/claudeProfiles.js) — Codex e shells puros ignoram o campo.
+const isClaudeNode = computed(() => props.type === 'wsl-claude-terminal' || props.type === 'claude-terminal')
+
+function switchProfile(profileId) {
+  updateNodeData(props.id, { claudeProfileId: profileId })
+}
 
 const { getConnectedEdges, findNode } = useVueFlow()
 
@@ -116,6 +128,7 @@ let retryTimer = null
 let stopThemeWatch = null
 let stopCwdWatch = null
 let stopNameWatch = null
+let stopProfileWatch = null
 let renameDebounceTimer = null
 
 // Não existe hoje nenhum sinal explícito de "o agente terminou de responder"
@@ -203,6 +216,7 @@ function connect() {
         name: props.data.name,
         cwd: props.data.cwd,
         command: props.data.command,
+        claudeProfileId: props.data.claudeProfileId || null,
         cols: term.cols,
         rows: term.rows
       })
@@ -484,6 +498,21 @@ onMounted(async () => {
       connect()
     }
   )
+
+  // mesma ideia do cwd: a conta é fixada quando o pty nasce (env
+  // CLAUDE_CONFIG_DIR), então trocar o perfil = reabrir a sessão
+  stopProfileWatch = watch(
+    () => props.data.claudeProfileId,
+    (profileId) => {
+      if (!isClaudeNode.value) return
+      disconnect()
+      term.clear()
+      const name = resolveClaudeProfile(profileId)?.name
+      term.write(`[reiniciando sessão na conta ${name ? `"${name}"` : 'padrão'}...]\r\n`)
+      resetUsage()
+      connect()
+    }
+  )
 })
 
 onBeforeUnmount(() => {
@@ -494,6 +523,7 @@ onBeforeUnmount(() => {
   stopThemeWatch?.()
   stopCwdWatch?.()
   stopNameWatch?.()
+  stopProfileWatch?.()
   disconnect()
   term?.dispose()
 })

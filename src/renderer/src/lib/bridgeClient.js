@@ -409,29 +409,31 @@ export function watchNote(path, onChange) {
   }
 }
 
-// Limite de uso do plano Claude Pro/Max (sessão de 5h + semana), o mesmo que
-// o /usage da CLI mostra — é da conta inteira, não de um terminal específico,
-// então (diferente das outras funções deste módulo) essa conexão é pra durar
-// a vida inteira do app: quem chama guarda o unsubscribe só pra fechar junto
-// com o processo, não a cada troca de tela.
-export function watchAccountUsage(onUpdate) {
+// Perfis de conta do Claude Code + limite de uso do plano (sessão de 5h +
+// semana, o mesmo que o /usage da CLI mostra) de cada um — é estado das
+// contas, não de um terminal específico, então (diferente das outras funções
+// deste módulo) essa conexão é pra durar a vida inteira do app e também
+// carrega os pedidos de criar/renomear/apagar perfil (ver
+// bridge/claudeAccountUsage.js e claudeProfiles.js).
+//
+// onMessage recebe 'claudeProfiles' (lista inteira), 'accountUsageUpdate'
+// (um perfil) e 'claudeProfileResult' (resposta de um pedido). send() devolve
+// false se o bridge ainda não está conectado.
+export function watchClaudeAccounts(onMessage) {
   let ws = null
   let retryTimer = null
 
   // No Windows o bridge sobe dentro do WSL (wsl.exe + shell de login + nvm,
   // ver startBridge() em src/main/index.js) — bem mais lento que o spawn
   // direto de node usado no Linux nativo. Essa conexão abre uma única vez, no
-  // boot do app (accountUsageStore.js é singleton de módulo), então sem
+  // boot do app (claudeProfilesStore.js é singleton de módulo), então sem
   // retry a primeira tentativa perde a corrida contra o bridge ainda
   // subindo e o indicador some pro resto da sessão — mesmo reconnect do `ws`
   // do terminal em WslClaudeTerminalNode.vue.
   function connect() {
     ws = new WebSocket(BRIDGE_URL)
     ws.onopen = () => ws.send(JSON.stringify({ type: 'watchAccountUsage' }))
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data)
-      if (msg.type === 'accountUsageUpdate') onUpdate(msg)
-    }
+    ws.onmessage = (event) => onMessage(JSON.parse(event.data))
     ws.onclose = () => {
       retryTimer = setTimeout(connect, 1500)
     }
@@ -440,12 +442,19 @@ export function watchAccountUsage(onUpdate) {
 
   connect()
 
-  return () => {
-    clearTimeout(retryTimer)
-    if (ws) {
-      ws.onclose = null
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'unwatchAccountUsage' }))
-      ws.close()
+  return {
+    send(message) {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return false
+      ws.send(JSON.stringify(message))
+      return true
+    },
+    close() {
+      clearTimeout(retryTimer)
+      if (ws) {
+        ws.onclose = null
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'unwatchAccountUsage' }))
+        ws.close()
+      }
     }
   }
 }

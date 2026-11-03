@@ -10,6 +10,24 @@
     />
   </div>
 
+  <div v-if="isClaude" class="field">
+    <label class="field-label" for="node-profile">Conta Claude</label>
+    <select
+      id="node-profile"
+      class="field-input"
+      :value="currentProfileId"
+      @change="updateNodeData(node.id, { claudeProfileId: $event.target.value })"
+    >
+      <option v-for="p in claudeProfiles" :key="p.id" :value="p.id">
+        {{ p.name }}{{ p.email ? ` — ${p.email}` : p.loggedIn ? '' : ' (sem login)' }}
+      </option>
+    </select>
+    <p class="status">
+      Trocar reinicia a sessão.
+      <button class="link-btn" @click="openSettings('claude')">Gerenciar contas</button>
+    </p>
+  </div>
+
   <div class="field">
     <label class="field-label" for="node-cwd">{{ wslMode ? 'Diretório (WSL)' : 'Diretório' }}</label>
     <div class="path-field">
@@ -68,11 +86,16 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { updateNodeData } from '../../store/flowStore'
 import { checkWslPath } from '../../lib/bridgeClient'
+import { claudeProfiles, resolveClaudeProfile } from '../../store/claudeProfilesStore'
+import { openSettings } from '../../store/themeStore'
 
 const props = defineProps({
   node: { type: Object, required: true },
   wslMode: { type: Boolean, default: false }
 })
+
+const isClaude = computed(() => props.node.type === 'wsl-claude-terminal' || props.node.type === 'claude-terminal')
+const currentProfileId = computed(() => resolveClaudeProfile(props.node.data.claudeProfileId)?.id)
 
 const cwdDraft = ref(props.node.data.cwd)
 const cwdStatus = ref('idle')
@@ -273,6 +296,23 @@ validate()
 
 .status.valid {
   color: #4ade80;
+}
+
+select.field-input {
+  cursor: pointer;
+}
+
+.link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #3b82f6;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
 }
 
 .btn-primary {

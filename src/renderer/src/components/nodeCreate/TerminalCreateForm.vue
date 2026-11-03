@@ -55,6 +55,15 @@
       <span v-else-if="status === 'valid'">{{ resolvedPath }}</span>
     </p>
 
+    <template v-if="isClaude && hasMultipleProfiles">
+      <label class="field-label" for="new-node-profile">Conta Claude</label>
+      <select id="new-node-profile" v-model="profileId" class="field-input">
+        <option v-for="p in claudeProfiles" :key="p.id" :value="p.id">
+          {{ p.name }}{{ p.email ? ` — ${p.email}` : p.loggedIn ? '' : ' (sem login)' }}
+        </option>
+      </select>
+    </template>
+
     <button class="btn-primary" :disabled="status !== 'valid'" @click="submit">Criar</button>
   </div>
 </template>
@@ -62,6 +71,7 @@
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { checkWslPath } from '../../lib/bridgeClient'
+import { DEFAULT_PROFILE_ID, claudeProfiles, hasMultipleProfiles } from '../../store/claudeProfilesStore'
 
 const props = defineProps({
   wslMode: { type: Boolean, default: false },
@@ -69,6 +79,10 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['submit', 'cancel'])
+
+// sem command = node "Terminal WSL · Claude Code" (o bridge cai no claude)
+const isClaude = computed(() => !props.command || props.command === 'claude')
+const profileId = ref(DEFAULT_PROFILE_ID)
 
 const path = ref('~')
 const status = ref('idle')
@@ -174,6 +188,7 @@ function submit() {
   if (status.value !== 'valid') return
   const payload = { name: 'Novo terminal', cwd: path.value }
   if (props.command) payload.command = props.command
+  if (isClaude.value && profileId.value !== DEFAULT_PROFILE_ID) payload.claudeProfileId = profileId.value
   emit('submit', payload)
 }
 

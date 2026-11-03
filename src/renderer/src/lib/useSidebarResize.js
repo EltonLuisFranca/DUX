@@ -2,10 +2,12 @@ import { onBeforeUnmount, ref } from 'vue'
 
 // Lógica de resize por arraste compartilhada pelas sidebars. NodeSettingsSidebar
 // abre pela esquerda com o handle na borda direita (arrastar pra direita aumenta
-// a largura); SettingsSidebar abre pela direita com o handle na borda esquerda
-// (arrastar pra esquerda aumenta a largura) — por isso `invert` inverte o sinal do dx.
-export function useSidebarResize({ defaultWidth, minWidth, maxWidth, invert = false }) {
-  const width = ref(defaultWidth)
+// a largura); uma sidebar aberta pela direita (handle na borda esquerda,
+// arrastar pra esquerda aumenta) passa `invert` pra inverter o sinal do dx.
+// `storageKey` (opcional) lembra a largura entre sessões.
+export function useSidebarResize({ defaultWidth, minWidth, maxWidth, invert = false, storageKey = null }) {
+  const stored = storageKey ? Number(localStorage.getItem(storageKey)) : NaN
+  const width = ref(Number.isFinite(stored) && stored > 0 ? Math.min(maxWidth, Math.max(minWidth, stored)) : defaultWidth)
   const resizing = ref(false)
   const showTip = ref(false)
   let startX = 0
@@ -30,6 +32,7 @@ export function useSidebarResize({ defaultWidth, minWidth, maxWidth, invert = fa
   }
 
   function stopResize() {
+    if (resizing.value && storageKey) localStorage.setItem(storageKey, String(width.value))
     resizing.value = false
     window.removeEventListener('mousemove', onResizeMove)
     window.removeEventListener('mouseup', stopResize)
