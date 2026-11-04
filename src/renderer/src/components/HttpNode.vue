@@ -291,7 +291,7 @@ async function send() {
 }
 
 .method-select.get {
-  color: #3b82f6;
+  color: var(--color-accent);
 }
 
 .method-select.post {
@@ -334,7 +334,7 @@ async function send() {
   flex-shrink: 0;
   border: none;
   border-radius: 6px;
-  background: #3b82f6;
+  background: var(--color-accent);
   color: #fff;
   cursor: pointer;
 }

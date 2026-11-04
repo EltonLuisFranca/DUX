@@ -663,7 +663,7 @@ onBeforeUnmount(() => {
 }
 
 .btn-primary {
-  background: #3b82f6;
+  background: var(--color-accent);
   color: #fff;
 }
 
@@ -725,7 +725,7 @@ onBeforeUnmount(() => {
 
 .progress-fill {
   height: 100%;
-  background: #3b82f6;
+  background: var(--color-accent);
   transition: width 0.15s ease;
 }
 

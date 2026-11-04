@@ -3,11 +3,6 @@
     <div class="dock-surface" :style="dockMaskStyle" />
 
     <div class="toolbar-row">
-      <WorkspaceSwitcher />
-
-
-      <span class="toolbar-divider" />
-
       <AppTooltip label="Diminuir zoom">
         <button class="zoom-btn" @click="handleZoomOut">
           <svg viewBox="0 0 16 16" width="14" height="14">
@@ -49,11 +44,11 @@
       <span class="toolbar-divider" />
 
       <AppTooltip label="Adicionar node" shortcut="Ctrl+N">
-        <button class="zoom-btn" @click="openAddNodeModal">
-          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2.5" y="2.5" width="11" height="11" rx="2.5" />
-            <path d="M8 5.5v5M5.5 8h5" />
+        <button class="add-node-btn" @click="openAddNodeModal">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3v10M3 8h10" />
           </svg>
+          <span class="add-node-label">Adicionar</span>
         </button>
       </AppTooltip>
 
@@ -73,7 +68,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useVueFlow } from '@vue-flow/core'
-import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
 import AppTooltip from './AppTooltip.vue'
 import { openAddNodeModal } from '../store/flowStore'
 
@@ -206,18 +200,6 @@ onBeforeUnmount(() => {
   padding: 8px;
 }
 
-:deep(.workspace-switcher) {
-  position: relative;
-  z-index: 1;
-}
-
-:deep(.workspace-switcher .zoom-btn) {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: #000;
-}
-
 .zoom-btn {
   display: flex;
   align-items: center;
@@ -233,6 +215,32 @@ onBeforeUnmount(() => {
 
 .zoom-btn:hover {
   background: var(--color-hover);
+}
+
+.add-node-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 12px 0 10px;
+  margin-left: 2px;
+  border: none;
+  border-radius: 9px;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.1s ease;
+}
+
+.add-node-btn:hover {
+  filter: brightness(1.08);
+}
+
+.add-node-label {
+  white-space: nowrap;
 }
 
 .toolbar-divider {

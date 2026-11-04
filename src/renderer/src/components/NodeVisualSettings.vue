@@ -12,7 +12,7 @@
         @click="setColor(color)"
       />
       <label class="swatch custom-swatch" title="Cor customizada">
-        <input type="color" class="color-input" :value="node.data.headerColor || '#1e1e22'" @input="setColor($event.target.value)" />
+        <input type="color" class="color-input" :value="node.data.headerColor || '#16161b'" @input="setColor($event.target.value)" />
       </label>
     </div>
 
@@ -27,7 +27,7 @@ const props = defineProps({
   node: { type: Object, required: true }
 })
 
-const presetColors = ['#1e1e22', '#7c3aed', '#2563eb', '#059669', '#d97706', '#dc2626', '#db2777', '#0891b2']
+const presetColors = ['#16161b', '#7c3aed', '#2563eb', '#059669', '#d97706', '#dc2626', '#db2777', '#0891b2']
 
 function setColor(color) {
   updateNodeData(props.node.id, { headerColor: color })

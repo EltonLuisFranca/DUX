@@ -147,7 +147,7 @@ function submit() {
   margin-top: 4px;
   border: none;
   border-radius: 6px;
-  background: #3b82f6;
+  background: var(--color-accent);
   color: #fff;
   font-size: 12px;
   font-weight: 600;

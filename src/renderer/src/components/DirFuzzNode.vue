@@ -650,7 +650,7 @@ onBeforeUnmount(() => {
 }
 
 .btn-primary {
-  background: #3b82f6;
+  background: var(--color-accent);
   color: #fff;
 }
 
@@ -712,7 +712,7 @@ onBeforeUnmount(() => {
 
 .progress-fill {
   height: 100%;
-  background: #3b82f6;
+  background: var(--color-accent);
   transition: width 0.15s ease;
 }
 
@@ -773,7 +773,7 @@ onBeforeUnmount(() => {
 .status-badge.status-3xx,
 .log-tag.status-3xx {
   background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+  color: var(--color-accent);
 }
 
 .status-badge.status-auth,
@@ -887,7 +887,7 @@ onBeforeUnmount(() => {
 
 .logs-search:focus {
   outline: none;
-  border-color: var(--selected-color, #3b82f6);
+  border-color: var(--selected-color, var(--color-accent));
 }
 
 .logs-modal-body {

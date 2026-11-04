@@ -7,7 +7,7 @@
       height: nodeHeight + 'px',
       background: backgroundStyle,
       '--rest-border-color': restBorderColor,
-      '--selected-color': data.headerColor || '#3b82f6'
+      '--selected-color': data.headerColor || 'var(--color-accent)'
     }"
     @keydown="handleNodeKeydown"
   >
@@ -949,8 +949,8 @@ onBeforeUnmount(() => {
 }
 
 .notes-handle.connected {
-  background: #3b82f6;
-  box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 25%, transparent);
 }
 
 .toolbar-fade-enter-active,
@@ -1056,7 +1056,7 @@ onBeforeUnmount(() => {
 .fmt-opacity-input {
   width: 56px;
   height: 4px;
-  accent-color: #3b82f6;
+  accent-color: var(--color-accent);
   cursor: pointer;
 }
 
@@ -1144,7 +1144,7 @@ onBeforeUnmount(() => {
 }
 
 .status-pill.status-link {
-  color: #3b82f6;
+  color: var(--color-accent);
 }
 
 .status-dot {
@@ -1354,7 +1354,7 @@ onBeforeUnmount(() => {
 .notes-body :deep(h3) {
   margin: 14px 0 6px;
   padding-bottom: 4px;
-  border-bottom: 2px solid #3b82f6;
+  border-bottom: 2px solid var(--color-accent);
   font-weight: 600;
   line-height: 1.3;
 }

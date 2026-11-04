@@ -1113,7 +1113,7 @@ onBeforeUnmount(() => {
 
 .search-input:focus {
   outline: none;
-  border-color: var(--selected-color, #3b82f6);
+  border-color: var(--selected-color, var(--color-accent));
 }
 
 .search-clear {
@@ -1453,7 +1453,7 @@ onBeforeUnmount(() => {
 }
 
 .port-chip:hover {
-  border-color: var(--selected-color, #3b82f6);
+  border-color: var(--selected-color, var(--color-accent));
   color: var(--color-text-primary);
 }
 
@@ -1683,7 +1683,7 @@ onBeforeUnmount(() => {
 }
 
 .toolbar-btn.active {
-  background: color-mix(in srgb, var(--selected-color, #3b82f6) 18%, transparent);
+  background: color-mix(in srgb, var(--selected-color, var(--color-accent)) 18%, transparent);
   color: var(--color-text-primary);
 }
 

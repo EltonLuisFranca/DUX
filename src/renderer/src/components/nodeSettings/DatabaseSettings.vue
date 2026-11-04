@@ -280,8 +280,8 @@ function shortVersion(v) {
 }
 
 .btn.primary {
-  background: #3b82f6;
-  border-color: #3b82f6;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
   color: #fff;
 }
 

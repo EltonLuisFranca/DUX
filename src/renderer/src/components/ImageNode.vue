@@ -2,7 +2,7 @@
   <div
     class="image-node"
     :class="{ selected }"
-    :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
+    :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || 'var(--color-accent)' }"
   >
     <Handle
       id="left"
@@ -166,8 +166,8 @@ async function replaceImage() {
 }
 
 .image-handle.connected {
-  background: #3b82f6;
-  box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 25%, transparent);
 }
 
 .image-content {

@@ -1200,7 +1200,7 @@ function onCreateCard() {
   height: 32px;
   border: none;
   border-radius: 6px;
-  background: #3b82f6;
+  background: var(--color-accent);
   color: #fff;
   font-size: 12px;
   font-weight: 600;
@@ -1208,7 +1208,7 @@ function onCreateCard() {
 }
 
 .create-card-btn:hover:not(:disabled) {
-  background: #2563eb;
+  background: var(--color-accent);
 }
 
 .create-card-btn:disabled {

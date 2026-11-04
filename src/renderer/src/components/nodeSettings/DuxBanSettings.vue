@@ -444,7 +444,7 @@ const connectedAgents = computed(() => {
   height: 2px;
   margin: 0 2px;
   border-radius: 999px;
-  background: #3b82f6;
+  background: var(--color-accent);
 }
 
 .column-drag-handle {
@@ -548,7 +548,7 @@ const connectedAgents = computed(() => {
 }
 
 .agent-status.active {
-  color: #3b82f6;
+  color: var(--color-accent);
 }
 
 .agent-status.queued {

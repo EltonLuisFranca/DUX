@@ -1,7 +1,25 @@
 <template>
   <div class="titlebar">
-    <div class="spacer" />
-    <div class="title">{{ title }}</div>
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
+        <rect x="2" y="2" width="6" height="8" rx="1.6" fill="currentColor" />
+        <rect x="2" y="12" width="6" height="10" rx="1.6" fill="currentColor" />
+        <path
+          d="M11 3l9 9-9 9"
+          fill="none"
+          stroke="var(--color-accent)"
+          stroke-width="3.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+      <span class="brand-word">DUX</span>
+      <span v-if="title && title !== 'DUX'" class="brand-sep">/</span>
+      <span v-if="title && title !== 'DUX'" class="brand-ctx">{{ title }}</span>
+    </div>
+
+    <div class="drag-fill" />
+
     <div class="right-controls">
       <div class="traffic-lights">
         <button class="light minimize" aria-label="Minimizar" @click="minimize" />
@@ -34,9 +52,37 @@ const maximize = () => window.windowControls?.maximize()
   -webkit-app-region: drag;
 }
 
-.spacer {
-  width: 84px;
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   flex-shrink: 0;
+}
+
+.brand-mark {
+  display: block;
+}
+
+.brand-word {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--color-text-primary);
+}
+
+.brand-sep {
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+}
+
+.brand-ctx {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.drag-fill {
+  flex: 1;
 }
 
 .right-controls {
@@ -76,13 +122,5 @@ const maximize = () => window.windowControls?.maximize()
 
 .light:hover {
   filter: brightness(1.15);
-}
-
-.title {
-  flex: 1;
-  text-align: center;
-  font-size: 12px;
-  color: var(--color-text-tertiary);
-  pointer-events: none;
 }
 </style>

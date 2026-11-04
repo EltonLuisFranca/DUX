@@ -1,22 +1,46 @@
 :root {
   color-scheme: dark;
 
-  --color-bg-app: #1e1e22;
-  --color-bg-surface: #18181b;
-  --color-bg-surface-alt: #1a1a1e;
-  --color-bg-surface-raised: #26262b;
-  --color-border: rgba(255, 255, 255, 0.08);
+  /* ——— Night Console: superfícies ——— */
+  --color-bg-app: #0b0b0e;
+  --color-bg-surface: #121216;
+  --color-bg-surface-alt: #16161b;
+  --color-bg-surface-raised: #1f1f25;
+  --color-border: rgba(255, 255, 255, 0.06);
   --color-border-strong: rgba(255, 255, 255, 0.1);
-  --color-hover: rgba(255, 255, 255, 0.08);
-  --color-text-primary: #e4e4e7;
-  --color-text-secondary: #a1a1aa;
-  --color-text-tertiary: #71717a;
-  --color-text-quaternary: #d4d4d8;
-  --color-dot: #55555e;
-  --color-shadow: rgba(0, 0, 0, 0.4);
-  --color-notes-bg: #332c14;
-  --color-notes-header: #3d3418;
+  --color-hover: rgba(255, 255, 255, 0.06);
+  --color-text-primary: #ededf0;
+  --color-text-secondary: #a0a0ab;
+  --color-text-tertiary: #6b6b76;
+  --color-text-quaternary: #c9c9d1;
+  --color-dot: #26262d;
+  --color-shadow: rgba(0, 0, 0, 0.5);
+  --color-notes-bg: #2b2412;
+  --color-notes-header: #362c15;
   --color-notes-border: #8a6d1f;
+
+  /* ——— acento (configurável via themeStore.accentColor) ——— */
+  --color-accent: #ff3d7f;
+  --color-accent-contrast: #ffffff;
+  --color-accent-soft: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  --color-accent-halo: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  --color-accent-border: color-mix(in srgb, var(--color-accent) 55%, transparent);
+
+  /* ——— estados / status ——— */
+  --color-status-working: #5ab8ff;
+  --color-status-waiting: #ffb547;
+  --color-status-ok: #4ade80;
+  --color-status-error: #ff6b6b;
+
+  /* ——— tipografia ——— */
+  --font-sans: 'Geist', 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* ——— raios ——— */
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 12px;
+
   /* intensidade da sombra dos cards de node (0%–100%) — sobrescrito via JS
      em themeStore.js (nodeShadowIntensity), fallback aqui é só pro primeiro
      paint antes do watchEffect rodar */
@@ -28,20 +52,23 @@
 
   --color-bg-app: #f4f4f5;
   --color-bg-surface: #ffffff;
-  --color-bg-surface-alt: #ececef;
-  --color-bg-surface-raised: #e4e4e7;
+  --color-bg-surface-alt: #f0f0f2;
+  --color-bg-surface-raised: #e7e7ea;
   --color-border: rgba(0, 0, 0, 0.08);
   --color-border-strong: rgba(0, 0, 0, 0.12);
-  --color-hover: rgba(0, 0, 0, 0.06);
+  --color-hover: rgba(0, 0, 0, 0.05);
   --color-text-primary: #18181b;
   --color-text-secondary: #52525b;
-  --color-text-tertiary: #71717a;
+  --color-text-tertiary: #8a8a93;
   --color-text-quaternary: #3f3f46;
   --color-dot: #c4c4cc;
   --color-shadow: rgba(0, 0, 0, 0.12);
   --color-notes-bg: #fef3c7;
   --color-notes-header: #fde68a;
   --color-notes-border: #fbbf24;
+
+  --color-accent-soft: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  --color-accent-halo: color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
 
 * {
@@ -55,15 +82,42 @@ body {
   height: 100%;
   overflow: hidden;
   background: transparent;
-  font-family:
-    -apple-system,
-    'Segoe UI',
-    Inter,
-    sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 #app {
   height: 100vh;
+}
+
+/* seleção de texto usa o acento */
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 32%, transparent);
+  color: var(--color-text-primary);
+}
+
+/* scrollbars finas e discretas, no tom do tema */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-text-tertiary) 60%, transparent);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .window-shell {
@@ -82,4 +136,17 @@ body {
   flex: 1;
   min-height: 0;
   display: flex;
+}
+
+/* edges do canvas: idle discreta, selecionada no acento (ver CustomEdge.vue
+   pros estilos por-tipo; isto é o fallback das edges default do vue-flow) */
+.vue-flow__edge-path {
+  stroke: var(--color-text-tertiary);
+}
+.vue-flow__edge.selected .vue-flow__edge-path,
+.vue-flow__edge:focus .vue-flow__edge-path {
+  stroke: var(--color-accent);
+}
+.vue-flow__connectionline .vue-flow__edge-path {
+  stroke: var(--color-accent);
 }

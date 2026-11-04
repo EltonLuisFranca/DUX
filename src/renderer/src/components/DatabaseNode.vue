@@ -549,7 +549,7 @@ watch(
 }
 
 .db-schema-resize:hover {
-  background: #3b82f6;
+  background: var(--color-accent);
 }
 
 .db-right {
@@ -690,8 +690,8 @@ watch(
 }
 
 .db-btn.primary {
-  background: #3b82f6;
-  border-color: #3b82f6;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
   color: #fff;
 }
 
@@ -715,8 +715,8 @@ watch(
 }
 
 .db-icon-btn.active {
-  border-color: #3b82f6;
-  color: #3b82f6;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .db-icon-btn:disabled {
@@ -757,7 +757,7 @@ watch(
 .db-link {
   background: none;
   border: none;
-  color: #3b82f6;
+  color: var(--color-accent);
   cursor: pointer;
   font-size: 10.5px;
   text-transform: none;

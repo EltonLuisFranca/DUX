@@ -52,7 +52,7 @@ const fullName = computed(() => [user.value?.firstname, user.value?.lastname].fi
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #3b82f6;
+  background: var(--color-accent);
   color: #fff;
   font-size: 13px;
   font-weight: 600;

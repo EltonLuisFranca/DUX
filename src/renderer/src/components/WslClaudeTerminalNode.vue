@@ -6,6 +6,10 @@
     :resize="{ minWidth: 320, minHeight: 220, defaultWidth: 480, defaultHeight: 344 }"
     :title="data.name"
     :status="statusColor"
+    :status-label="statusLabel"
+    :status-tone="statusTone"
+    :status-pulse="status === 'connecting'"
+    :accent="isClaudeNode ? 'var(--color-accent)' : ''"
   >
     <template #icon>
       <svg viewBox="0 0 20 20" width="12" height="12" v-html="TERMINAL_ICON"></svg>
@@ -98,6 +102,19 @@ const status = ref('connecting')
 
 const STATUS_COLORS = { online: '#28c840', connecting: '#febc2e', offline: '#ff5f57' }
 const statusColor = computed(() => STATUS_COLORS[status.value] || '#6b7280')
+
+// Pill de status no header: só aparece quando precisa de atenção
+// (conectando/offline). Online fica com o dot discreto (statusLabel vazio).
+const statusLabel = computed(() => {
+  if (status.value === 'connecting') return 'Conectando…'
+  if (status.value === 'offline') return 'Offline'
+  return ''
+})
+const statusTone = computed(() => {
+  if (status.value === 'connecting') return 'waiting'
+  if (status.value === 'offline') return 'error'
+  return 'ok'
+})
 
 // % da janela de contexto do Claude Code em uso nesta sessão, calculado pelo
 // bridge (claudeUsage.js) a partir do transcript da sessão em
@@ -553,9 +570,9 @@ onBeforeUnmount(() => {
 }
 
 :deep(.shell-handle.connected) {
-  background: #3b82f6;
-  border-color: #3b82f6;
-  box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 25%, transparent);
 }
 
 :deep(.shell-handle.vue-flow__handle-connecting) {

@@ -193,7 +193,7 @@ onBeforeUnmount(close)
 }
 
 .menu-item.active {
-  background: rgb(59 130 246 / 0.12);
+  background: var(--color-accent-soft);
 }
 
 .menu-item-text {

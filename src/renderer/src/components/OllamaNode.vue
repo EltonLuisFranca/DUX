@@ -555,7 +555,7 @@ onBeforeUnmount(() => {
 }
 
 .msg.user .msg-bubble {
-  background: #3b82f6;
+  background: var(--color-accent);
   color: #fff;
 }
 
@@ -691,7 +691,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   border: none;
   border-radius: 6px;
-  background: #3b82f6;
+  background: var(--color-accent);
   color: #fff;
   cursor: pointer;
 }

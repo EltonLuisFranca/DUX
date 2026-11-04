@@ -9,11 +9,11 @@
 
       <span class="tool-divider" />
       <AppTooltip label="Cor do header">
-        <label class="color-swatch" :style="{ background: data.headerColor || '#1e1e22' }">
+        <label class="color-swatch" :style="{ background: data.headerColor || '#16161b' }">
           <input
             type="color"
             class="color-input"
-            :value="data.headerColor || '#1e1e22'"
+            :value="data.headerColor || '#16161b'"
             @input="setColor($event.target.value)"
           />
         </label>

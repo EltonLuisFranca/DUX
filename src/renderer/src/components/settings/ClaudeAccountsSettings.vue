@@ -161,9 +161,9 @@ async function create() {
   gap: 12px;
   padding: 14px;
   background: var(--color-bg-surface);
-  border: 1px solid #3b82f6;
+  border: 1px solid var(--color-accent);
   border-radius: 12px;
-  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 12%, transparent);
 }
 
 .add-head {

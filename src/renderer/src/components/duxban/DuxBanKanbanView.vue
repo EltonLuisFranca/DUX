@@ -363,8 +363,8 @@ function onColumnDropForReorder() {
 }
 
 .column.drop-active {
-  border-color: #3b82f6;
-  background: color-mix(in srgb, #3b82f6 6%, var(--color-bg-app));
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 6%, var(--color-bg-app));
 }
 
 .column.col-dragging {
@@ -377,7 +377,7 @@ function onColumnDropForReorder() {
   width: 2px;
   margin: 0 -1px;
   border-radius: 999px;
-  background: #3b82f6;
+  background: var(--color-accent);
 }
 
 .column-drag-handle {
@@ -549,7 +549,7 @@ function onColumnDropForReorder() {
   height: 2px;
   margin: 0 2px;
   border-radius: 999px;
-  background: #3b82f6;
+  background: var(--color-accent);
 }
 
 .card {

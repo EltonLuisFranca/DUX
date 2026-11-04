@@ -51,7 +51,7 @@ import SettingsGroup from './SettingsGroup.vue'
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #3b82f6;
+  background: var(--color-accent);
   color: #fff;
   font-size: 15px;
   font-weight: 600;

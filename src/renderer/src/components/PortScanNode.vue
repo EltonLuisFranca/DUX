@@ -654,7 +654,7 @@ onBeforeUnmount(() => {
 }
 
 .btn-primary {
-  background: #3b82f6;
+  background: var(--color-accent);
   color: #fff;
 }
 
@@ -716,7 +716,7 @@ onBeforeUnmount(() => {
 
 .progress-fill {
   height: 100%;
-  background: #3b82f6;
+  background: var(--color-accent);
   transition: width 0.15s ease;
 }
 
@@ -840,7 +840,7 @@ onBeforeUnmount(() => {
 
 .logs-search:focus {
   outline: none;
-  border-color: var(--selected-color, #3b82f6);
+  border-color: var(--selected-color, var(--color-accent));
 }
 
 .logs-modal-body {

@@ -1,7 +1,7 @@
 <template>
   <div
     class="node-shell"
-    :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || '#3b82f6' }"
+    :style="{ width: nodeWidth + 'px', height: nodeHeight + 'px', '--selected-color': data.headerColor || 'var(--color-accent)' }"
   >
     <NodeToolbar :id="id" :data="data" :selected="selected" />
 
@@ -45,10 +45,24 @@
     com o raio — que muda dinamicamente com a variante (estruturado/compacto). -->
     <div class="shell-card" :class="[`variant-${nodeStyleVariant}`, { selected }]">
       <div class="shell-header" :style="{ background: data.headerColor || undefined }">
-        <span v-if="$slots.icon" class="shell-icon-badge"><slot name="icon" /></span>
-        <span v-if="status" class="shell-status-dot" :class="{ pulsing: statusPulse }" :style="{ background: status }" />
+        <span
+          v-if="$slots.icon"
+          class="shell-icon-badge"
+          :class="{ accented: !!accent }"
+          :style="accent ? { '--badge-accent': accent } : undefined"
+          ><slot name="icon"
+        /></span>
+        <span v-if="status && !statusLabel" class="shell-status-dot" :class="{ pulsing: statusPulse }" :style="{ background: status }" />
         <span class="shell-title">{{ title }}</span>
         <span v-if="meta" class="shell-meta">{{ meta }}</span>
+        <span
+          v-if="statusLabel"
+          class="shell-status-pill"
+          :class="[`tone-${statusTone}`, { pulsing: statusPulse }]"
+        >
+          <span class="shell-status-pill-dot" />
+          {{ statusLabel }}
+        </span>
         <slot name="headerActions" />
       </div>
 
@@ -86,9 +100,19 @@ const props = defineProps({
   meta: { type: String, default: '' },
   // cor CSS (hex/rgb/var()) do dot de status, ou omitido/null pra não mostrar nenhum
   status: { type: String, default: null },
-  // anima o dot pulsando (ex: scan/teste em andamento) — vários dos scanners
-  // usam essa mesma indicação de "rodando"
-  statusPulse: { type: Boolean, default: false }
+  // anima o dot/pill pulsando (ex: scan/teste em andamento) — vários dos
+  // scanners usam essa mesma indicação de "rodando"
+  statusPulse: { type: Boolean, default: false },
+  // pill de status explícito no header (ex: "Trabalhando 0:42", "Aguardando").
+  // Quando presente, substitui o dot simples. statusTone escolhe a cor.
+  statusLabel: { type: String, default: '' },
+  statusTone: {
+    type: String,
+    default: 'idle',
+    validator: (v) => ['idle', 'working', 'waiting', 'ok', 'error'].includes(v)
+  },
+  // cor CSS pra tingir o badge do ícone (categoria do node). Omitido = neutro.
+  accent: { type: String, default: '' }
 })
 
 const { isHandleConnected } = useHandleConnection(props.id)
@@ -120,6 +144,9 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, props.resize
 
 .shell-card.selected {
   border-color: var(--selected-color);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--selected-color) 16%, transparent),
+    0 18px 40px color-mix(in srgb, var(--color-shadow) var(--node-shadow-pct), transparent);
 }
 
 .shell-handle {
@@ -132,8 +159,8 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, props.resize
 }
 
 .shell-handle.connected {
-  background: #3b82f6;
-  box-shadow: 0 0 4px rgba(59, 130, 246, 0.6);
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 25%, transparent);
 }
 
 .shell-header {
@@ -157,6 +184,13 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, props.resize
   height: 12px;
 }
 
+/* badge tingido pela categoria do node (prop `accent`) */
+.shell-icon-badge.accented {
+  color: var(--badge-accent);
+  background: color-mix(in srgb, var(--badge-accent) 16%, var(--color-bg-surface)) !important;
+  border-color: color-mix(in srgb, var(--badge-accent) 38%, transparent) !important;
+}
+
 .shell-status-dot {
   width: 6px;
   height: 6px;
@@ -167,6 +201,51 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, props.resize
 
 .shell-status-dot.pulsing {
   animation: shell-status-pulse 1.1s ease-in-out infinite;
+}
+
+/* pill de status explícito no header */
+.shell-status-pill {
+  --tone: var(--color-text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+  height: 20px;
+  padding: 0 9px 0 8px;
+  border-radius: 11px;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--tone) 82%, var(--color-text-primary));
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+}
+
+.shell-status-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+
+.shell-status-pill.pulsing .shell-status-pill-dot {
+  animation: shell-status-pulse 1.1s ease-in-out infinite;
+}
+
+.shell-status-pill.tone-working {
+  --tone: var(--color-status-working);
+}
+.shell-status-pill.tone-waiting {
+  --tone: var(--color-status-waiting);
+}
+.shell-status-pill.tone-ok {
+  --tone: var(--color-status-ok);
+}
+.shell-status-pill.tone-error {
+  --tone: var(--color-status-error);
+}
+.shell-status-pill.tone-idle {
+  --tone: var(--color-text-tertiary);
 }
 
 @keyframes shell-status-pulse {
@@ -235,6 +314,7 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, props.resize
   height: 26px;
   border-radius: 7px;
   border: 1px solid var(--color-border-strong);
+  background: var(--color-bg-surface-raised);
 }
 
 .variant-structured .shell-title {
@@ -275,6 +355,18 @@ const { nodeWidth, nodeHeight, startResize } = useNodeResize(props, props.resize
 
 .variant-compact .shell-title {
   font-size: 10.5px;
+}
+
+.variant-compact .shell-status-pill {
+  height: 16px;
+  padding: 0 7px 0 6px;
+  font-size: 9px;
+  gap: 4px;
+}
+
+.variant-compact .shell-status-pill-dot {
+  width: 5px;
+  height: 5px;
 }
 
 .variant-compact .shell-meta {

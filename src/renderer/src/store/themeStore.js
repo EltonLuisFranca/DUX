@@ -29,6 +29,33 @@ export function setTheme(value) {
   theme.value = value
 }
 
+// ——— Cor de destaque (accent) ———
+// Token --color-accent (ver style.css) aplicado globalmente: seleção de node,
+// botões primários, links, edges ativas. Configurável na aba Aparência.
+const ACCENT_STORAGE_KEY = 'dux-accent-color'
+const HEX_RE = /^#([0-9a-fA-F]{6})$/
+
+export const ACCENT_PRESETS = [
+  { value: '#ff3d7f', label: 'Rosa' },
+  { value: '#7c6cff', label: 'Violeta' },
+  { value: '#2fc5a0', label: 'Verde-água' },
+  { value: '#ff8a3d', label: 'Laranja' },
+  { value: '#4c9fff', label: 'Azul' },
+  { value: '#ffb547', label: 'Âmbar' }
+]
+
+const storedAccent = localStorage.getItem(ACCENT_STORAGE_KEY)
+export const accentColor = ref(HEX_RE.test(storedAccent || '') ? storedAccent : '#ff3d7f')
+
+watchEffect(() => {
+  localStorage.setItem(ACCENT_STORAGE_KEY, accentColor.value)
+  document.documentElement.style.setProperty('--color-accent', accentColor.value)
+})
+
+export function setAccentColor(value) {
+  if (HEX_RE.test(value)) accentColor.value = value
+}
+
 export const CANVAS_VARIANTS = [
   { value: 'dots', label: 'Pontos' },
   { value: 'lines', label: 'Linhas' },
@@ -76,7 +103,7 @@ export function setCanvasPatternColor(value) {
 // tema, igual sempre foi antes de existir a opção de customizar. Exportado
 // pra FleetCanvas.vue e SettingsSidebar.vue usarem o mesmo valor (preview do
 // swatch e botão "resetar" precisam bater com o que realmente é desenhado).
-export const defaultCanvasPatternColor = computed(() => (theme.value === 'light' ? '#c4c4cc' : '#55555e'))
+export const defaultCanvasPatternColor = computed(() => (theme.value === 'light' ? '#c4c4cc' : '#26262d'))
 
 export const resolvedCanvasPatternColor = computed(() => canvasPatternColor.value || defaultCanvasPatternColor.value)
 
@@ -212,6 +239,6 @@ export function toggleSettings() {
 }
 
 export const XTERM_THEMES = {
-  dark: { background: '#18181b', foreground: '#e4e4e7' },
+  dark: { background: '#121216', foreground: '#ededf0' },
   light: { background: '#ffffff', foreground: '#18181b' }
 }

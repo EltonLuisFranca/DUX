@@ -81,6 +81,12 @@ onBeforeUnmount(() => clearTimeout(timer))
   top: calc(100% + 8px);
 }
 
+.placement-right {
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
 .app-tooltip kbd {
   padding: 1px 5px;
   background: var(--color-bg-surface-raised);

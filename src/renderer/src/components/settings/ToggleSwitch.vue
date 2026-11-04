@@ -38,7 +38,7 @@ defineEmits(['update:modelValue'])
 }
 
 .toggle.on {
-  background: #3b82f6;
+  background: var(--color-accent);
   box-shadow: none;
 }
 
@@ -48,7 +48,7 @@ defineEmits(['update:modelValue'])
 }
 
 .toggle:focus-visible {
-  outline: 2px solid rgb(59 130 246 / 0.5);
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 50%, transparent);
   outline-offset: 2px;
 }
 

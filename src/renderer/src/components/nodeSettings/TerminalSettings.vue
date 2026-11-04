@@ -306,7 +306,7 @@ select.field-input {
   padding: 0;
   border: none;
   background: none;
-  color: #3b82f6;
+  color: var(--color-accent);
   font-size: inherit;
   cursor: pointer;
 }
@@ -321,7 +321,7 @@ select.field-input {
   margin-top: 8px;
   border: none;
   border-radius: 6px;
-  background: #3b82f6;
+  background: var(--color-accent);
   color: #fff;
   font-size: 11.5px;
   font-weight: 600;

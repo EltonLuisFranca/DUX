@@ -758,7 +758,7 @@ onBeforeUnmount(() => {
 }
 
 .nav-btn.on {
-  color: #3b82f6;
+  color: var(--color-accent);
 }
 
 .nav-btn.small {
@@ -952,8 +952,8 @@ onBeforeUnmount(() => {
 }
 
 .media-dl:hover:not(:disabled) {
-  border-color: #3b82f6;
-  color: #3b82f6;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .media-dl:disabled {
@@ -1055,8 +1055,8 @@ onBeforeUnmount(() => {
 }
 
 .zen-essentials-zone.drop-active {
-  border-color: #3b82f6;
-  background: color-mix(in srgb, #3b82f6 10%, transparent);
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 .zen-ess-placeholder {
@@ -1093,7 +1093,7 @@ onBeforeUnmount(() => {
 }
 
 .zen-ess.active {
-  border-color: #3b82f6;
+  border-color: var(--color-accent);
 }
 
 .zen-ess-ico {
@@ -1155,7 +1155,7 @@ onBeforeUnmount(() => {
 }
 
 .zen-tab.drop-before {
-  box-shadow: inset 0 2px 0 0 #3b82f6;
+  box-shadow: inset 0 2px 0 0 var(--color-accent);
 }
 
 .zen-tab-ico {

@@ -414,8 +414,8 @@ onBeforeUnmount(() => {
 }
 
 .search:focus-within {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.15);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 15%, transparent);
 }
 
 .search-input {
@@ -507,18 +507,18 @@ onBeforeUnmount(() => {
 }
 
 .nav-item:focus-visible {
-  outline: 2px solid rgb(59 130 246 / 0.5);
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 50%, transparent);
   outline-offset: -2px;
 }
 
 .nav-item.active {
-  background: rgb(59 130 246 / 0.14);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
   color: var(--color-text-primary);
   font-weight: 600;
 }
 
 .nav-item.active .nav-icon {
-  color: #3b82f6;
+  color: var(--color-accent);
 }
 
 .nav-icon {
@@ -730,8 +730,8 @@ components/settings/ — sem scoped de propósito (escopados pelo
 .settings-sidebar .st-input:focus,
 .settings-sidebar .st-select:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.15);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 15%, transparent);
 }
 
 .settings-sidebar .st-select:disabled,
@@ -776,8 +776,8 @@ components/settings/ — sem scoped de propósito (escopados pelo
 }
 
 .settings-sidebar .st-btn--primary {
-  background: #3b82f6;
-  border-color: #3b82f6;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
   color: #fff;
 }
 
@@ -815,7 +815,7 @@ components/settings/ — sem scoped de propósito (escopados pelo
 
 .settings-sidebar .st-range {
   width: 100%;
-  accent-color: #3b82f6;
+  accent-color: var(--color-accent);
 }
 
 .settings-sidebar .st-hint {

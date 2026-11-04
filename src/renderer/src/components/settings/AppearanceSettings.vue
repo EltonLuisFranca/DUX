@@ -5,6 +5,36 @@
     </SettingsRow>
   </SettingsGroup>
 
+  <SettingsGroup title="Cor de destaque">
+    <SettingsRow label="Cor" hint="Usada em seleção, links, edges ativas e botões primários." stacked>
+      <div class="accent-row">
+        <button
+          v-for="preset in ACCENT_PRESETS"
+          :key="preset.value"
+          class="accent-swatch"
+          :class="{ active: isSameColor(accentColor, preset.value) }"
+          :style="{ background: preset.value }"
+          :title="preset.label"
+          :aria-label="preset.label"
+          @click="setAccentColor(preset.value)"
+        >
+          <svg v-if="isSameColor(accentColor, preset.value)" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M3 8.5l3 3 7-7" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <span class="accent-divider" />
+        <AppTooltip label="Cor personalizada">
+          <label class="accent-swatch accent-custom" :style="{ background: accentColor }">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path d="M8 3v10M3 8h10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+            <input type="color" class="color-input" :value="accentColor" @input="setAccentColor($event.target.value)" />
+          </label>
+        </AppTooltip>
+      </div>
+    </SettingsRow>
+  </SettingsGroup>
+
   <SettingsGroup title="Nodes">
     <SettingsRow label="Estilo" hint="Compacto tira o cabeçalho alto e aproxima o conteúdo da borda.">
       <SegmentedControl
@@ -89,7 +119,7 @@
           <input
             type="color"
             class="color-input"
-            :value="canvasBgColor || '#1e1e22'"
+            :value="canvasBgColor || '#0b0b0e'"
             @input="setCanvasBgColor($event.target.value)"
           />
         </label>
@@ -170,6 +200,9 @@
 import {
   theme,
   setTheme,
+  accentColor,
+  setAccentColor,
+  ACCENT_PRESETS,
   nodeStyleVariant,
   setNodeStyleVariant,
   nodeShadowIntensity,
@@ -228,6 +261,12 @@ const EDGE_PREVIEW_PATHS = {
   step: 'M6 8 H32 V24 H58',
   straight: 'M6 8 L58 24'
 }
+
+// compara hex ignorando caixa (o <input type=color> devolve minúsculo, mas o
+// valor salvo pode vir de preset com caixa diferente)
+function isSameColor(a, b) {
+  return (a || '').toLowerCase() === (b || '').toLowerCase()
+}
 </script>
 
 <style scoped>
@@ -260,9 +299,50 @@ const EDGE_PREVIEW_PATHS = {
 }
 
 .option-tile.active {
-  border-color: #3b82f6;
-  color: #3b82f6;
-  background: rgb(59 130 246 / 0.08);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.accent-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.accent-swatch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 0 1px 3px var(--color-shadow);
+  transition: transform 0.1s ease;
+}
+
+.accent-swatch:hover {
+  transform: translateY(-1px);
+}
+
+.accent-swatch.active {
+  border-color: var(--color-text-primary);
+}
+
+.accent-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--color-border-strong);
+}
+
+.accent-custom {
+  overflow: hidden;
+  color: #fff;
 }
 
 .option-preview {
@@ -275,7 +355,7 @@ const EDGE_PREVIEW_PATHS = {
 }
 
 .option-tile.active .option-label {
-  color: #3b82f6;
+  color: var(--color-accent);
 }
 
 .color-swatch {
