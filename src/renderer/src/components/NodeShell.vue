@@ -55,6 +55,7 @@
         <span v-if="status && !statusLabel" class="shell-status-dot" :class="{ pulsing: statusPulse }" :style="{ background: status }" />
         <span class="shell-title">{{ title }}</span>
         <span v-if="meta" class="shell-meta">{{ meta }}</span>
+        <slot name="headerMeta" />
         <span
           v-if="statusLabel"
           class="shell-status-pill"

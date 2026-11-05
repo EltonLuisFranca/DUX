@@ -9,6 +9,11 @@ const claudeProfiles = require('./claudeProfiles')
 // .credentials.json — não é uma API pública documentada, então o formato da
 // resposta pode mudar entre versões da CLI sem aviso.
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
+// Dono real do token. O oauthAccount do .claude.json pode ficar defasado em
+// relação ao .credentials.json (já vimos um perfil mostrar um e-mail com o
+// token de outra conta) — nesse caso dois perfis "diferentes" gastam a mesma
+// licença e nada na tela denuncia. Por isso a identidade exibida vem daqui.
+const PROFILE_URL = 'https://api.anthropic.com/api/oauth/profile'
 
 // Limite de plano é conta inteira, não por sessão — não faz sentido repetir
 // a leitura a cada 3s por terminal aberto (como o claudeUsage.js de contexto
@@ -39,6 +44,10 @@ let profilesTimer = null
 let polling = false
 const lastForcedAt = new Map()
 const backoffUntil = new Map() // profileId -> timestamp
+// profileId -> { token, accountUuid, email, displayName, organization }. Só em
+// memória, e o token nunca sai daqui: serve pra consultar de novo apenas quando
+// ele muda (renovação a cada poucas horas ou um /login novo).
+const identityByProfile = new Map()
 const subscribers = new Set()
 
 function loadCache() {
@@ -124,6 +133,62 @@ async function fetchUsage(profile) {
   }
 }
 
+// Falha aqui (rede, 429) não atrapalha o uso: a tela segue com a identidade
+// anterior ou a do .claude.json, e o próximo poll tenta de novo.
+async function verifyIdentity(profile) {
+  const oauth = claudeProfiles.readOauth(profile)
+  const known = identityByProfile.get(profile.id)
+  if (!oauth?.accessToken || known?.token === oauth.accessToken) return
+  if (oauth.expiresAt && oauth.expiresAt < Date.now()) return
+
+  let data
+  try {
+    const res = await fetch(PROFILE_URL, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${oauth.accessToken}`,
+        'anthropic-beta': 'oauth-2025-04-20'
+      }
+    })
+    if (!res.ok) return
+    data = await res.json()
+  } catch {
+    return
+  }
+  if (!data?.account?.uuid) return
+
+  // /login em outra conta: uso guardado e bloqueio de 429 eram da conta antiga
+  if (known && known.accountUuid !== data.account.uuid) {
+    delete usageByProfile[profile.id]
+    backoffUntil.delete(profile.id)
+    lastForcedAt.delete(profile.id)
+  }
+
+  identityByProfile.set(profile.id, {
+    token: oauth.accessToken,
+    accountUuid: data.account.uuid,
+    email: data.account.email || null,
+    displayName: data.account.display_name || data.account.full_name || null,
+    organization: data.organization?.name || null
+  })
+}
+
+// listProfiles() só enxerga os arquivos locais; aqui entra o que o servidor
+// disse sobre o token de cada perfil, quando já se sabe.
+function listVerifiedProfiles() {
+  return claudeProfiles.listProfiles().map((profile) => {
+    const identity = profile.loggedIn ? identityByProfile.get(profile.id) : null
+    if (!identity) return profile
+    return {
+      ...profile,
+      accountUuid: identity.accountUuid,
+      email: identity.email || profile.email,
+      displayName: identity.displayName || profile.displayName,
+      organization: identity.organization || profile.organization
+    }
+  })
+}
+
 function send(ws, payload) {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload))
 }
@@ -165,12 +230,17 @@ async function pollAll() {
   try {
     for (const profile of claudeProfiles.listProfiles()) {
       if (!profile.loggedIn) {
+        identityByProfile.delete(profile.id)
         store(profile.id, { error: 'no-auth' })
         broadcast(usageMessage(profile.id))
         continue
       }
+      // antes do backoff: é um endpoint à parte, e um /login novo tira o
+      // perfil do bloqueio da conta anterior
+      const resolved = claudeProfiles.resolveProfile(profile.id)
+      await verifyIdentity(resolved)
       if (inBackoff(profile.id)) continue
-      await pollProfile(claudeProfiles.resolveProfile(profile.id))
+      await pollProfile(resolved)
     }
     saveCache()
   } finally {
@@ -179,21 +249,25 @@ async function pollAll() {
 }
 
 function checkProfiles() {
-  const profiles = claudeProfiles.listProfiles()
+  const profiles = listVerifiedProfiles()
   const json = JSON.stringify(profiles)
   if (json === lastProfilesJson) return
   const previous = lastProfilesJson ? JSON.parse(lastProfilesJson) : []
   lastProfilesJson = json
   broadcast({ type: 'claudeProfiles', profiles })
 
-  // perfil que acabou de logar (ou foi criado) não espera o próximo ciclo de 60s
-  const wasLoggedIn = new Set(previous.filter((p) => p.loggedIn).map((p) => p.id))
-  if (profiles.some((p) => p.loggedIn && !wasLoggedIn.has(p.id))) pollAll()
+  // token novo (primeiro login, /login em outra conta ou renovação) não espera
+  // o próximo ciclo de 60s
+  const previousTokens = new Map(previous.map((p) => [p.id, p.tokenExpiresAt]))
+  if (profiles.some((p) => p.loggedIn && previousTokens.get(p.id) !== p.tokenExpiresAt)) pollAll()
 
   // perfil apagado: some do cache também
   const ids = new Set(profiles.map((p) => p.id))
   for (const id of Object.keys(usageByProfile)) {
     if (!ids.has(id)) delete usageByProfile[id]
+  }
+  for (const id of identityByProfile.keys()) {
+    if (!ids.has(id)) identityByProfile.delete(id)
   }
 }
 
@@ -216,7 +290,7 @@ function stopPollingIfIdle() {
 
 function subscribe(ws) {
   subscribers.add(ws)
-  send(ws, { type: 'claudeProfiles', profiles: claudeProfiles.listProfiles() })
+  send(ws, { type: 'claudeProfiles', profiles: listVerifiedProfiles() })
   for (const id of Object.keys(usageByProfile)) send(ws, usageMessage(id))
   ensurePolling()
 }

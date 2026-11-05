@@ -10,7 +10,7 @@ const claudeUsage = require('./claudeUsage')
 const claudeAccountUsage = require('./claudeAccountUsage')
 const claudeProfiles = require('./claudeProfiles')
 const { resolveCwd, isDirectory, isFile, listSubdirectories, listDirEntries } = require('./fsHelpers')
-const { getGitInfo } = require('./gitStatus')
+const { getGitInfo, watchBranch } = require('./gitStatus')
 const { listContainers, containerAction, containerLogs } = require('./dockerStatus')
 const dbClient = require('./dbClient')
 const dbVault = require('./dbVault')
@@ -75,6 +75,7 @@ function createConnectionHandler({ agentPort }) {
   return function handleConnection(ws) {
     let ptyProcess = null
     let sessionId = null
+    let stopBranchWatch = null
     // runners de teste de força bruta em andamento nesta conexão, por
     // requestId — permite credentialTestStop encontrar o certo, e garante
     // que fechar o node/terminal mata o teste em vez de deixá-lo martelando
@@ -240,6 +241,22 @@ function createConnectionHandler({ agentPort }) {
           ws.close()
           return
         }
+
+        // /proc acompanha o cd feito dentro de um shell; onde não existe (macOS)
+        // fica no diretório em que o terminal abriu
+        const { pid } = ptyProcess
+        stopBranchWatch = watchBranch(
+          () => {
+            try {
+              return fs.readlinkSync(`/proc/${pid}/cwd`)
+            } catch {
+              return cwd
+            }
+          },
+          (branch) => {
+            if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'gitBranch', branch }))
+          }
+        )
 
         if (sessionId) {
           agentLink.registerSession(sessionId, { name: msg.name || sessionId, cwd, ptyProcess })
@@ -848,6 +865,7 @@ function createConnectionHandler({ agentPort }) {
       activeNetworkDeviceScans.clear()
       for (const runner of activePentestSuites.values()) runner.stop()
       activePentestSuites.clear()
+      stopBranchWatch?.()
       ptyProcess?.kill()
       ptyProcess = null
       if (sessionId) {

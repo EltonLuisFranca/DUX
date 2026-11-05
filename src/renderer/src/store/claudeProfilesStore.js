@@ -9,7 +9,8 @@ import { watchClaudeAccounts } from '../lib/bridgeClient'
 
 export const DEFAULT_PROFILE_ID = 'default'
 
-// [{ id, name, configDir, isDefault, loggedIn, plan, email, displayName, organization, tokenExpiresAt }]
+// [{ id, name, configDir, isDefault, loggedIn, plan, email, displayName, organization, tokenExpiresAt, accountUuid }]
+// accountUuid só existe depois que o bridge confirma o dono do token no servidor
 export const claudeProfiles = ref([])
 // profileId -> { session, week, weekOpus, weekSonnet, extra, breakdown, fetchedAt, error }
 export const usageByProfile = ref({})

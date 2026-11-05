@@ -5,6 +5,7 @@
     :selected="selected"
     :resize="{ minWidth: 320, minHeight: 220, defaultWidth: 480, defaultHeight: 344 }"
     :title="data.name"
+    :meta="cwdLabel"
     :status="statusColor"
     :status-label="statusLabel"
     :status-tone="statusTone"
@@ -13,6 +14,22 @@
   >
     <template #icon>
       <svg viewBox="0 0 20 20" width="12" height="12" v-html="TERMINAL_ICON"></svg>
+    </template>
+    <template #headerMeta>
+      <span
+        v-if="gitBranch"
+        class="branch-chip"
+        :class="{ compact: nodeStyleVariant === 'compact' }"
+        :title="`Branch: ${gitBranch}`"
+      >
+        <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <circle cx="5" cy="3.5" r="1.5" />
+          <circle cx="5" cy="12.5" r="1.5" />
+          <circle cx="11.5" cy="5.5" r="1.5" />
+          <path d="M5 5v6M11.5 7c0 2.5-2 3-6.5 3.5" />
+        </svg>
+        <span class="branch-name">{{ gitBranch }}</span>
+      </span>
     </template>
     <template #headerActions>
       <ClaudeProfileChip v-if="isClaudeNode" :profile-id="data.claudeProfileId" @change="switchProfile" />
@@ -99,6 +116,17 @@ const connectedPeers = computed(() => {
 
 const termEl = ref(null)
 const status = ref('connecting')
+const gitBranch = ref(null)
+
+// Só a última pasta: o caminho inteiro (/mnt/c/Users/...) não cabe no header.
+// "~" e "~/x" ficam como estão. É o diretório em que o terminal abriu; um cd
+// feito dentro de um shell não muda o rótulo (a branch, sim, acompanha).
+const cwdLabel = computed(() => {
+  const cwd = String(props.data.cwd || '').replace(/[\\/]+$/, '')
+  if (!cwd || cwd === '~') return cwd
+  const name = cwd.split(/[\\/]/).pop()
+  return cwd.startsWith('~/') ? `~/${name}` : name
+})
 
 const STATUS_COLORS = { online: '#28c840', connecting: '#febc2e', offline: '#ff5f57' }
 const statusColor = computed(() => STATUS_COLORS[status.value] || '#6b7280')
@@ -262,6 +290,7 @@ function sendResize() {
 
 function connect() {
   status.value = 'connecting'
+  gitBranch.value = null
   ws = new WebSocket('ws://127.0.0.1:4577')
 
   ws.onopen = () => {
@@ -303,6 +332,8 @@ function connect() {
       usagePercent.value = msg.percent
       usageTokens.value = msg.contextTokens
       usageWindow.value = msg.contextWindow
+    } else if (msg.type === 'gitBranch') {
+      gitBranch.value = msg.branch
     }
   }
 
@@ -623,6 +654,40 @@ onBeforeUnmount(() => {
 :deep(.shell-handle.vue-flow__handle-valid) {
   background: #28c840;
   border-color: #28c840;
+}
+
+/* branch longa encolhe com reticências (nome inteiro no title) antes de
+   empurrar o status e os chips da direita pra fora do header */
+.branch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 140px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.branch-chip svg {
+  flex-shrink: 0;
+}
+
+.branch-chip.compact {
+  height: 15px;
+  padding: 0 4px;
+  font-size: 9px;
+}
+
+.branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .peer-count {

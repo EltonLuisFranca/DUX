@@ -56,6 +56,14 @@
     </div>
 
     <template v-else>
+      <div v-if="sharedWith" class="card-banner warn">
+        <span>
+          Este login é da mesma conta de {{ sharedWith }}, então o uso e a licença são os mesmos. Para separar, abra um
+          terminal aqui, rode <code>/login</code> e entre com a outra conta no navegador.
+        </span>
+        <button class="st-btn st-btn--small" @click="$emit('open-terminal')">Abrir terminal</button>
+      </div>
+
       <div v-if="banner" class="card-banner" :class="banner.kind">
         <span>{{ banner.text }}</span>
         <button v-if="banner.action" class="st-btn st-btn--small" @click="$emit('open-terminal')">{{ banner.action }}</button>
@@ -127,6 +135,7 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue'
 import {
+  claudeProfiles,
   deleteClaudeProfile,
   planLabel,
   refreshClaudeUsage,
@@ -151,6 +160,17 @@ const plan = computed(() => planLabel(props.profile))
 const initial = computed(() => (props.profile.name || '?').charAt(0).toUpperCase())
 const updatedAgo = computed(() => formatAgo(usage.value?.fetchedAt, props.now))
 const breakdown = computed(() => (usage.value?.breakdown || []).filter((r) => r.percent > 0))
+
+// Pastas de perfil separadas não garantem contas separadas: o que vale é o dono
+// do token, confirmado pelo bridge no servidor.
+const sharedWith = computed(() => {
+  const uuid = props.profile.accountUuid
+  if (!uuid) return null
+  const names = claudeProfiles.value
+    .filter((p) => p.id !== props.profile.id && p.accountUuid === uuid)
+    .map((p) => `"${p.name}"`)
+  return names.length ? names.join(', ') : null
+})
 
 // Dado guardado de um poll anterior — mostrado esmaecido quando o atual falhou
 const stale = computed(() => !!usage.value?.error && usage.value.error !== 'no-auth')
@@ -374,6 +394,13 @@ async function remove() {
 
 .card-banner span {
   flex: 1;
+}
+
+.card-banner code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--color-bg-surface-raised);
+  font-size: 11px;
 }
 
 .card-banner.warn {
