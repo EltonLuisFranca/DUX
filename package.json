@@ -1,6 +1,6 @@
 {
   "name": "dux",
-  "version": "1.2.70",
+  "version": "1.2.71",
   "description": "",
   "main": "./out/main/index.js",
   "scripts": {
