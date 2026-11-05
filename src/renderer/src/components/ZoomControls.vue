@@ -41,6 +41,14 @@
         </button>
       </AppTooltip>
 
+      <AppTooltip label="Ajustar à tela">
+        <button class="zoom-btn" @click="handleFitView">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" />
+          </svg>
+        </button>
+      </AppTooltip>
+
       <span class="toolbar-divider" />
 
       <AppTooltip label="Adicionar node" shortcut="Ctrl+N">

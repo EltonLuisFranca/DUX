@@ -57,8 +57,10 @@ import {
   openAddNodeModal
 } from '../store/flowStore'
 import { theme, toggleTheme, openSettings, setAccentColor, ACCENT_PRESETS } from '../store/themeStore'
+import { commandBarOpen, openCommandBar, closeCommandBar } from '../store/uiStore'
 
-const open = ref(false)
+// estado global (pode ser aberto pela busca na barra de título)
+const open = commandBarOpen
 const query = ref('')
 const activeIndex = ref(0)
 const searchInput = ref(null)
@@ -177,23 +179,26 @@ function onKeydown(event) {
   }
 }
 
-function openBar() {
-  open.value = true
-  query.value = ''
-  activeIndex.value = 0
-  nextTick(() => searchInput.value?.focus())
+function close() {
+  closeCommandBar()
 }
 
-function close() {
-  open.value = false
-}
+// foca e reseta sempre que o command bar abre (seja por Ctrl+K ou pela busca
+// na barra de título, que só seta commandBarOpen = true)
+watch(open, (isOpen) => {
+  if (isOpen) {
+    query.value = ''
+    activeIndex.value = 0
+    nextTick(() => searchInput.value?.focus())
+  }
+})
 
 // Ctrl+K (captura antes do xterm.js, como o Ctrl+N do AddNodeModal)
 function onGlobalKeydown(event) {
   if (event.ctrlKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'k') {
     event.preventDefault()
     event.stopPropagation()
-    open.value ? close() : openBar()
+    open.value ? closeCommandBar() : openCommandBar()
   }
 }
 

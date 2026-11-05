@@ -8,7 +8,7 @@
     :status="statusColor"
     :status-label="statusLabel"
     :status-tone="statusTone"
-    :status-pulse="status === 'connecting'"
+    :status-pulse="status === 'connecting' || workActive"
     :accent="isClaudeNode ? 'var(--color-accent)' : ''"
   >
     <template #icon>
@@ -103,14 +103,44 @@ const status = ref('connecting')
 const STATUS_COLORS = { online: '#28c840', connecting: '#febc2e', offline: '#ff5f57' }
 const statusColor = computed(() => STATUS_COLORS[status.value] || '#6b7280')
 
-// Pill de status no header: só aparece quando precisa de atenção
-// (conectando/offline). Online fica com o dot discreto (statusLabel vazio).
+// "Trabalhando" de verdade: deriva da mesma heurística do som de notificação
+// (ver onPtyDataForNotification). Arma no Enter (workStartedAt), aparece
+// quando o agente começa a produzir saída e some ~1,2s depois que ele
+// silencia. workNow tica de 1 em 1s só enquanto está ativo, pro cronômetro.
+const workActive = ref(false)
+const workNow = ref(0)
+let workStartedAt = 0
+let workTimer = null
+
+const workElapsed = computed(() => {
+  const s = Math.max(0, Math.floor((workNow.value - workStartedAt) / 1000))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+})
+
+function startWorkTimer() {
+  if (workTimer) return
+  workNow.value = Date.now()
+  workTimer = setInterval(() => {
+    workNow.value = Date.now()
+  }, 1000)
+}
+
+function stopWorkTimer() {
+  clearInterval(workTimer)
+  workTimer = null
+}
+
+// Pill de status no header: "Trabalhando · M:SS" enquanto o agente responde;
+// senão, só aparece quando precisa de atenção (conectando/offline). Online
+// ocioso fica com o dot discreto (statusLabel vazio).
 const statusLabel = computed(() => {
+  if (workActive.value) return `Trabalhando · ${workElapsed.value}`
   if (status.value === 'connecting') return 'Conectando…'
   if (status.value === 'offline') return 'Offline'
   return ''
 })
 const statusTone = computed(() => {
+  if (workActive.value) return 'working'
   if (status.value === 'connecting') return 'waiting'
   if (status.value === 'offline') return 'error'
   return 'ok'
@@ -197,21 +227,31 @@ function onPtyDataForNotification(chunk) {
   if (!notifyAwaitingResponse) return
   if (!chunk.trim()) return
   notifyHasOutput = true
+  // primeira saída depois do Enter = agente começou a trabalhar
+  if (!workActive.value) {
+    workActive.value = true
+    startWorkTimer()
+  }
   clearTimeout(notifySilenceTimer)
   notifySilenceTimer = setTimeout(() => {
     if (notifyHasOutput && !ttsEnabled.value) playNotificationSound()
     notifyHasOutput = false
     notifyAwaitingResponse = false
+    workActive.value = false
+    stopWorkTimer()
   }, TTS_SILENCE_MS)
 }
 
 function armNotificationCapture() {
   notifyAwaitingResponse = true
+  workStartedAt = Date.now()
 }
 
 function resetNotificationCapture() {
   notifyHasOutput = false
   notifyAwaitingResponse = false
+  workActive.value = false
+  stopWorkTimer()
   clearTimeout(notifySilenceTimer)
   notifySilenceTimer = null
 }

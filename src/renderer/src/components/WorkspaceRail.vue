@@ -59,6 +59,14 @@
       </button>
     </AppTooltip>
 
+    <AppTooltip v-if="isAuthenticated" :label="accountName" placement="right">
+      <button class="ws-account" aria-label="Conta" @click="openSettings('account')">
+        <img v-if="user?.avatar" class="ws-account-img" :src="user.avatar" alt="" />
+        <span v-else class="ws-account-fallback">{{ accountInitials }}</span>
+        <span class="ws-account-dot" />
+      </button>
+    </AppTooltip>
+
     <!-- menu de contexto do workspace -->
     <div v-if="menu === 'context'" class="ws-popover" :style="{ top: menuTop + 'px' }" @click.stop>
       <button class="pop-item" @click="startRename(ctxWs)">
@@ -113,7 +121,7 @@
 </template>
 
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   workspaces,
   activeWorkspaceId,
@@ -123,7 +131,8 @@ import {
   requestDeleteWorkspace
 } from '../store/flowStore'
 import { openRoomInviteModal, isRoomConnected, joinRoomByCode, joinRoomById, leaveRoom } from '../store/roomStore'
-import { settingsSidebarOpen, toggleSettings } from '../store/themeStore'
+import { settingsSidebarOpen, toggleSettings, openSettings } from '../store/themeStore'
+import { isAuthenticated, user } from '../store/authStore'
 import AppTooltip from './AppTooltip.vue'
 
 const rootRef = ref(null)
@@ -144,6 +153,15 @@ function initials(name) {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
   return (parts[0][0] + parts[1][0]).toUpperCase()
 }
+
+const accountName = computed(
+  () => [user.value?.firstname, user.value?.lastname].filter(Boolean).join(' ') || 'Conta'
+)
+const accountInitials = computed(() => {
+  const f = user.value?.firstname?.[0] || ''
+  const l = user.value?.lastname?.[0] || ''
+  return (f + l || f || '?').toUpperCase()
+})
 
 // y do popover: alinhado ao topo do botão clicado, relativo ao rail
 function anchorTop(event) {
@@ -353,6 +371,50 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
 .ws-gear.active {
   color: var(--color-accent);
   background: var(--color-accent-soft);
+}
+
+.ws-account {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  overflow: visible;
+}
+
+.ws-account-img,
+.ws-account-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 24%, var(--color-bg-surface));
+  color: var(--color-text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+
+.ws-account:hover .ws-account-img,
+.ws-account:hover .ws-account-fallback {
+  border-color: var(--color-accent);
+}
+
+.ws-account-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-status-ok);
+  border: 2px solid var(--color-bg-surface-alt);
 }
 
 .ws-spacer {

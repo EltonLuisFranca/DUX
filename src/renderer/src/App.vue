@@ -8,11 +8,6 @@
         <div v-for="ws in workspaces" :key="ws.id" v-show="ws.id === activeWorkspaceId" class="canvas-slot">
           <FleetCanvas :workspace="ws" />
         </div>
-        <div class="user-badge-corner">
-          <UserBadge />
-          <RoomPresenceBadge />
-        </div>
-        <ClaudeUsageDock />
         <DuxiTopBar />
       </div>
       <NodeSettingsSidebar />
@@ -37,9 +32,6 @@ import ConfirmDeleteWorkspaceModal from './components/ConfirmDeleteWorkspaceModa
 import SettingsSidebar from './components/SettingsSidebar.vue'
 import WorkspaceRail from './components/WorkspaceRail.vue'
 import DuxiTopBar from './components/DuxiTopBar.vue'
-import UserBadge from './components/UserBadge.vue'
-import RoomPresenceBadge from './components/RoomPresenceBadge.vue'
-import ClaudeUsageDock from './components/ClaudeUsageDock.vue'
 import RoomInviteModal from './components/RoomInviteModal.vue'
 import { workspaces, activeWorkspaceId, switchWorkspace, flushPersist } from './store/flowStore'
 
@@ -85,13 +77,4 @@ onBeforeUnmount(() => {
   inset: 0;
 }
 
-.user-badge-corner {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 </style>
