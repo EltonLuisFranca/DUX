@@ -1,4 +1,17 @@
 <template>
+  <SettingsGroup title="Geral">
+    <SettingsRow
+      label="Ativar a Duxi"
+      hint="Desligada, ela some da barra do topo e o microfone e o áudio do PC deixam de ser escutados."
+    >
+      <ToggleSwitch
+        :model-value="duxiConfig.enabled !== false"
+        label="Ativar a Duxi"
+        @update:model-value="updateDuxiConfig({ enabled: $event })"
+      />
+    </SettingsRow>
+  </SettingsGroup>
+
   <SettingsGroup title="Conexão com o modelo">
     <SettingsRow label="Endereço do Ollama" stacked>
       <input

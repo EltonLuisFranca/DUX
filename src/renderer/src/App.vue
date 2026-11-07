@@ -8,7 +8,7 @@
         <div v-for="ws in workspaces" :key="ws.id" v-show="ws.id === activeWorkspaceId" class="canvas-slot">
           <FleetCanvas :workspace="ws" />
         </div>
-        <DuxiTopBar />
+        <DuxiTopBar v-if="duxiConfig.enabled !== false" />
       </div>
       <NodeSettingsSidebar />
     </div>
@@ -34,6 +34,7 @@ import WorkspaceRail from './components/WorkspaceRail.vue'
 import DuxiTopBar from './components/DuxiTopBar.vue'
 import RoomInviteModal from './components/RoomInviteModal.vue'
 import { workspaces, activeWorkspaceId, switchWorkspace, flushPersist } from './store/flowStore'
+import { duxiConfig } from './store/duxiStore'
 
 function goToWorkspace(direction) {
   const currentIndex = workspaces.value.findIndex((w) => w.id === activeWorkspaceId.value)

@@ -38,6 +38,9 @@ const DUXI_VOICE_ID = 'duxi'
 const MERLIN_NODE_TYPE = 'merlin'
 
 const DEFAULT_CONFIG = {
+  // desligada: a barra some do topo e nada dela fica rodando (mic esperando
+  // o nome, escuta do áudio do PC) — ver watch de `enabled` mais abaixo
+  enabled: true,
   host: 'http://localhost:11434',
   token: '',
   model: '',
@@ -359,15 +362,20 @@ function isSleepCommand(text) {
 // estava abrindo pra dormir)
 let sleepListenPromise = null
 
+// a Duxi só escuta o nome se estiver habilitada e com a opção ligada
+function wantsSleepListening() {
+  return duxiConfig.value.enabled !== false && duxiConfig.value.wakeWordEnabled
+}
+
 function startSleepListening() {
-  if (!duxiConfig.value.wakeWordEnabled || duxiState.value !== 'off') return
+  if (!wantsSleepListening() || duxiState.value !== 'off') return
   if (isRecording.value || sleepListenPromise) return
   sleepListenPromise = startRecording(DUXI_VOICE_ID)
     .catch((err) => console.error('[duxi] falha ao abrir microfone pra ouvir o nome', err))
     .finally(() => {
       sleepListenPromise = null
       // desativou a opção enquanto o mic abria
-      if (duxiState.value === 'off' && !duxiConfig.value.wakeWordEnabled) cancelRecording()
+      if (duxiState.value === 'off' && !wantsSleepListening()) cancelRecording()
     })
 }
 
@@ -375,9 +383,21 @@ function stopSleepListening() {
   if (duxiState.value === 'off') cancelRecording()
 }
 
+watch(wantsSleepListening, (wants) => (wants ? startSleepListening() : stopSleepListening()))
+
+// desabilitar a Duxi nas configurações: corta o que estiver em andamento
+// (resposta, fala, mic) e fecha a barra — senão ela voltaria aberta no meio
+// de uma conversa ao reabilitar. A barra em si sai da tela no App.vue.
 watch(
-  () => duxiConfig.value.wakeWordEnabled,
-  (enabled) => (enabled ? startSleepListening() : stopSleepListening())
+  () => duxiConfig.value.enabled !== false,
+  (enabled) => {
+    if (enabled) return
+    if (duxiState.value !== 'off') disableListening()
+    duxiEngaged.value = false
+    duxiHistoryOpen.value = false
+    duxiTypingOpen.value = false
+    pendingChoice.value = null
+  }
 )
 startSleepListening()
 

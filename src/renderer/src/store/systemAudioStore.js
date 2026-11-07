@@ -113,7 +113,7 @@ async function start() {
     if (platform.systemAudio === 'loopback') {
       retryListener = () => {
         clearRetry()
-        if (duxiConfig.value.musicReactEnabled) start()
+        if (wantsSystemAudio()) start()
       }
       window.addEventListener('pointerdown', retryListener, true)
     }
@@ -132,8 +132,13 @@ function stop() {
   systemAudio.bands = systemAudio.bands.map(() => 0)
 }
 
+// só quem usa o áudio do PC é a Duxi — desabilitada, não tem por que escutar
+function wantsSystemAudio() {
+  return duxiConfig.value.enabled !== false && duxiConfig.value.musicReactEnabled
+}
+
 watch(
-  () => duxiConfig.value.musicReactEnabled,
+  wantsSystemAudio,
   (enabled) => {
     if (enabled) start()
     else {
