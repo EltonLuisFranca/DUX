@@ -39,7 +39,12 @@ export function fetchGitStatus(path) {
       ws.close()
     }
 
-    const timeout = setTimeout(() => finish({ valid: false, error: 'timeout' }), 8000)
+    // repositório no /mnt/c (disco do Windows visto do WSL) leva vários
+    // segundos por comando git — 8s estourava com o cache frio
+    const timeout = setTimeout(
+      () => finish({ valid: false, error: 'O git demorou demais pra responder (repositório no disco do Windows é lento pelo WSL).' }),
+      20000
+    )
 
     ws.onopen = () => ws.send(JSON.stringify({ type: 'gitStatus', path }))
 

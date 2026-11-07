@@ -5,13 +5,31 @@
     :selected="selected"
     :resize="{ minWidth: 320, minHeight: 220, defaultWidth: 420, defaultHeight: 320 }"
     :title="data.name"
-    :meta="branch"
+    :meta="repoLabel"
     :status="statusColor"
+    accent="#22c55e"
   >
     <template #icon>
       <svg viewBox="0 0 20 20" width="12" height="12" v-html="GIT_ICON"></svg>
     </template>
+    <template #headerMeta>
+      <span v-if="branch" class="branch-chip" :class="{ compact: nodeStyleVariant === 'compact' }" :title="branchTitle">
+        <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <circle cx="5" cy="3.5" r="1.5" />
+          <circle cx="5" cy="12.5" r="1.5" />
+          <circle cx="11.5" cy="5.5" r="1.5" />
+          <path d="M5 5v6M11.5 7c0 2.5-2 3-6.5 3.5" />
+        </svg>
+        <span class="branch-name">{{ branch }}</span>
+        <span v-if="ahead" class="branch-sync">↑{{ ahead }}</span>
+        <span v-if="behind" class="branch-sync">↓{{ behind }}</span>
+      </span>
+    </template>
     <template #headerActions>
+      <span v-if="totals.added || totals.deleted" class="diffstat header-diffstat" title="Linhas alteradas no total">
+        <span class="diff-add">+{{ totals.added }}</span>
+        <span class="diff-del">−{{ totals.deleted }}</span>
+      </span>
       <button class="header-btn nodrag" title="Atualizar" @click="refresh">
         <svg viewBox="0 0 16 16" width="13" height="13" :class="{ spinning: loading }">
           <path
@@ -39,6 +57,10 @@
         >
           <span class="file-status" :class="file.status">{{ statusLabel(file.status) }}</span>
           <span class="file-path">{{ file.file }}</span>
+          <span v-if="file.added !== undefined" class="diffstat">
+            <span v-if="file.added" class="diff-add">+{{ file.added }}</span>
+            <span v-if="file.deleted" class="diff-del">−{{ file.deleted }}</span>
+          </span>
         </li>
       </ul>
 
@@ -54,6 +76,7 @@ import NodeShell from './NodeShell.vue'
 import { GIT_ICON } from '../nodeTypes/nodeIcons'
 import { updateNodeData } from '../store/flowStore'
 import { fetchGitStatus } from '../lib/bridgeClient'
+import { nodeStyleVariant } from '../store/themeStore'
 
 const POLL_INTERVAL_MS = 15_000
 
@@ -67,6 +90,22 @@ const status = ref('connecting')
 const STATUS_COLORS = { online: '#22c55e', offline: '#ef4444' }
 const statusColor = computed(() => STATUS_COLORS[status.value] || 'var(--color-text-tertiary)')
 const branch = ref('')
+// commits à frente/atrás do remoto (null = branch sem upstream)
+const ahead = ref(null)
+const behind = ref(null)
+const totals = ref({ added: 0, deleted: 0 })
+const branchTitle = computed(() => {
+  const parts = [`Branch: ${branch.value}`]
+  if (ahead.value === null) parts.push('sem branch remota')
+  else {
+    if (ahead.value) parts.push(`${ahead.value} commit(s) pra enviar`)
+    if (behind.value) parts.push(`${behind.value} commit(s) pra baixar`)
+    if (!ahead.value && !behind.value) parts.push('em dia com o remoto')
+  }
+  return parts.join(' · ')
+})
+// só a última pasta do repositório (o caminho inteiro não cabe no header)
+const repoLabel = computed(() => String(props.data.path || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '')
 const files = ref([])
 const diffText = ref('')
 const errorMessage = ref('')
@@ -116,12 +155,18 @@ async function refresh() {
     files.value = []
     diffText.value = ''
     branch.value = ''
+    ahead.value = null
+    behind.value = null
+    totals.value = { added: 0, deleted: 0 }
     return
   }
 
   errorMessage.value = ''
   status.value = 'online'
   branch.value = result.branch
+  ahead.value = result.ahead ?? null
+  behind.value = result.behind ?? null
+  totals.value = result.totals || { added: 0, deleted: 0 }
   files.value = result.files
   diffText.value = result.diff
 }
@@ -133,7 +178,10 @@ watch(
 
 onMounted(() => {
   refresh()
-  pollTimer = setInterval(refresh, POLL_INTERVAL_MS)
+  // pula o ciclo se a consulta anterior ainda não voltou (repo lento no /mnt/c)
+  pollTimer = setInterval(() => {
+    if (!loading.value) refresh()
+  }, POLL_INTERVAL_MS)
 })
 
 onBeforeUnmount(() => {
@@ -259,11 +307,73 @@ onBeforeUnmount(() => {
 }
 
 .file-path {
+  flex: 1;
+  min-width: 0;
   font-size: 12px;
   color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* +N −M (por arquivo e total no header) */
+.diffstat {
+  display: inline-flex;
+  gap: 6px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.header-diffstat {
+  margin-left: auto;
+}
+
+.diff-add {
+  color: #22c55e;
+}
+
+.diff-del {
+  color: #ef4444;
+}
+
+/* mesmo chip de branch do header dos terminais (WslClaudeTerminalNode) */
+.branch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 160px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.branch-chip svg {
+  flex-shrink: 0;
+}
+
+.branch-chip.compact {
+  height: 15px;
+  padding: 0 4px;
+  font-size: 9px;
+}
+
+.branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-sync {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
 }
 
 .diff-view {

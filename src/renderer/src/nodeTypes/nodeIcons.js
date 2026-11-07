@@ -13,8 +13,9 @@ export const BROWSER_ICON =
 export const OLLAMA_ICON =
   '<circle cx="10" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M4 17.5c0-3 2.7-5.5 6-5.5s6 2.5 6 5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><circle cx="7.8" cy="6.5" r="0.9" fill="currentColor"/><circle cx="12.2" cy="6.5" r="0.9" fill="currentColor"/>'
 
+// ícone de branch (mesmo desenho do chip de branch do header), não o de merge
 export const GIT_ICON =
-  '<circle cx="10" cy="10" r="1.8" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="5" cy="4.5" r="1.8" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="5" cy="15.5" r="1.8" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M5 6.3V13.7M11.6 9.2C10 7.6 8 6.3 5 6.3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/>'
+  '<circle cx="6.5" cy="4.5" r="1.9" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="6.5" cy="15.5" r="1.9" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="14" cy="7" r="1.9" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M6.5 6.4v7.2M14 8.9c0 3.2-2.4 3.9-7.5 4.6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>'
 
 export const IMAGE_ICON =
   '<rect x="2" y="3" width="16" height="14" rx="2.2" stroke="currentColor" stroke-width="1.4" fill="none"/><circle cx="7" cy="8" r="1.6" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M3.5 15l4.5-4.5 2.5 2.5 3.5-4 3 3.5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
