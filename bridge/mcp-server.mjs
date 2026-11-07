@@ -227,6 +227,90 @@ function imagePathsToDataUrls(imagePaths) {
 
 const server = new McpServer({ name: 'dux', version: '1.0.0' })
 
+// Cartão "Aguardando você" no node deste terminal (bridge/approvals.js) —
+// segura até o usuário clicar numa opção. Sem timeout curto: quem responde é
+// uma pessoa que pode estar em outra janela.
+const APPROVAL_WAIT_MS = 30 * 60 * 1000
+
+function requestApproval(payload) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({ sessionId, source: 'agent', ...payload })
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port: agentPort,
+        path: '/approval',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+        timeout: APPROVAL_WAIT_MS
+      },
+      (res) => {
+        let data = ''
+        res.on('data', (chunk) => (data += chunk))
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data)
+            if (res.statusCode !== 200) return reject(new Error(parsed.error || `bridge respondeu HTTP ${res.statusCode}`))
+            resolve(parsed)
+          } catch {
+            reject(new Error('resposta inválida do bridge'))
+          }
+        })
+      }
+    )
+    req.on('timeout', () => {
+      req.destroy()
+      resolve({ choice: null, reason: 'timeout' })
+    })
+    req.on('error', (err) => reject(new Error(`não foi possível falar com o bridge (${err.message})`)))
+    req.end(body)
+  })
+}
+
+server.registerTool(
+  'dux_request_approval',
+  {
+    title: 'Ask the user to approve or decide (DUX card)',
+    description:
+      'Show a decision card ("Aguardando você") on this terminal\'s node in the DUX canvas and wait until the user ' +
+      'clicks one of the options. Use it before risky or irreversible actions (deleting files, running migrations, ' +
+      'pushing, deploying) or whenever you need the user to choose between alternatives, instead of only asking in ' +
+      'the chat — the card is visible even when the user is looking at another part of the canvas, and the app ' +
+      'counts it in the "aguardando" status. Write the question and options in the user\'s language. Returns the ' +
+      'label of the chosen option, or a note that there was no answer (do not proceed with the risky action then).',
+    inputSchema: {
+      question: z.string().describe('Short question shown as the card title, e.g. "Aplicar migração no banco local?"'),
+      details: z
+        .string()
+        .optional()
+        .describe('Optional context shown under the question: the command, the files affected, what will change'),
+      options: z
+        .array(z.string())
+        .min(1)
+        .max(4)
+        .optional()
+        .describe('Button labels, first one is highlighted. Defaults to ["Sim", "Não"]')
+    }
+  },
+  async ({ question, details, options }) => {
+    const labels = options?.length ? options : ['Sim', 'Não']
+    try {
+      const result = await requestApproval({
+        title: question,
+        detail: details || '',
+        options: labels.map((label, i) => ({ id: String(i), label, tone: i === 0 ? 'primary' : undefined }))
+      })
+      if (result.choice === null || result.choice === undefined) {
+        const why = { timeout: 'no answer in 30 minutes', closed: 'the terminal was closed', 'no-session': 'this terminal is not connected to the DUX canvas' }[result.reason] || 'no answer'
+        return { content: [{ type: 'text', text: `The user did not answer (${why}). Do not proceed with the action; ask in the chat instead.` }] }
+      }
+      return { content: [{ type: 'text', text: `The user chose: ${labels[Number(result.choice)]}` }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
+    }
+  }
+)
+
 server.registerTool(
   'dux_ask',
   {

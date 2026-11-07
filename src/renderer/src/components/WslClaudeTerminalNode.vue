@@ -9,7 +9,7 @@
     :status="statusColor"
     :status-label="statusLabel"
     :status-tone="statusTone"
-    :status-pulse="status === 'connecting' || workActive"
+    :status-pulse="status === 'connecting' || workActive || !!currentApproval"
     :accent="isClaudeNode ? 'var(--color-accent)' : ''"
   >
     <template #icon>
@@ -48,6 +48,32 @@
       {{ usagePercent }}%
     </div>
     <div ref="termEl" class="agent-term nodrag nowheel nopan"></div>
+
+    <!-- Cartão "Aguardando você": pedido de permissão do Claude (hook) ou
+         decisão pedida pelo agente (tool dux_request_approval), ver
+         bridge/approvals.js. Um por vez; os seguintes esperam na fila. -->
+    <Transition name="approval-pop">
+      <div v-if="currentApproval" :key="currentApproval.id" class="approval-card nodrag nowheel nopan">
+        <div class="approval-head">
+          <span class="approval-dot" />
+          <span class="approval-label">Aguardando você</span>
+          <span v-if="pendingApprovals.length > 1" class="approval-queue">+{{ pendingApprovals.length - 1 }}</span>
+        </div>
+        <div class="approval-title">{{ currentApproval.title }}</div>
+        <pre v-if="currentApproval.detail" class="approval-detail">{{ currentApproval.detail }}</pre>
+        <div class="approval-actions">
+          <button
+            v-for="opt in currentApproval.options"
+            :key="opt.id"
+            class="approval-btn"
+            :class="opt.tone ? `tone-${opt.tone}` : ''"
+            @click="answerApproval(currentApproval.id, opt.id)"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
+    </Transition>
   </NodeShell>
 </template>
 
@@ -81,6 +107,7 @@ import {
 import { speak, ttsEnabled } from '../store/ttsStore'
 import { playNotificationSound } from '../store/notificationSoundStore'
 import { resolveClaudeProfile } from '../store/claudeProfilesStore'
+import { setAgentStatus, clearAgentStatus } from '../store/agentStatusStore'
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -158,16 +185,47 @@ function stopWorkTimer() {
   workTimer = null
 }
 
+// Pedidos "Aguardando você" pendentes (ver template e bridge/approvals.js).
+// O primeiro aparece no cartão; a resposta volta pela mesma conexão ws.
+const pendingApprovals = ref([])
+const currentApproval = computed(() => pendingApprovals.value[0] || null)
+
+function answerApproval(id, choice) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'approvalAnswer', id, choice }))
+  pendingApprovals.value = pendingApprovals.value.filter((a) => a.id !== id)
+}
+
 // Pill de status no header: "Trabalhando · M:SS" enquanto o agente responde;
 // senão, só aparece quando precisa de atenção (conectando/offline). Online
 // ocioso fica com o dot discreto (statusLabel vazio).
 const statusLabel = computed(() => {
+  if (currentApproval.value) return 'Aguardando você'
   if (workActive.value) return `Trabalhando · ${workElapsed.value}`
   if (status.value === 'connecting') return 'Conectando…'
   if (status.value === 'offline') return 'Offline'
   return ''
 })
+// publica o estado pro rodapé (AgentStatusBar) contar trabalhando/aguardando —
+// só terminais de agente: um shell comum rodando um comando não é "agente
+// trabalhando"
+watch(
+  [workActive, status, currentApproval, () => props.data.name],
+  () => {
+    if (!AGENT_TERMINAL_TYPES.includes(props.type)) return
+    const state = currentApproval.value
+      ? 'waiting'
+      : workActive.value
+        ? 'working'
+        : status.value === 'online'
+          ? 'idle'
+          : status.value
+    setAgentStatus(props.id, { state, name: props.data.name })
+  },
+  { immediate: true }
+)
+
 const statusTone = computed(() => {
+  if (currentApproval.value) return 'waiting'
   if (workActive.value) return 'working'
   if (status.value === 'connecting') return 'waiting'
   if (status.value === 'offline') return 'error'
@@ -326,6 +384,12 @@ function connect() {
       status.value = 'offline'
       term.write(`\r\n\r\n[erro: ${msg.message}]\r\n`)
       resetUsage()
+    } else if (msg.type === 'approvalRequest') {
+      pendingApprovals.value.push(msg)
+      // som de atenção mesmo com TTS ligado: o agente está parado esperando
+      playNotificationSound()
+    } else if (msg.type === 'approvalClosed') {
+      pendingApprovals.value = pendingApprovals.value.filter((a) => a.id !== msg.id)
     } else if (msg.type === 'duxbanRequest') {
       handleDuxbanRequest(msg)
     } else if (msg.type === 'claudeUsage') {
@@ -340,6 +404,9 @@ function connect() {
   ws.onclose = () => {
     status.value = 'offline'
     resetUsage()
+    // o bridge libera os pedidos pendentes quando a conexão cai
+    // (approvals.unregisterSession) — o cartão não tem mais quem responder
+    pendingApprovals.value = []
     retryTimer = setTimeout(connect, 1500)
   }
 
@@ -604,6 +671,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  clearAgentStatus(props.id)
   resizeObserver?.disconnect()
   clearTimeout(renameDebounceTimer)
   resetTtsCapture()
@@ -733,5 +801,135 @@ onBeforeUnmount(() => {
   min-height: 0;
   padding: 6px;
   overflow: hidden;
+}
+
+/* cartão "Aguardando você" por cima da parte de baixo do terminal */
+.approval-card {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 70%;
+  padding: 10px 12px 12px;
+  border: 1px solid color-mix(in srgb, var(--color-status-waiting) 55%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-status-waiting) 8%, var(--color-bg-surface));
+  box-shadow: 0 10px 30px var(--color-shadow);
+}
+
+.approval-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.approval-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-status-waiting);
+  animation: approval-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes approval-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-status-waiting) 60%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+.approval-label {
+  color: var(--color-status-waiting);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.approval-queue {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+}
+
+.approval-title {
+  color: var(--color-text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.approval-detail {
+  min-height: 0;
+  max-height: 140px;
+  margin: 0;
+  padding: 6px 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--color-bg-app);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.approval-btn {
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.approval-btn:hover {
+  background: var(--color-hover);
+}
+
+.approval-btn.tone-primary {
+  border-color: var(--color-status-waiting);
+  background: var(--color-status-waiting);
+  color: #1a1206;
+}
+
+.approval-btn.tone-primary:hover {
+  filter: brightness(1.08);
+}
+
+.approval-btn.tone-danger {
+  color: var(--color-status-error);
+}
+
+.approval-pop-enter-active,
+.approval-pop-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.approval-pop-enter-from,
+.approval-pop-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 </style>

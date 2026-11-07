@@ -6,6 +6,7 @@ const duxbanLink = require('./duxbanLink')
 const dockerStatus = require('./dockerStatus')
 const noteLink = require('./noteLink')
 const noteTabs = require('./noteTabs')
+const approvals = require('./approvals')
 const { createConnectionHandler } = require('./wsHandlers')
 
 const PORT = 4577
@@ -22,7 +23,7 @@ const wss = new WebSocketServer({ host: '127.0.0.1', port: PORT })
 wss.on('connection', createConnectionHandler({ agentPort: AGENT_PORT }))
 
 const agentServer = http.createServer((req, res) => {
-  if (req.method !== 'POST' || !['/ask', '/duxban', '/docker', '/notes'].includes(req.url)) {
+  if (req.method !== 'POST' || !['/ask', '/duxban', '/docker', '/notes', '/approval'].includes(req.url)) {
     res.writeHead(404).end()
     return
   }
@@ -32,6 +33,45 @@ const agentServer = http.createServer((req, res) => {
     body += chunk
     if (body.length > MAX_BODY_BYTES) req.destroy()
   })
+
+  // /approval: cartão "Aguardando você" no node do terminal. Chamado pelo hook
+  // de permissão do Claude Code (hooks/permission.js) e pela tool
+  // dux_request_approval (mcp-server.mjs). Segura a resposta HTTP até o
+  // usuário escolher no cartão (ver approvals.js) — se quem pediu desistir
+  // antes (conexão fechada), o cartão sai da tela.
+  if (req.url === '/approval') {
+    req.on('end', async () => {
+      let parsed
+      try {
+        parsed = JSON.parse(body)
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'JSON inválido' }))
+        return
+      }
+      const { sessionId, source, title, detail, options } = parsed
+      const validOptions = Array.isArray(options)
+        ? options.filter((o) => o && typeof o.id === 'string' && typeof o.label === 'string').slice(0, 6)
+        : []
+      if (!sessionId || !title || !validOptions.length) {
+        res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'sessionId, title e options são obrigatórios' }))
+        return
+      }
+      const { id, done } = approvals.request(sessionId, {
+        source: source === 'permission' ? 'permission' : 'agent',
+        title: String(title).slice(0, 300),
+        detail: detail ? String(detail).slice(0, 4000) : '',
+        options: validOptions
+      })
+      let answered = false
+      res.on('close', () => {
+        if (!answered && id) approvals.cancel(sessionId, id)
+      })
+      const result = await done
+      answered = true
+      if (!res.writableEnded) res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(result))
+    })
+    return
+  }
 
   if (req.url === '/ask') {
     req.on('end', async () => {

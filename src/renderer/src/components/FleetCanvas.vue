@@ -81,6 +81,9 @@
     <Panel position="bottom-center" class="bottom-toolbar-stack">
       <ZoomControls />
     </Panel>
+    <Panel position="bottom-left" class="agent-status-panel">
+      <AgentStatusBar />
+    </Panel>
 
     <DuxSearch v-if="isActiveWorkspace" :workspace="workspace" />
 
@@ -265,6 +268,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, watch } from 'vue'
 import { VueFlow, Panel, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import ZoomControls from './ZoomControls.vue'
+import AgentStatusBar from './AgentStatusBar.vue'
+import { nodeFocusRequest } from '../store/agentStatusStore'
 import CustomEdge from './CustomEdge.vue'
 import RemoteCursor from './RemoteCursor.vue'
 import WslClaudeTerminalNode from './WslClaudeTerminalNode.vue'
@@ -357,6 +362,26 @@ watch(fullscreenNodeId, (id, prevId) => {
     savedViewport = null
   }
 })
+
+// "leva até este node" (rodapé de status): cada canvas recebe o pedido, só o
+// que tem o node age. flush 'post': quem pediu pode ter acabado de trocar de
+// workspace, e o canvas precisa já estar visível pra centralizar certo.
+watch(
+  nodeFocusRequest,
+  (req) => {
+    const node = req && findNode(req.nodeId)
+    if (!node) return
+    removeSelectedNodes(getSelectedNodes.value)
+    addSelectedNodes([node])
+    const width = node.dimensions?.width || node.data?.width || 320
+    const height = node.dimensions?.height || node.data?.height || 200
+    setCenter(node.position.x + width / 2, node.position.y + height / 2, {
+      zoom: Math.max(viewport.value.zoom, 0.75),
+      duration: 300
+    })
+  },
+  { flush: 'post' }
+)
 
 function nodeTitle(nodeProps) {
   return nodeTypeRegistry[nodeProps.type]?.label || nodeProps.type
@@ -618,6 +643,10 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+}
+
+:deep(.vue-flow__panel.bottom.left.agent-status-panel) {
+  margin: 0 0 12px 12px;
 }
 
 :deep(.vue-flow__panel.bottom.bottom-toolbar-stack) {

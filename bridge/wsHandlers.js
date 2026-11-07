@@ -6,6 +6,7 @@ const { WebSocket } = require('ws')
 const agentLink = require('./agentLink')
 const noteLink = require('./noteLink')
 const duxbanLink = require('./duxbanLink')
+const approvals = require('./approvals')
 const claudeUsage = require('./claudeUsage')
 const claudeAccountUsage = require('./claudeAccountUsage')
 const claudeProfiles = require('./claudeProfiles')
@@ -218,12 +219,41 @@ function createConnectionHandler({ agentPort }) {
                   })}'`
                 : ''
 
+            // Hook de permissão (hooks/permission.js): o pedido de permissão
+            // do Claude vira o cartão "Aguardando você" no node. --settings
+            // inline soma esse hook aos do usuário (~/.claude/settings.json),
+            // não substitui. Aspas duplas (escapadas no JSON) porque o JSON
+            // inteiro vai entre aspas simples na linha do zsh, como o
+            // --mcp-config acima. "node" do PATH, igual ao servidor MCP.
+            // A tool dux_request_approval já é, ela mesma, uma pergunta ao
+            // usuário — pedir permissão pra perguntar daria dois cartões
+            // seguidos; fica liberada (soma à lista allow do usuário).
+            const settingsFlag =
+              command === 'claude' && sessionId
+                ? ` --settings '${JSON.stringify({
+                    permissions: { allow: ['mcp__dux__dux_request_approval'] },
+                    hooks: {
+                      PermissionRequest: [
+                        {
+                          hooks: [
+                            {
+                              type: 'command',
+                              command: `node "${path.join(__dirname, 'hooks', 'permission.js')}"`,
+                              timeout: 600
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  })}'`
+                : ''
+
             // -i (além de -l) é necessário: alguns setups de dotfiles (nvm.sh
             // incluso, aqui) só rodam sua inicialização de PATH quando o shell é
             // interativo — um simples "zsh -lc claude" spawnado por um processo pai
             // não-interativo (como o Electron) acaba sem PATH nenhum de nvm/asdf/
             // etc., e comandos instalados por eles somem com "command not found".
-            ptyProcess = pty.spawn('zsh', ['-lic', `${command}${mcpConfigFlag}`], {
+            ptyProcess = pty.spawn('zsh', ['-lic', `${command}${mcpConfigFlag}${settingsFlag}`], {
               name: 'xterm-256color',
               cols: msg.cols || 80,
               rows: msg.rows || 24,
@@ -232,6 +262,12 @@ function createConnectionHandler({ agentPort }) {
                 PATH: `${BIN_DIR}${path.delimiter}${process.env.PATH}`,
                 DUX_SESSION_ID: sessionId || '',
                 DUX_AGENT_PORT: String(agentPort),
+                // O servidor MCP do DUX (mcp-server.mjs) leva 11–14s pra subir
+                // quando o bridge está no /mnt/c (carregar o SDK do MCP + zod
+                // arquivo a arquivo pelo WSL é lento) — com o Claude subindo ao
+                // mesmo tempo, estourava o limite padrão de 30s e as tools
+                // dux_* sumiam da sessão.
+                MCP_TIMEOUT: '120000',
                 ...(claudeProfile ? claudeProfiles.envFor(claudeProfile.id) : {})
               })
             })
@@ -262,6 +298,7 @@ function createConnectionHandler({ agentPort }) {
           agentLink.registerSession(sessionId, { name: msg.name || sessionId, cwd, ptyProcess })
           noteLink.registerSession(sessionId)
           duxbanLink.registerSession(sessionId, { ptyProcess, ws })
+          approvals.registerSession(sessionId, ws)
         }
 
         if (sessionId && isClaudeCommand) {
@@ -294,6 +331,7 @@ function createConnectionHandler({ agentPort }) {
             agentLink.unregisterSession(sessionId)
             noteLink.unregisterSession(sessionId)
             claudeUsage.stopWatch(sessionId)
+            approvals.unregisterSession(sessionId, ws)
           }
           ptyProcess = null
           // Fecha o socket pra acionar o retry automático que o cliente já usa
@@ -799,6 +837,9 @@ function createConnectionHandler({ agentPort }) {
         // recebeu o duxbanRequest (ver duxbanLink.request) — sessionId é o
         // da closure, não precisa vir no corpo
         if (sessionId) duxbanLink.onResponse(sessionId, msg.requestId, msg.result, msg.error)
+      } else if (msg.type === 'approvalAnswer') {
+        // clique no cartão "Aguardando você" (ver approvals.js)
+        if (sessionId) approvals.answer(sessionId, msg.id, msg.choice)
       } else if (msg.type === 'fileRead') {
         // usado pela tool read_file do node Ollama — diferente de noteRead,
         // NÃO cria o arquivo silenciosamente: o modelo pediu um path achando
@@ -876,6 +917,7 @@ function createConnectionHandler({ agentPort }) {
       }
       stopAllNoteWatches(ws)
       claudeAccountUsage.unsubscribe(ws)
+      if (sessionId) approvals.unregisterSession(sessionId, ws)
     })
   }
 }
