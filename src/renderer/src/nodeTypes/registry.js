@@ -6,6 +6,7 @@ import DuxBanSettings from '../components/nodeSettings/DuxBanSettings.vue'
 import DockerSettings from '../components/nodeSettings/DockerSettings.vue'
 import DatabaseSettings from '../components/nodeSettings/DatabaseSettings.vue'
 import GitCreateForm from '../components/nodeCreate/GitCreateForm.vue'
+import GitSettings from '../components/nodeSettings/GitSettings.vue'
 import ImageCreateForm from '../components/nodeCreate/ImageCreateForm.vue'
 import HttpCreateForm from '../components/nodeCreate/HttpCreateForm.vue'
 import NotesCreateForm from '../components/nodeCreate/NotesCreateForm.vue'
@@ -152,6 +153,7 @@ export const nodeTypeRegistry = {
     label: 'Git',
     description: 'Status e diff de um repositório, atualizado automaticamente.',
     category: 'tools',
+    settingsComponent: GitSettings,
     createForm: GitCreateForm,
     icon: GIT_ICON
   },
